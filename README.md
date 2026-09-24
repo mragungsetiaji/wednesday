@@ -39,6 +39,11 @@ uv run xau-screener --source csv --csv data/xauusd_m1.csv
 uv run xau-screener --source synthetic --once    # random-walk demo, no data needed
 ```
 
+For MT5, test the connection first with `uv run xau-screener --check`.
+Settings can live in a `.env` file (copy `.env.example`); command line flags
+override it. Windows local testing and VPS production setup (auto-start,
+auto-restart, logs) are in [docs/DEPLOY_WINDOWS.md](docs/DEPLOY_WINDOWS.md).
+
 Useful options:
 
 | Option | Default | Meaning |
@@ -49,6 +54,8 @@ Useful options:
 | `--zone` | `wick` | OB zone = full candle range (`wick`) or open/close (`body`) |
 | `--mitigation` | `close` | OB is invalidated by a close through it (`close`) or any wick (`wick`) |
 | `--once` | off | Scan once and exit instead of looping every minute |
+| `--check` | off | Test the feed connection (account, symbol, bars loaded) and exit |
+| `--log-file` | - | Rotating log file, includes every scan table (`XAU_LOG_FILE`) |
 | `--json-out` | - | Append each scan as a JSON line (for bots/dashboards) |
 | `--delay` | `2` | Seconds after the minute closes before polling |
 
@@ -82,6 +89,8 @@ src/xau_screener/
   scanner.py      multi-timeframe scan, nearest OB above/below
   report.py       console table
   cli.py          1-minute polling loop
+scripts/          Windows VPS: auto-restart wrapper + Task Scheduler installer
+docs/             deployment guide
 tests/
 ```
 

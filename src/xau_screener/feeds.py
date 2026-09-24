@@ -6,6 +6,7 @@ time. Add a new broker/API by subclassing :class:`DataFeed`.
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -13,6 +14,8 @@ import numpy as np
 import pandas as pd
 
 from .timeframes import M1, normalize_ohlcv
+
+log = logging.getLogger(__name__)
 
 
 class DataFeed(ABC):
@@ -32,6 +35,10 @@ class DataFeed(ABC):
         """Live price if the feed has one; otherwise the scanner uses the last M1 close."""
         return None
 
+    def describe(self) -> dict:
+        """Connection details shown by ``--check``."""
+        return {"feed": self.name}
+
 
 class MT5Feed(DataFeed):
     """MetaTrader 5 terminal (Windows, ``uv sync --extra mt5``).
@@ -43,9 +50,11 @@ class MT5Feed(DataFeed):
     name = "mt5"
 
     def __init__(self, symbol: str = "XAUUSD", login: int | None = None,
-                 password: str | None = None, server: str | None = None, path: str | None = None):
+                 password: str | None = None, server: str | None = None, path: str | None = None,
+                 timeout_ms: int = 60_000):
         self.symbol = symbol
         self.login, self.password, self.server, self.path = login, password, server, path
+        self.timeout_ms = timeout_ms
         self._mt5 = None
 
     def connect(self) -> None:
@@ -53,35 +62,70 @@ class MT5Feed(DataFeed):
             import MetaTrader5 as mt5
         except ImportError as exc:  # pragma: no cover - platform specific
             raise RuntimeError("MetaTrader5 is not installed. Run: uv sync --extra mt5 (Windows only)") from exc
+        # ``path`` (terminal64.exe) is positional; credentials are optional when the terminal is logged in.
+        args = [self.path] if self.path else []
         kwargs = {k: v for k, v in {"login": self.login, "password": self.password,
-                                    "server": self.server, "path": self.path}.items() if v is not None}
-        if not mt5.initialize(**kwargs):
-            raise RuntimeError(f"MT5 initialize failed: {mt5.last_error()}")
+                                    "server": self.server}.items() if v is not None}
+        if not mt5.initialize(*args, timeout=self.timeout_ms, **kwargs):
+            err = mt5.last_error()
+            mt5.shutdown()
+            raise RuntimeError(f"MT5 initialize failed: {err}. Is the terminal installed, running and logged in?")
         if not mt5.symbol_select(self.symbol, True):
-            raise RuntimeError(f"MT5 symbol {self.symbol!r} not available: {mt5.last_error()}")
+            err = mt5.last_error()
+            mt5.shutdown()
+            raise RuntimeError(f"MT5 symbol {self.symbol!r} not available: {err}. "
+                               "Check the exact name in Market Watch (e.g. XAUUSD.m, GOLD).")
         self._mt5 = mt5
+
+    def reconnect(self) -> None:
+        log.warning("reconnecting to MT5")
+        self.close()
+        self.connect()
 
     def close(self) -> None:
         if self._mt5 is not None:
             self._mt5.shutdown()
             self._mt5 = None
 
-    def fetch_m1(self, count: int) -> pd.DataFrame:
+    def _copy_rates(self, count: int):
         mt5 = self._mt5
-        if mt5 is None:
-            raise RuntimeError("MT5Feed.connect() was not called")
         # Position 0 is the still-forming bar; start at 1 for closed bars only.
-        rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M1, 1, count)
+        return mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M1, 1, count)
+
+    def fetch_m1(self, count: int) -> pd.DataFrame:
+        if self._mt5 is None:
+            self.connect()
+        rates = self._copy_rates(count)
         if rates is None or len(rates) == 0:
-            raise RuntimeError(f"MT5 returned no M1 data: {mt5.last_error()}")
+            # Terminal restarted or lost its connection: re-initialise once and retry.
+            self.reconnect()
+            rates = self._copy_rates(count)
+        if rates is None or len(rates) == 0:
+            raise RuntimeError(f"MT5 returned no M1 data: {self._mt5.last_error()}")
+        if len(rates) < count:
+            log.warning("MT5 returned %d of %d requested M1 bars; raise Tools > Options > Charts > "
+                        "'Max bars in chart' or let the terminal download more history", len(rates), count)
         df = pd.DataFrame(rates)
-        df.index = pd.to_datetime(df["time"], unit="s")
+        df.index = pd.to_datetime(df["time"], unit="s")  # broker server time
         df = df.rename(columns={"tick_volume": "volume"})
         return normalize_ohlcv(df)
 
     def last_price(self) -> float | None:
         tick = self._mt5.symbol_info_tick(self.symbol) if self._mt5 else None
         return float(tick.bid) if tick else None
+
+    def describe(self) -> dict:
+        """Connection details for ``--check``."""
+        mt5 = self._mt5
+        term, acc, sym = mt5.terminal_info(), mt5.account_info(), mt5.symbol_info(self.symbol)
+        return {
+            "terminal": f"{term.name} build {mt5.version()[1]}" if term else None,
+            "connected": bool(term and term.connected),
+            "account": f"{acc.login} @ {acc.server}" if acc else None,
+            "symbol": self.symbol,
+            "digits": sym.digits if sym else None,
+            "bid/ask": f"{sym.bid} / {sym.ask}" if sym else None,
+        }
 
 
 class YFinanceFeed(DataFeed):

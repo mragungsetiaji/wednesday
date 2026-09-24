@@ -7,3 +7,5 @@ build/
 *.egg-info/
 data/
 *.log
+.env
+logs/

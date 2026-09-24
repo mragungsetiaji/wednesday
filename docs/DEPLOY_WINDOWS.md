@@ -1,0 +1,95 @@
+# Running on Windows: local test and VPS production
+
+The MetaTrader 5 Python API talks to a running MT5 terminal on the same
+machine, in the same Windows user session. So the bot and the terminal always
+live together: on your PC while testing, on the VPS in production.
+
+## 1. Local test (Windows PC)
+
+1. Install and log in to the MT5 terminal. Open **Market Watch** and note the
+   exact gold symbol name (`XAUUSD`, `XAUUSD.m`, `GOLD`, ...).
+2. In MT5: **Tools > Options > Charts > Max bars in chart** should be at least
+   `100000` (the 4H scan needs about 48k M1 bars).
+3. Install uv and the project:
+
+   ```powershell
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+   git clone <repo-url> xau-screener
+   cd xau-screener
+   uv sync --extra mt5
+   copy .env.example .env   # then edit XAU_SYMBOL (credentials optional if MT5 is logged in)
+   ```
+
+4. Test the connection. It prints the account, symbol, bid/ask and how many M1
+   bars were loaded:
+
+   ```powershell
+   uv run xau-screener --check
+   ```
+
+   If it reports fewer M1 bars than needed, open an M1 chart of the symbol and
+   scroll back (or press Home) so the terminal downloads more history, then retry.
+
+5. One scan, then the live loop:
+
+   ```powershell
+   uv run xau-screener --once
+   uv run xau-screener
+   ```
+
+## 2. Production (Windows VPS)
+
+Do the same setup as above on the VPS (MT5, uv, `uv sync --extra mt5`, `.env`,
+`--check`). Then make it survive reboots and crashes:
+
+1. **Auto-login the VPS user.** The MT5 API needs an interactive desktop
+   session, so the bot cannot run as a Windows service in session 0. Enable
+   automatic logon for the user (Sysinternals *Autologon*, or `netplwiz`).
+2. **Start MT5 at logon.** Either put a shortcut to `terminal64.exe` in
+   `shell:startup`, or set `MT5_PATH` (plus `MT5_LOGIN`, `MT5_PASSWORD`,
+   `MT5_SERVER`) in `.env`: the bot then launches and logs in to the terminal
+   itself when it is not running.
+3. **Register the bot as a logon task** (run once, from the repo folder):
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\install_task.ps1
+   Start-ScheduledTask -TaskName "XAU Screener"
+   ```
+
+   The task waits 60 s after logon, then runs `scripts\run_screener.ps1`,
+   which restarts the screener 30 s after any exit. Inside the screener, a
+   failed MT5 fetch triggers a reconnect, and any error just retries on the
+   next minute.
+4. **Disconnect RDP, don't sign out.** Close the Remote Desktop window (the
+   session keeps running). *Signing out* ends the session and stops both MT5
+   and the bot.
+
+Logs go to `logs/screener.log` (rotated at 5 MB, 5 files kept) when
+`XAU_LOG_FILE` is set; every scan table is written there too.
+
+Useful commands on the VPS:
+
+```powershell
+Get-Content logs\screener.log -Tail 50 -Wait        # follow the log
+Get-ScheduledTask -TaskName "XAU Screener" | Get-ScheduledTaskInfo
+Stop-ScheduledTask -TaskName "XAU Screener"
+Unregister-ScheduledTask -TaskName "XAU Screener"   # remove
+```
+
+## Updating the VPS
+
+```powershell
+Stop-ScheduledTask -TaskName "XAU Screener"
+# if a python.exe from the bot is still alive, stop it (check the path before killing)
+Get-Process python -ErrorAction SilentlyContinue | Where-Object Path -like "*xau-screener*" | Stop-Process
+git pull
+uv sync --extra mt5
+uv run xau-screener --check
+Start-ScheduledTask -TaskName "XAU Screener"
+```
+
+## Timezone note
+
+MT5 bar times are broker server time (often GMT+2/+3). The screener keeps that
+clock, so 4H and 1H candles line up with the MT5 chart. Log timestamps use the
+VPS clock.
