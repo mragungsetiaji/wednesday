@@ -1,0 +1,95 @@
+# xau-screener
+
+Order block screener for XAUUSD. Every minute it pulls closed 1-minute bars,
+resamples them into **4H, 1H, 30M, 15M and 5M** candles, detects order blocks
+over the last N candles of each timeframe, and reports the **nearest active
+order block above and below** the current price, scanning from the highest
+timeframe down to the lowest.
+
+```
+[2026-09-24 14:05] XAUUSD price 2651.40
+TF    #OB  NEAREST ABOVE                          NEAREST BELOW                          INSIDE
+4H      3  BEAR 2662.10-2668.35 (+10.70) t0       BULL 2631.80-2637.25 (-14.15) t1       -
+1H      5  BEAR 2655.90-2659.00 (+4.50) t2        BULL 2643.10-2646.70 (-4.70) t0        -
+...
+nearest above: 1H BEAR 2655.90-2659.00 (+4.50) t0 | nearest below: 15M BULL ...
+```
+
+`(+4.50)` is the distance from price to the zone's nearest edge, `tN` is how many
+candles have tapped the zone since it formed, and `INSIDE` lists zones price is
+currently trading in.
+
+## Setup (uv)
+
+```bash
+uv sync                      # core deps (pandas, numpy) + dev tools
+uv sync --extra mt5          # MetaTrader 5 feed (Windows only)
+uv sync --extra yfinance     # Yahoo Finance feed (testing / non-Windows)
+```
+
+## Run
+
+```bash
+# MetaTrader 5 terminal must be running and logged in
+uv run xau-screener --source mt5 --symbol XAUUSD
+
+# Other feeds
+uv run xau-screener --source yfinance            # GC=F futures, ~7 days of 1m only
+uv run xau-screener --source csv --csv data/xauusd_m1.csv
+uv run xau-screener --source synthetic --once    # random-walk demo, no data needed
+```
+
+Useful options:
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--timeframes` | `4H,1H,30M,15M,5M` | Timeframes to scan (always processed high to low) |
+| `--lookback` | `200` | Closed candles per timeframe searched for order blocks |
+| `--swing-length` | `5` | Bars on each side needed to confirm a swing high/low |
+| `--zone` | `wick` | OB zone = full candle range (`wick`) or open/close (`body`) |
+| `--mitigation` | `close` | OB is invalidated by a close through it (`close`) or any wick (`wick`) |
+| `--once` | off | Scan once and exit instead of looping every minute |
+| `--json-out` | - | Append each scan as a JSON line (for bots/dashboards) |
+| `--delay` | `2` | Seconds after the minute closes before polling |
+
+The 4H timeframe with `--lookback 200` needs about 48k M1 bars, which are loaded
+once at startup; after that only the last 30 bars are fetched each minute.
+
+## How order blocks are detected
+
+1. **Swings**: a swing high/low is a bar whose high/low is the extreme of the
+   `swing_length` bars on each side. It is only confirmed after those right-side
+   bars close, so there is no look-ahead.
+2. **Break of structure**: a candle *closes* above the latest unbroken swing
+   high (bullish) or below the latest unbroken swing low (bearish).
+3. **Order block**: for a bullish break, the candle with the lowest low between
+   the swing high and the breakout candle (demand zone). For a bearish break,
+   the candle with the highest high in that leg (supply zone).
+4. **Mitigation**: a bullish OB dies when price closes below its bottom, a
+   bearish OB when price closes above its top. Only unmitigated OBs are reported.
+
+Only closed candles are used for detection; the still-forming candle of each
+timeframe is dropped. Candle times follow the feed's clock, so with MT5 the 4H
+candles line up with the broker chart.
+
+## Project layout
+
+```
+src/xau_screener/
+  timeframes.py   timeframe list + M1 -> HTF resampling
+  orderblock.py   swing / BOS / order block detection
+  feeds.py        MT5, yfinance, CSV, synthetic feeds + rolling M1 buffer
+  scanner.py      multi-timeframe scan, nearest OB above/below
+  report.py       console table
+  cli.py          1-minute polling loop
+tests/
+```
+
+Add a new data source by subclassing `feeds.DataFeed` and implementing
+`fetch_m1(count)` (return closed M1 bars, oldest first).
+
+## Tests
+
+```bash
+uv run pytest
+```
