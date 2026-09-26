@@ -21,6 +21,7 @@ from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .news import CALENDAR_KEY, CalendarSettings
 from .engine import Engine, Runtime
 from .lab.api import lab_router
+from .features import catalog as feature_catalog
 from .plugins import PLUGIN_API, features, load_plugins
 from .quarters import quarters_payload, utc_to_feed
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
@@ -312,7 +313,38 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     @app.get("/api/plugins")
     def get_plugins() -> dict:
         """Installed plugins and the features they provide (the dashboard unlocks screens from this)."""
-        return {"api": PLUGIN_API, "plugins": [p.to_dict() for p in plugins], "features": features(plugins)}
+        enabled = features(plugins)
+        return {"api": PLUGIN_API, "plugins": [p.to_dict() for p in plugins], "features": enabled,
+                "catalog": feature_catalog(enabled)}
+
+    def licence_provider():
+        return runtime.hooks.licence if runtime else None
+
+    @app.get("/api/licence")
+    def get_licence() -> dict:
+        """The licence, when a plugin handles licences; otherwise just that none does."""
+        provider = licence_provider()
+        return {"available": False} if provider is None else {"available": True, **provider.status()}
+
+    @app.put("/api/licence")
+    def put_licence(body: dict = Body(...)) -> dict:
+        provider = licence_provider()
+        if provider is None:
+            raise HTTPException(409, "No plugin handles licences. Install Wednesday EE to use one.")
+        key = str(body.get("key") or "").strip()
+        if not key:
+            raise HTTPException(422, "Paste a licence key")
+        try:
+            return {"available": True, **provider.activate(key)}
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.delete("/api/licence")
+    def delete_licence() -> dict:
+        provider = licence_provider()
+        if provider is None:
+            raise HTTPException(409, "No plugin handles licences")
+        return {"available": True, **provider.clear()}
 
     ui = Path(ui_dir or os.environ.get("XAU_UI_DIR") or DEFAULT_UI_DIR)
     if (ui / "index.html").is_file():

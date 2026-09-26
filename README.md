@@ -140,5 +140,8 @@ uv run wednesday --serve
 | [Plugins](docs/plugins.md) | Add features from a separate Python package |
 | [Development](docs/development.md) | Project layout and how a scan flows |
 
+Everything above is free. Paid extras (signed models, the second brain, session recaps, scheduled briefs) come as a
+plugin with a licence; see [Plugins](docs/plugins.md#licences-and-paid-features).
+
 > [!NOTE]
 > Wednesday is an analysis tool. It doesn't place orders, and nothing it shows is financial advice.

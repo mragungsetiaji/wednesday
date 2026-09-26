@@ -74,6 +74,7 @@ class Hooks:
         self.after_scan: list[Callable] = []  # fn(result, engine)
         self.on_alert: list[Callable] = []  # fn(keys, result): order block alerts just sent
         self.stop = threading.Event()  # set on shutdown; jobs wait on it
+        self.licence = None  # a licence provider (see PluginContext.set_licence_provider), at most one
         self._jobs: list[threading.Thread] = []
 
     @staticmethod
@@ -144,6 +145,18 @@ class PluginContext:
     def provide(self, *features: str) -> None:
         """Declare feature ids at runtime (e.g. only when a licence allows them)."""
         self._info.features.extend(f for f in features if f not in self._info.features)
+
+    def set_features(self, features: Iterable[str]) -> None:
+        """Replace this plugin's feature ids, e.g. when a licence is entered, removed or expires."""
+        self._info.features[:] = list(dict.fromkeys(features))
+
+    def set_licence_provider(self, provider) -> None:
+        """Serve the dashboard's licence screen (``/api/licence``). The provider has
+        ``status() -> dict``, ``activate(key: str) -> dict`` (``ValueError`` for a bad key)
+        and ``clear() -> dict``. Only one plugin can provide it."""
+        if self.runtime.hooks.licence is not None:
+            raise RuntimeError("another plugin already provides the licence")
+        self.runtime.hooks.licence = provider
 
 
 def _version_of(ep: EntryPoint) -> str | None:

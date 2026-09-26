@@ -59,6 +59,21 @@ Hooks and jobs are isolated: an exception is logged and never stops the scan
 loop or other plugins. A plugin that raises in `register` is skipped and its
 features are not offered.
 
+## Licences and paid features
+
+One plugin can handle licences with `ctx.set_licence_provider(provider)`. The
+provider has `status()`, `activate(key)` (raise `ValueError` with a message for
+a bad key) and `clear()`, and Wednesday serves it as `GET / PUT / DELETE
+/api/licence` for **Settings > Plan**. The provider switches the plugin's
+features with `ctx.set_features(...)`: all of them off without a valid licence.
+
+`wednesday/features.py` lists the paid feature ids with a title and a line on
+what each does, so the Plan screen can show them, locked, even when no plugin is
+installed. A plugin can provide ids that aren't in the list; they show too.
+
+Free, with or without a licence: the screener, alerts, the bias, the news card,
+the news brief with your own API key, and labelling and training your own models.
+
 ## Versioning
 
 `wednesday.plugins.PLUGIN_API` (now `1`) is bumped when the context changes

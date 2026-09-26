@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { fetchSettings, saveSettings, type DataSettings, type SettingsResponse } from "../api";
 import { fmtFeedTime } from "../format";
 import { usePlugins } from "../plugins";
+import { AccountSettings } from "./AccountSettings";
 import { AlertsSettings } from "./AlertsSettings";
 import { BriefSettingsForm } from "./BriefSettingsForm";
 import { CalendarSettingsForm } from "./CalendarSettingsForm";
@@ -191,6 +192,7 @@ export function SettingsPage() {
         <AlertsSettings />
         <CalendarSettingsForm />
         <BriefSettingsForm />
+        <AccountSettings />
       </div>
 
       <aside className="settings-side">

@@ -2135,3 +2135,41 @@ fieldset:disabled .switch {
     animation: none;
   }
 }
+
+/* ---------- Plan and licence ---------- */
+.licence {
+  display: grid;
+  gap: var(--s3);
+}
+.licence-form {
+  display: grid;
+  gap: var(--s3);
+}
+.feature-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.feature-list li {
+  display: grid;
+  gap: 2px;
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.feature-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-weight: 600;
+}
+.feature-desc {
+  font-size: var(--text-sm);
+  color: var(--text-2);
+  max-width: 62ch;
+}
+.feature-link {
+  justify-self: start;
+  font-size: var(--text-sm);
+}

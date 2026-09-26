@@ -561,6 +561,33 @@ export interface PluginsResponse {
   api: number;
   plugins: PluginInfo[];
   features: string[]; // feature ids provided by loaded plugins; screens unlock from these
+  catalog: FeatureInfo[]; // every known paid feature, on or not
 }
+
+export interface FeatureInfo {
+  id: string;
+  title: string;
+  description: string;
+  issue: number | null;
+  enabled: boolean;
+}
+
+/** Licence state from the plugin that handles licences; available=false when none does. */
+export interface LicenceStatus {
+  available: boolean;
+  valid?: boolean;
+  plan?: string | null;
+  licensee?: string | null;
+  licence_id?: string | null;
+  issued_at?: string | null;
+  expires_at?: string | null;
+  features?: string[];
+  error?: string | null; // why a stored key isn't valid (expired, tampered, no signing key configured)
+  key_hint?: string | null; // last characters of the stored key
+}
+
+export const fetchLicence = () => getJson<LicenceStatus>("/api/licence");
+export const activateLicence = (key: string) => send<LicenceStatus>("PUT", "/api/licence", { key });
+export const removeLicence = () => send<LicenceStatus>("DELETE", "/api/licence");
 
 export const fetchPlugins = () => getJson<PluginsResponse>("/api/plugins");

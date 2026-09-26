@@ -69,8 +69,30 @@ def test_hooks_run_after_each_scan_and_failures_are_isolated(tmp_path, monkeypat
 
 def test_no_plugins_is_fine(tmp_path, monkeypatch):
     api, runtime = make(tmp_path, monkeypatch, eps=[])
-    assert api.get("/api/plugins").json() == {"api": PLUGIN_API, "plugins": [], "features": []}
+    body = api.get("/api/plugins").json()
+    assert body["plugins"] == [] and body["features"] == []
+    assert body["catalog"] and not any(f["enabled"] for f in body["catalog"])
     assert api.get("/api/ee/ee/hello").status_code == 404
+    assert api.get("/api/licence").json() == {"available": False}
+    assert api.put("/api/licence", json={"key": "x"}).status_code == 409
+
+
+def test_licence_provider_switches_features(tmp_path, monkeypatch):
+    api, runtime = make(tmp_path, monkeypatch, eps=[ep("lic", "licensed"), ep("lic2", "second_licence")])
+    plugins = {p["name"]: p for p in api.get("/api/plugins").json()["plugins"]}
+    assert plugins["lic"]["loaded"] and not plugins["lic2"]["loaded"]  # only one licence provider
+    assert "already provides" in plugins["lic2"]["error"]
+    assert api.get("/api/licence").json() == {"available": True, "plan": None, "valid": False}
+    assert api.put("/api/licence", json={"key": "bad"}).status_code == 422
+    assert api.put("/api/licence", json={"key": " "}).status_code == 422
+    assert api.put("/api/licence", json={"key": "good"}).json()["plan"] == "pro"
+    body = api.get("/api/plugins").json()
+    assert body["features"] == ["llm.recap", "vendor.extra"]
+    by = {f["id"]: f for f in body["catalog"]}
+    assert by["llm.recap"]["enabled"] and not by["llm.second_brain"]["enabled"]
+    assert by["vendor.extra"]["enabled"]  # unknown ids from a plugin still show
+    api.delete("/api/licence")
+    assert api.get("/api/plugins").json()["features"] == []
 
 
 def test_add_job_refuses_busy_loops():

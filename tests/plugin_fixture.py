@@ -33,3 +33,34 @@ def _boom(ctx):
 
 broken = Plugin(name="broken", register=_boom, features=["should.not.show"])
 not_a_plugin = object()
+
+
+class FakeLicence:
+    """Accepts the key "good"; switches the plugin's features with it."""
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+        self.plan = None
+
+    def status(self):
+        return {"plan": self.plan, "valid": self.plan is not None}
+
+    def activate(self, key):
+        if key != "good":
+            raise ValueError("That key isn't valid")
+        self.plan = "pro"
+        self.ctx.set_features(["llm.recap", "vendor.extra"])
+        return self.status()
+
+    def clear(self):
+        self.plan = None
+        self.ctx.set_features([])
+        return self.status()
+
+
+def _register_licensed(ctx):
+    ctx.set_licence_provider(FakeLicence(ctx))
+
+
+licensed = Plugin(name="lic", register=_register_licensed)
+second_licence = Plugin(name="lic2", register=_register_licensed)
