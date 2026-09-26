@@ -6,22 +6,23 @@
 # Output: dist/Wednesday/Wednesday.exe (one folder; packaging/wednesday.iss turns it into an installer).
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 ROOT = Path(SPECPATH).parent
 
 if not (ROOT / "web" / "dist" / "index.html").is_file():
     raise SystemExit("Build the dashboard first: cd web && npm ci && npm run build")
 
-datas = [
-    (str(ROOT / "web" / "dist"), "web/dist"),
-    (str(ROOT / ".env.example"), "."),
-]
+datas = [(str(ROOT / "web" / "dist"), "web/dist")]
 # Time zone database for zoneinfo: Windows has none of its own.
 datas += collect_data_files("tzdata")
 
-# uvicorn picks its loop and protocol modules by name at runtime.
-hiddenimports = collect_submodules("wednesday") + collect_submodules("uvicorn")
+# keyring finds its backends (Windows Credential Manager) through package metadata.
+datas += copy_metadata("keyring")
+
+# uvicorn picks its loop and protocol modules by name at runtime; so does keyring its backends.
+hiddenimports = (collect_submodules("wednesday") + collect_submodules("uvicorn")
+                 + collect_submodules("keyring.backends") + collect_submodules("win32ctypes"))
 
 a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],

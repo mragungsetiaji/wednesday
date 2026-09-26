@@ -86,6 +86,7 @@ export interface ScanResponse {
   scanned_at: string | null;
   error: string | null;
   error_at: string | null;
+  conn: FeedConn;
   config: {
     timeframes: string[];
     lookback: number;
@@ -189,17 +190,25 @@ export interface DataSettings {
   clock: string | null; // null = the source default
 }
 
+/** connecting -> connected; reconnecting while a lost connection is retried; failed once it gave up. */
+export type FeedConn = "connecting" | "connected" | "reconnecting" | "failed";
+
 export interface SettingsResponse {
   editable: boolean;
   settings: DataSettings | null;
   sources: SourceInfo[];
-  mt5_password_set: boolean;
+  /** Where the MT5 password for the saved account comes from; null = none. Never the password itself. */
+  mt5_password: "saved" | "session" | "env" | null;
   running: {
     source: string;
     symbol: string;
     version: number;
     scanned_at: string | null;
     error: string | null;
+    conn: FeedConn;
+    attempt: number;
+    max_attempts: number | null; // null = the feed keeps retrying
+
     bars_loaded: number;
     bars_needed: number;
     first_bar: string | null;
@@ -214,11 +223,11 @@ export interface SettingsResponse {
 
 export const fetchSettings = () => getJson<SettingsResponse>("/api/settings");
 
-export async function saveSettings(settings: DataSettings): Promise<SettingsResponse> {
-  const res = await fetch("/api/settings", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(settings),
+async function settingsRequest(url: string, method: string, body?: unknown): Promise<SettingsResponse> {
+  const res = await fetch(url, {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
@@ -231,6 +240,21 @@ export async function saveSettings(settings: DataSettings): Promise<SettingsResp
   }
   return res.json() as Promise<SettingsResponse>;
 }
+
+/** Save and restart the feed. A password is sent only when typed; it's kept by the OS, never returned. */
+export const saveSettings = (settings: DataSettings, secret: { mt5_password?: string; forget_mt5_password?: boolean } = {}) =>
+  settingsRequest("/api/settings", "PUT", { ...settings, ...secret });
+
+/** Restart the feed with the saved settings, e.g. after it gave up connecting. */
+export const reconnectFeed = () => settingsRequest("/api/settings/reconnect", "POST");
+
+export interface Mt5Terminal {
+  path: string;
+  name: string;
+  running: boolean;
+}
+
+export const fetchMt5Terminals = () => getJson<{ terminals: Mt5Terminal[] }>("/api/mt5/terminals");
 
 export interface AlertSettings {
   enabled: boolean;

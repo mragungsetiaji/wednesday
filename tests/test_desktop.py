@@ -80,7 +80,7 @@ def test_run_serves_dashboard_in_window(home, monkeypatch):
     assert seen["url"] == f"http://127.0.0.1:{port}"
     assert seen["api"] == "Wednesday"
     assert seen["start"]["private_mode"] is False
-    assert (home / ".env").read_text() == EXAMPLE.read_text()
+    assert not (home / ".env").exists()  # the desktop app is set up from the dashboard, not a .env
     assert (home / "data" / "xau.db").is_file()
     assert (home / "logs" / "screener.log").is_file()
     # The server stopped with the window, and the next run can have the same port.

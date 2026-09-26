@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
-import { fetchSettings, saveSettings, type DataSettings, type SettingsResponse } from "../api";
+import {
+  fetchMt5Terminals, fetchSettings, reconnectFeed, saveSettings, type DataSettings, type Mt5Terminal, type SettingsResponse,
+} from "../api";
+import { useDesktopApi } from "../desktop";
 import { fmtFeedTime } from "../format";
 import { usePlugins } from "../plugins";
 import { AccountSettings } from "./AccountSettings";
@@ -79,6 +82,30 @@ export function SettingsPage() {
   );
 }
 
+type Running = SettingsResponse["running"];
+
+/** What the feed is doing, in words. Only "connected" with a scan counts as done. */
+function connText(running: Running, sourceTitle: string): string {
+  switch (running.conn) {
+    case "connecting":
+      return running.attempt > 0 ? `Connecting to ${sourceTitle}, trying again next minute…` : `Connecting to ${sourceTitle}…`;
+    case "reconnecting":
+      return running.max_attempts
+        ? `Connection lost. Trying to reconnect (attempt ${running.attempt} of ${running.max_attempts})…`
+        : "Connection lost. Trying again next minute…";
+    case "failed":
+      return "Not connected. The feed stopped trying.";
+    default:
+      return `Scanning · last scan ${running.scanned_at ? new Date(running.scanned_at).toLocaleTimeString() : ""}`;
+  }
+}
+
+const PASSWORD_SOURCE: Record<string, string> = {
+  saved: "Saved in Windows Credential Manager for this login.",
+  session: "Kept until the app closes (no credential store on this PC).",
+  env: "Read from MT5_PASSWORD in .env.",
+};
+
 /** Data source settings. Saving restarts the feed; the page keeps polling so the result shows up here. */
 function DataSourceSettings() {
   const [data, setData] = useState<SettingsResponse | null>(null);
@@ -87,6 +114,16 @@ function DataSourceSettings() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [password, setPassword] = useState("");
+  const [forgetPassword, setForgetPassword] = useState(false);
+  const [terminals, setTerminals] = useState<Mt5Terminal[]>([]);
+  const [reconnecting, setReconnecting] = useState(false);
+  const desktop = useDesktopApi();
+
+  useEffect(() => {
+    if (form.source !== "mt5") return;
+    fetchMt5Terminals().then((r) => setTerminals(r.terminals)).catch(() => setTerminals([]));
+  }, [form.source]);
 
   useEffect(() => {
     let alive = true;
@@ -116,7 +153,7 @@ function DataSourceSettings() {
   }
 
   const current = data.settings ?? EMPTY;
-  const dirty = !same(form, current);
+  const dirty = !same(form, current) || password !== "" || forgetPassword;
   const source = data.sources.find((s) => s.id === form.source);
   const running = data.running;
   const runningSource = data.sources.find((s) => s.id === running.source);
@@ -131,9 +168,14 @@ function DataSourceSettings() {
     setSaving(true);
     setSaveError(null);
     try {
-      const res = await saveSettings(form);
+      const res = await saveSettings(form, {
+        mt5_password: password || undefined,
+        forget_mt5_password: forgetPassword || undefined,
+      });
       setData(res);
       if (res.settings) setForm(res.settings);
+      setPassword("");
+      setForgetPassword(false);
       setSaved(true);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
@@ -142,7 +184,25 @@ function DataSourceSettings() {
     }
   };
 
+  const reconnect = async () => {
+    setReconnecting(true);
+    try {
+      setData(await reconnectFeed());
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReconnecting(false);
+    }
+  };
+
+  const browse = async () => {
+    const picked = await desktop?.pick_terminal?.();
+    if (picked) set({ mt5_path: picked });
+  };
+
   const short = running.bars_loaded < running.bars_needed;
+  const runningTitle = runningSource?.title ?? running.source;
+  const knownTerminal = terminals.some((t) => t.path === form.mt5_path);
 
   return (
     <div className="settings-data">
@@ -204,27 +264,61 @@ function DataSourceSettings() {
 
             {form.source === "mt5" && (
               <>
-                <p className="field-note">
-                  If the terminal is already open and logged in, leave these empty. The password is read from{" "}
-                  <code>MT5_PASSWORD</code> in <code>.env</code> and never stored ({data.mt5_password_set ? "currently set" : "currently not set"}).
-                </p>
+                <div className="field">
+                  <label className="field-label" htmlFor="mt5-terminal">Terminal</label>
+                  {terminals.length > 0 && (
+                    <select aria-label="Installed MT5 terminals" value={knownTerminal ? form.mt5_path ?? "" : ""}
+                      onChange={(e) => set({ mt5_path: e.target.value || null })}>
+                      <option value="">{knownTerminal ? "Any open terminal" : "Choose an installed terminal…"}</option>
+                      {terminals.map((t) => (
+                        <option key={t.path} value={t.path}>{t.name}{t.running ? " (open)" : ""}</option>
+                      ))}
+                    </select>
+                  )}
+                  <div className="input-with-button">
+                    <input id="mt5-terminal" type="text" value={form.mt5_path ?? ""} spellCheck={false}
+                      placeholder="C:\Program Files\MetaTrader 5\terminal64.exe"
+                      onChange={(e) => set({ mt5_path: orNull(e.target.value) })} />
+                    {desktop?.pick_terminal && (
+                      <button type="button" className="button secondary" onClick={browse}>Browse…</button>
+                    )}
+                  </div>
+                  <span className="field-hint">
+                    With several MT5 terminals (MetaQuotes and your brokers'), pick the one logged in to this account. It is
+                    started once when the feed starts; if it can't connect, the feed stops and waits for Reconnect instead of
+                    opening it again. Empty = the terminal that is open.
+                  </span>
+                </div>
                 <div className="field-row">
                   <Field label="Login">
-                    <input type="text" inputMode="numeric" value={form.mt5_login ?? ""} placeholder="12345678"
+                    <input type="text" inputMode="numeric" autoComplete="off" value={form.mt5_login ?? ""} placeholder="12345678"
                       onChange={(e) => {
                         const v = e.target.value.replace(/\D/g, "");
                         set({ mt5_login: v ? Number(v) : null });
                       }} />
                   </Field>
                   <Field label="Server">
-                    <input type="text" value={form.mt5_server ?? ""} placeholder="Broker-Server" spellCheck={false}
+                    <input type="text" autoComplete="off" value={form.mt5_server ?? ""} placeholder="Broker-Server" spellCheck={false}
                       onChange={(e) => set({ mt5_server: orNull(e.target.value) })} />
                   </Field>
                 </div>
-                <Field label="Terminal path" hint="Lets the screener start the terminal itself when it isn't running.">
-                  <input type="text" value={form.mt5_path ?? ""} placeholder="C:\Program Files\MetaTrader 5\terminal64.exe" spellCheck={false}
-                    onChange={(e) => set({ mt5_path: orNull(e.target.value) })} />
+                <Field label="Password"
+                  hint={forgetPassword ? "The saved password will be removed when you save."
+                    : data.mt5_password ? PASSWORD_SOURCE[data.mt5_password] : "Kept in Windows Credential Manager, never in the database."}>
+                  <input type="password" autoComplete="new-password" value={password}
+                    placeholder={data.mt5_password && !forgetPassword ? "•••••••• (leave empty to keep)" : "MT5 password"}
+                    onChange={(e) => { setPassword(e.target.value); setForgetPassword(false); setSaved(false); setSaveError(null); }} />
                 </Field>
+                {data.mt5_password && data.mt5_password !== "env" && !forgetPassword && (
+                  <p className="field-note">
+                    <button type="button" className="link-button" onClick={() => { setForgetPassword(true); setPassword(""); setSaved(false); }}>
+                      Forget the saved password
+                    </button>
+                  </p>
+                )}
+                <p className="field-note">
+                  If the terminal is already open and logged in, login, server and password can stay empty.
+                </p>
               </>
             )}
           </fieldset>
@@ -238,7 +332,13 @@ function DataSourceSettings() {
                 Discard changes
               </button>
               <span className="form-status" role="status">
-                {saveError ? <span className="text-error">{saveError}</span> : saved && !dirty ? "Saved. The feed restarted." : dirty ? "Unsaved changes" : ""}
+                {saveError ? (
+                  <span className="text-error">{saveError}</span>
+                ) : saved && !dirty ? (
+                  running.conn === "connected" ? "Saved. Connected." : running.conn === "failed" ? (
+                    <span className="text-error">Saved, but not connected: {running.error}</span>
+                  ) : `Saved. ${connText(running, runningTitle)}`
+                ) : dirty ? "Unsaved changes" : ""}
               </span>
             </div>
           )}
@@ -249,17 +349,23 @@ function DataSourceSettings() {
         <section aria-labelledby="running-h">
           <h3 id="running-h">Running now</h3>
           <dl className="facts">
-            <div><dt>Source</dt><dd>{runningSource?.title ?? running.source}</dd></div>
+            <div><dt>Source</dt><dd>{runningTitle}</dd></div>
             <div><dt>Symbol</dt><dd>{running.symbol}</dd></div>
             <div>
               <dt>Status</dt>
               <dd>
-                {running.error ? (
-                  <span className="text-error">{running.error}</span>
-                ) : running.version > 0 ? (
-                  `Scanning · last scan ${running.scanned_at ? new Date(running.scanned_at).toLocaleTimeString() : ""}`
-                ) : (
-                  "Connecting…"
+                {running.conn === "connected" ? connText(running, runningTitle) : (
+                  <>
+                    <span className={running.conn === "failed" ? "text-error" : undefined}>{connText(running, runningTitle)}</span>
+                    {running.error && <span className="text-error"> {running.error}</span>}
+                  </>
+                )}
+                {data.editable && running.conn === "failed" && (
+                  <div className="status-actions">
+                    <button type="button" className="button secondary" disabled={reconnecting} onClick={reconnect}>
+                      {reconnecting ? "Reconnecting…" : "Reconnect"}
+                    </button>
+                  </div>
                 )}
               </dd>
             </div>

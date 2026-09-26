@@ -50,9 +50,11 @@ Do the same setup as above on the VPS (MT5, uv, `uv sync --extra mt5 --extra llm
    session, so the bot cannot run as a Windows service in session 0. Enable
    automatic logon for the user (Sysinternals *Autologon*, or `netplwiz`).
 2. **Start MT5 at logon.** Either put a shortcut to `terminal64.exe` in
-   `shell:startup`, or set `MT5_PATH` (plus `MT5_LOGIN`, `MT5_PASSWORD`,
-   `MT5_SERVER`) in `.env`: the bot then launches and logs in to the terminal
-   itself when it is not running.
+   `shell:startup`, or set the terminal path, login and server in **Settings** (the password
+   there too; it goes to Windows Credential Manager for the VPS user): the bot
+   then launches and logs in to the terminal itself when it is not running.
+   If that connection fails, or a lost one fails 3 times in a row, the feed
+   stops rather than reopening the terminal; press **Reconnect** in Settings.
 3. **Register the bot as a logon task** (run once, from the repo folder):
 
    ```powershell

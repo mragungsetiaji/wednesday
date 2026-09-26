@@ -69,8 +69,17 @@ uv run wednesday --source mt5 --check
 ```
 
 If the terminal is already open and logged in, no credentials are needed.
-Otherwise set `MT5_LOGIN`, `MT5_SERVER` and `MT5_PATH` (in Settings or `.env`).
-The password is only read from `MT5_PASSWORD` in `.env` and is never stored.
+Otherwise set the terminal, login and server in **Settings** (or `MT5_PATH`,
+`MT5_LOGIN`, `MT5_SERVER` in `.env`). Settings lists the MT5 terminals installed
+on the PC, for when there are several. The password is entered in Settings and
+kept in Windows Credential Manager (through `keyring`), never in the database;
+`MT5_PASSWORD` in the environment still works for older setups.
+
+Connecting starts the terminal at `MT5_PATH` once. If that fails, the feed
+records the error and stops instead of retrying (a retry would open the
+terminal again); a lost connection is retried up to 3 times, a minute apart,
+and only while the terminal is still running. **Reconnect** in Settings starts
+it again. Other sources keep retrying every minute.
 Full Windows and VPS setup: [deploy-windows.md](deploy-windows.md).
 
 ## Storage

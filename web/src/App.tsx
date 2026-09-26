@@ -164,13 +164,19 @@ export default function App() {
     ? { cls: "error", text: "Offline" }
     : !data
       ? { cls: "idle", text: "Connecting" }
-      : data.error
-        ? { cls: "error", text: "Feed error" }
-        : !lastOk
-          ? { cls: "idle", text: "Loading" }
-          : now - lastOk > STALE_MS
-            ? { cls: "warn", text: "Stale" }
-            : { cls: "ok", text: "Live" };
+      : data.conn === "failed"
+        ? { cls: "error", text: "Not connected" }
+        : data.conn === "reconnecting"
+          ? { cls: "warn", text: "Reconnecting" }
+          : data.error
+            ? { cls: "error", text: "Feed error" }
+            : data.conn === "connecting"
+              ? { cls: "idle", text: "Connecting" }
+              : !lastOk
+                ? { cls: "idle", text: "Loading" }
+                : now - lastOk > STALE_MS
+                  ? { cls: "warn", text: "Stale" }
+                  : { cls: "ok", text: "Live" };
 
   const toggleLayer = (name: string) => setHidden(hidden.includes(name) ? hidden.filter((n) => n !== name) : [...hidden, name]);
   const hasOb = detectors.some((d) => d.name === "ob");

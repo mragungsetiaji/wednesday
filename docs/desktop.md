@@ -28,15 +28,42 @@ upgrading or uninstalling keeps it:
 
 | Path | What |
 | --- | --- |
-| `.env` | Created from `.env.example` on first run. Put the MT5 login, Telegram token and LLM keys here, then restart the app. |
 | `data\xau.db` | Settings saved from the dashboard and the M1 history |
 | `data\models\` | Lab model files |
 | `logs\screener.log` | The log, with every scan |
 | `webview\` | The window's storage: dashboard layout and preferences |
 
-The data source, alerts and the rest are set in the dashboard under **Settings**,
-as in the browser version. The installer includes the MT5, news brief and Lab
-extras, so every source and feature works without installing Python.
+Everything is set in the dashboard under **Settings**; the app needs no `.env`.
+The MT5 password is kept in Windows Credential Manager (see below). The Telegram
+token and the LLM keys are still read from a `.env` in this folder if you create
+one (same variables as [`.env.example`](../.env.example)), then restart the app.
+The installer includes the MT5, news brief and Lab extras, so every source and
+feature works without installing Python.
+
+## Connecting to MetaTrader 5
+
+In **Settings > Data source**, pick **MetaTrader 5**, then:
+
+- **Terminal**: choose it from the list of MT5 terminals installed on this PC
+  (MetaQuotes' own and each broker's), or **Browse…** to its `terminal64.exe`,
+  or paste the path or its folder. With several terminals, pick the one logged in
+  to the account you want.
+- **Login**, **Server**, **Password**: optional when that terminal is already open
+  and logged in. Paste the account number and the broker's server name as MT5
+  shows them. The password is saved in Windows Credential Manager for that login,
+  never in the database or a file; leave it empty later to keep it, or
+  **Forget the saved password**.
+
+**Save and restart feed** starts the terminal once if it isn't running. The status
+says **Connecting…** until the first scan is in, and only then **Connected**. If
+it can't connect (wrong password, you closed the login window, symbol missing),
+it shows the error and stops: it doesn't open the terminal again. Fix the cause
+and press **Reconnect**.
+
+If the connection drops later, it tries again up to 3 times, a minute apart
+(**Trying to reconnect, attempt 1 of 3**), only while the terminal is still open.
+A terminal you closed is never reopened; after the third try the feed stops and
+waits for **Reconnect**.
 
 Only one copy runs at a time; starting a second one says it is already running.
 The dashboard uses port `XAU_PORT` (8000) on `127.0.0.1`, or a free port when that

@@ -65,7 +65,7 @@ bars are fetched each minute.
 | `XAU_SOURCE`, `XAU_SYMBOL` | Data source and symbol |
 | `XAU_CLOCK` | The feed's clock ([Feed clock](data-sources.md#feed-clock)) |
 | `XAU_DB_URL` | Storage URL |
-| `MT5_LOGIN`, `MT5_PASSWORD`, `MT5_SERVER`, `MT5_PATH` | MetaTrader 5 connection; the password is only read from here |
+| `MT5_LOGIN`, `MT5_SERVER`, `MT5_PATH` | MetaTrader 5 connection (also set in Settings). The password is entered in Settings; `MT5_PASSWORD` is still read for older setups |
 | `XAU_MAX_SL`, `XAU_DETECTORS` | Strategy settings |
 | `XAU_SERVE`, `XAU_HOST`, `XAU_PORT` | Dashboard |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Telegram alerts |

@@ -1368,6 +1368,7 @@ p {
 }
 
 input[type="text"],
+input[type="password"],
 input[type="number"],
 textarea,
 select {
@@ -1388,10 +1389,12 @@ textarea {
   resize: vertical;
 }
 input[type="text"]::placeholder,
+input[type="password"]::placeholder,
 textarea::placeholder {
   color: var(--text-3);
 }
 input[type="text"]:hover,
+input[type="password"]:hover,
 input[type="number"]:hover,
 textarea:hover,
 select:hover {
@@ -1400,6 +1403,7 @@ select:hover {
 input[type="number"]:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
+input[type="password"]:focus-visible,
 input[type="text"]:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 0;
@@ -1592,6 +1596,27 @@ td.wrap {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--s3);
+}
+.input-with-button {
+  display: flex;
+  gap: var(--s2);
+}
+.input-with-button .button {
+  flex: none;
+}
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.link-button:hover {
+  text-decoration: underline;
+}
+.status-actions {
+  margin-top: var(--s2);
 }
 
 .form-actions {

@@ -40,9 +40,10 @@ package is `src/wednesday/`.
 - **The bias is the trader's call.** `bias.py` is set by hand; the LLM brief
   (`brief.py`) only offers a suggestion the trader applies with a click. Don't make
   anything set the bias, or trade, on its own.
-- **Secrets come from the environment only.** MT5 password, Telegram token and LLM
-  API keys are read from `.env` and must never be written to the database, logs, API
-  responses or the dashboard. `.env` is gitignored; add new variables to
+- **Secrets never go into the database.** The MT5 password is entered in Settings
+  and kept in the OS credential store (`keyring`, see `settings.py`); the Telegram
+  token and LLM API keys are read from `.env`. None may be written to the database,
+  logs, API responses or the dashboard. `.env` is gitignored; add new variables to
   `.env.example` with an empty value and a comment.
 - **The dashboard has no login.** Keep the default host `127.0.0.1`, and don't add
   endpoints that expose secrets or files outside `data/`.

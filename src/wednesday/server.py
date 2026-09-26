@@ -20,12 +20,13 @@ from .alerts import ALERTS_KEY, AlertSettings, TelegramError
 from .bias import TradeBias
 from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .news import CALENDAR_KEY, CalendarSettings
-from .engine import Engine, Runtime
+from .engine import RECONNECT_ATTEMPTS, Engine, Runtime
 from .lab.api import lab_router
 from .journal.api import journal_router
 from .features import catalog as feature_catalog
 from .plugins import PLUGIN_API, features, load_plugins
 from .quarters import quarters_payload, utc_to_feed
+from .mt5_terminals import find_terminals
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
 
@@ -81,6 +82,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                 "scanned_at": _iso(st.scanned_at),
                 "error": st.error,
                 "error_at": _iso(st.error_at),
+                "conn": st.conn,
                 "config": cfg.to_dict(),
             }
 
@@ -230,6 +232,9 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                 "version": engine.state.version,
                 "scanned_at": _iso(engine.state.scanned_at),
                 "error": engine.state.error,
+                "conn": engine.state.conn,
+                "attempt": engine.state.attempt,
+                "max_attempts": None if engine.feed.retry_connect else RECONNECT_ATTEMPTS,
                 "bars_loaded": 0 if m1 is None else len(m1),
                 "bars_needed": engine.buffer.max_bars,
                 "first_bar": _iso(m1.index[0]) if m1 is not None and len(m1) else None,
@@ -240,7 +245,8 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             "editable": runtime is not None,
             "settings": runtime.settings.to_dict() if runtime else None,
             "sources": catalog(),
-            "mt5_password_set": bool(runtime and runtime.mt5_password),
+            # Only whether a password is known and where it's kept; never the password itself.
+            "mt5_password": runtime.mt5_password_for(runtime.settings)[1] if runtime else None,
             "running": running,
             "storage": {**store.describe(), "series": store.bar_stats()} if store else None,
         }
@@ -253,6 +259,9 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     def put_settings(body: dict = Body(...)) -> dict:
         if runtime is None:
             raise HTTPException(409, "Settings can only be changed when the server runs with --serve")
+        body = dict(body)
+        password = str(body.pop("mt5_password", None) or "")
+        forget = bool(body.pop("forget_mt5_password", False))
         try:
             new = DataSettings.from_dict({**DataSettings().to_dict(), **body})
         except (TypeError, ValueError) as exc:
@@ -261,12 +270,32 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         ok, reason = source_availability(new.source) if not errors else (True, None)
         if not ok:
             errors.append(reason)
+        if not errors and (err := new.terminal_error()):
+            errors.append(err)
+        if password and new.mt5_login is None:
+            errors.append("Enter the MT5 login that goes with the password")
         if errors:
             raise HTTPException(422, "; ".join(errors))
+        if forget:
+            runtime.forget_mt5_password(new.mt5_login, new.mt5_server)
+        if password:
+            runtime.set_mt5_password(new.mt5_login, new.mt5_server, password)
         if runtime.store:
             runtime.store.set_setting(SETTINGS_KEY, new.to_dict())
         runtime.apply(new)
         return settings_payload()
+
+    @app.post("/api/settings/reconnect")
+    def reconnect() -> dict:
+        if runtime is None:
+            raise HTTPException(409, "The feed can only be restarted when the server runs with --serve")
+        runtime.reconnect()
+        return settings_payload()
+
+    @app.get("/api/mt5/terminals")
+    def mt5_terminals() -> dict:
+        """MT5 terminals installed on this PC, to pick one in Settings."""
+        return {"terminals": find_terminals()}
 
     def alerts_payload() -> dict:
         alerts = runtime.alerts if runtime else None

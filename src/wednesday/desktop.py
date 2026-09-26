@@ -4,18 +4,18 @@ Runs the same scan loop and API as ``wednesday --serve``, with uvicorn on a
 background thread and the dashboard in a native window (pywebview, WebView2 on
 Windows). Closing the window stops everything.
 
-Settings, the database, models and logs live in a per-user folder, not next to
-the program, so the app can be installed without admin rights and upgraded
-without touching data: ``%LOCALAPPDATA%\\Wednesday`` on Windows (``~/.wednesday``
-elsewhere, or ``WEDNESDAY_HOME``). Its ``.env`` is created from ``.env.example``
-on first run; secrets (MT5 password, Telegram token, LLM keys) go there.
+The database, models and logs live in a per-user folder, not next to the
+program, so the app can be installed without admin rights and upgraded without
+touching data: ``%LOCALAPPDATA%\\Wednesday`` on Windows (``~/.wednesday``
+elsewhere, or ``WEDNESDAY_HOME``). Everything is set in the dashboard; the MT5
+password goes to Windows Credential Manager. A ``.env`` in that folder is still
+read if one is there, but the app doesn't need or create one.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import shutil
 import socket
 import sys
 import threading
@@ -36,11 +36,6 @@ def home_dir() -> Path:
     if os.name == "nt" and (local := os.environ.get("LOCALAPPDATA")):
         return Path(local) / "Wednesday"
     return Path.home() / ".wednesday"
-
-
-def bundle_dir() -> Path:
-    """Where bundled files are: PyInstaller's unpack folder, or the repository root when run from source."""
-    return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
 
 
 def _alert(message: str) -> None:
@@ -96,6 +91,19 @@ def _pick_port(host: str, preferred: int) -> int:
         return s.getsockname()[1]
 
 
+class DesktopApi:
+    """Called from the dashboard as ``window.pywebview.api.<method>()``; only in the desktop app."""
+
+    def pick_terminal(self) -> str | None:
+        """Pick a terminal64.exe with the Windows file dialog."""
+        import webview
+
+        start = os.environ.get("ProgramFiles") or str(Path.home())
+        dialog = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else webview.OPEN_DIALOG
+        picked = webview.windows[0].create_file_dialog(dialog, directory=start, file_types=("Programs (*.exe)",))
+        return picked[0] if picked else None
+
+
 def serve_in_window(app, host: str, port: int) -> None:
     """Start uvicorn on a thread, show the dashboard in a window, stop the server when it closes."""
     import uvicorn
@@ -117,7 +125,7 @@ def serve_in_window(app, host: str, port: int) -> None:
             webbrowser.open(url)
             thread.join()
             return
-        webview.create_window(TITLE, url, width=1440, height=900, min_size=(960, 600))
+        webview.create_window(TITLE, url, width=1440, height=900, min_size=(960, 600), js_api=DesktopApi())
         # private_mode=False keeps the dashboard's saved layout (localStorage) between runs.
         webview.start(private_mode=False, storage_path=str(home_dir() / "webview"))
     finally:
@@ -139,12 +147,9 @@ def run() -> None:
         _alert("Wednesday is already running.")
         return
 
-    # Relative paths in .env (data/xau.db, data/models, logs/) resolve inside the home folder.
+    # Relative paths (data/xau.db, data/models, logs/) resolve inside the home folder.
     os.chdir(home)
     env = home / ".env"
-    example = bundle_dir() / ".env.example"
-    if not env.exists() and example.is_file():
-        shutil.copyfile(example, env)
     load_env_file(env)
     os.environ.setdefault("XAU_LOG_FILE", "logs/screener.log")
 
@@ -154,7 +159,7 @@ def run() -> None:
         main(["--serve", "--env-file", str(env), "--host", host, "--port", str(port)], serve=serve_in_window)
     except SystemExit as exc:
         if exc.code not in (None, 0):
-            _alert(f"{exc.code}\n\nSettings are in {env}")
+            _alert(f"{exc.code}\n\nThe log is in {home / 'logs'}")
         raise
     except Exception as exc:
         log.exception("desktop app stopped")

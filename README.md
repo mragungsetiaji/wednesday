@@ -104,35 +104,16 @@ Sync an MT5 account, or import the terminal's history report, and get the number
 
 ## Quick start
 
-Needs [uv](https://docs.astral.sh/uv/) and Node 20+.
+1. Download `WednesdaySetup-<version>.exe` from the
+   [latest release](https://github.com/mragungsetiaji/wednesday/releases/latest) and run it.
+   No Python or Node needed. Windows may say "Windows protected your PC" because the
+   installer isn't code signed: click **More info > Run anyway**.
+2. Start **Wednesday** from the Start menu or the desktop.
+3. It starts on free Yahoo Finance data. For your broker's prices, open
+   **Settings > Data source**, pick **MetaTrader 5**, choose your terminal and save.
 
-```bash
-git clone https://github.com/mragungsetiaji/wednesday.git
-cd wednesday
-make setup     # checks uv + Node, creates .env, installs everything, builds the dashboard
-make serve     # dashboard on http://127.0.0.1:8000 (Yahoo Finance data)
-```
-
-Just want to look around? `make demo` runs the same dashboard on random demo data.
-
-```bash
-make dev       # API + Vite hot reload on http://localhost:5173
-make scan      # one scan in the console
-make test      # run the tests
-make           # list every target
-```
-
-Extra flags go through `ARGS`, e.g. `make serve PORT=9000 ARGS="--lookback 300"`.
-
-**Windows desktop app**: download `WednesdaySetup-<version>.exe` from [Releases](https://github.com/mragungsetiaji/wednesday/releases) and install it; no Python or Node needed. See [Windows desktop app](docs/desktop.md).
-
-**Windows / MT5 from source**: run the `uv` commands directly, see [Windows and VPS](docs/deploy-windows.md).
-
-```powershell
-uv sync --extra mt5 --extra llm --extra ml
-uv run wednesday --source mt5 --check   # test the MT5 connection
-uv run wednesday --serve
-```
+More in [Windows desktop app](docs/desktop.md). Running from source, on a VPS or
+developing: [Windows and VPS](docs/deploy-windows.md) and [Development](docs/development.md).
 
 ## Docs
 

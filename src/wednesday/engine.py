@@ -19,10 +19,14 @@ from .bias import BIAS_KEY, TradeBias, active
 from .feeds import DataFeed, M1Buffer, build_feed
 from .plugins import Hooks
 from .scanner import ScanConfig, ScanResult, scan
-from .settings import DataSettings
+from .settings import DataSettings, forget_mt5_password, load_mt5_password, mt5_account, save_mt5_password
 from .storage import Store
 
 log = logging.getLogger(__name__)
+
+
+# A feed that doesn't retry its connection (MT5) gets this many tries after losing it.
+RECONNECT_ATTEMPTS = 3
 
 
 def seconds_to_next_minute(delay: float) -> float:
@@ -37,6 +41,9 @@ class EngineState:
     scanned_at: datetime | None = None
     error: str | None = None
     error_at: datetime | None = None
+    # connecting -> connected; reconnecting while a lost connection is retried; failed once it gave up.
+    conn: str = "connecting"
+    attempt: int = 0  # reconnect attempts so far
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
@@ -57,6 +64,11 @@ class Engine:
         with self.state.lock:
             self.state.error = f"{type(exc).__name__}: {exc}"
             self.state.error_at = datetime.now(timezone.utc)
+
+    def _set_conn(self, conn: str, attempt: int = 0) -> None:
+        with self.state.lock:
+            self.state.conn = conn
+            self.state.attempt = attempt
 
     def step(self) -> ScanResult:
         """Fetch new M1 bars and rescan. Errors are recorded in the state and re-raised."""
@@ -86,6 +98,8 @@ class Engine:
         that needs the terminal (the journal's sync) goes through here.
         """
         if self._thread is None or not self._thread.is_alive():
+            if self.state.conn == "failed":
+                raise RuntimeError(f"Not connected ({self.state.error}). Press Reconnect in Settings.")
             raise RuntimeError("The scanner isn't running")
         done, box = threading.Event(), {}
 
@@ -120,10 +134,14 @@ class Engine:
     def run_forever(self, delay: float = 2.0, on_result=None) -> None:
         """Connect, then scan now and after every minute close until :meth:`stop`.
 
-        A failed connection is recorded like any other error and retried on the
-        next minute, so a terminal that is still starting doesn't kill the loop.
+        Most feeds retry a failed connection or scan on the next minute, so a
+        network blip doesn't kill the loop. A feed with ``retry_connect = False``
+        (MT5) gives up at once when the first connection fails, and after
+        ``RECONNECT_ATTEMPTS`` failed minutes in a row once it had connected; the
+        state then says ``failed`` until the dashboard restarts the feed.
         """
-        connected = False
+        connected = False  # the feed connected at least once
+        failures = 0
         try:
             while not self._stop.is_set():
                 try:
@@ -131,11 +149,18 @@ class Engine:
                         self.feed.connect()
                         connected = True
                     result = self.step()
+                    failures = 0
+                    self._set_conn("connected")
                     if on_result:
                         on_result(result)
                 except Exception as exc:
-                    if not connected:
-                        self._record_error(exc)
+                    failures += 1
+                    self._record_error(exc)
+                    if not self.feed.retry_connect and (not connected or failures >= RECONNECT_ATTEMPTS):
+                        self._set_conn("failed", failures)
+                        log.error("%s: giving up (%s); restart the feed from Settings", self.feed.name, exc)
+                        return
+                    self._set_conn("reconnecting" if connected else "connecting", failures)
                     log.exception("scan failed; retrying next minute")
                 self._idle(seconds_to_next_minute(delay))
         finally:
@@ -163,7 +188,8 @@ class Runtime:
                  calendar=None, lab=None, journals=None):
         self.cfg = cfg
         self.store = store
-        self.mt5_password = mt5_password
+        self.mt5_password = mt5_password  # MT5_PASSWORD from the environment, for setups that still use it
+        self._session_passwords: dict[str, str] = {}  # when there is no credential store: this run only
         self.delay = delay
         self.on_result = on_result
         self.alerts = alerts  # AlertManager or None
@@ -178,8 +204,30 @@ class Runtime:
         self.engine = self._build(settings)
 
     def _build(self, settings: DataSettings) -> Engine:
-        feed = build_feed(settings, self.mt5_password)
+        feed = build_feed(settings, self.mt5_password_for(settings)[0])
         return Engine(feed, self.cfg, settings.resolved_symbol, self.store)
+
+    def mt5_password_for(self, settings: DataSettings) -> tuple[str | None, str | None]:
+        """The MT5 password for the settings' account and where it came from: saved, session or env."""
+        account = mt5_account(settings.mt5_login, settings.mt5_server)
+        if pw := self._session_passwords.get(account):
+            return pw, "session"
+        if pw := load_mt5_password(settings.mt5_login, settings.mt5_server):
+            return pw, "saved"
+        if self.mt5_password:
+            return self.mt5_password, "env"
+        return None, None
+
+    def set_mt5_password(self, login: int, server: str | None, password: str) -> None:
+        account = mt5_account(login, server)
+        if save_mt5_password(login, server, password):
+            self._session_passwords.pop(account, None)
+        else:
+            self._session_passwords[account] = password
+
+    def forget_mt5_password(self, login: int | None, server: str | None) -> None:
+        self._session_passwords.pop(mt5_account(login, server), None)
+        forget_mt5_password(login, server)
 
     def active_bias(self) -> TradeBias | None:
         """The trader's bias, unless it has expired."""
@@ -216,6 +264,10 @@ class Runtime:
     def stop(self) -> None:
         self.hooks.shutdown()
         self.engine.stop()
+
+    def reconnect(self) -> None:
+        """Restart the feed with the current settings (after it gave up, or to pick up a new password)."""
+        self.apply(self.settings)
 
     def apply(self, settings: DataSettings) -> None:
         """Stop the current feed, then start one for ``settings``."""

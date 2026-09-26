@@ -27,6 +27,9 @@ log = logging.getLogger(__name__)
 class DataFeed(ABC):
     name = "base"
     persist = True  # store fetched bars in the database
+    # Keep retrying a failed connection every minute. MT5 doesn't: connecting starts the
+    # terminal, so retrying would reopen it every minute after the trader closed it.
+    retry_connect = True
 
     def connect(self) -> None:  # noqa: B027 - optional hook
         """Open connections / log in. Called once before the first fetch."""
@@ -55,6 +58,7 @@ class MT5Feed(DataFeed):
     """
 
     name = "mt5"
+    retry_connect = False
 
     def __init__(self, symbol: str = "XAUUSD", login: int | None = None,
                  password: str | None = None, server: str | None = None, path: str | None = None,
@@ -85,8 +89,13 @@ class MT5Feed(DataFeed):
         self._mt5 = mt5
 
     def reconnect(self) -> None:
+        """Connect again to a terminal that is still open; never start one the trader closed."""
         log.warning("reconnecting to MT5")
         self.close()
+        from .mt5_terminals import is_running
+
+        if self.path and not is_running(self.path):
+            raise RuntimeError("The MT5 terminal is closed. Open it, log in, then press Reconnect in Settings.")
         self.connect()
 
     def close(self) -> None:
@@ -101,7 +110,7 @@ class MT5Feed(DataFeed):
 
     def fetch_m1(self, count: int) -> pd.DataFrame:
         if self._mt5 is None:
-            self.connect()
+            self.reconnect()  # the connection was lost earlier
         rates = self._copy_rates(count)
         if rates is None or len(rates) == 0:
             # Terminal restarted or lost its connection: re-initialise once and retry.

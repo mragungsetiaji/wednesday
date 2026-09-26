@@ -14,11 +14,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-mt5 = ["MetaTrader5>=5.0.45; sys_platform == 'win32'"]
+mt5 = ["MetaTrader5>=5.0.45; sys_platform == 'win32'", "keyring>=25"]
 postgres = ["psycopg[binary]>=3.1"]
 llm = ["anthropic>=1.0", "openai>=1.0"]
 ml = ["scikit-learn>=1.5", "pyarrow>=16"]
-desktop = ["pywebview>=5"]
+desktop = ["pywebview>=5", "keyring>=25"]
 
 [project.scripts]
 wednesday = "wednesday.cli:main"

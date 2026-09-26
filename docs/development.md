@@ -1,5 +1,21 @@
 # Development
 
+Run from source (macOS, Linux or Windows):
+
+```bash
+git clone https://github.com/mragungsetiaji/wednesday.git
+cd wednesday
+make setup       # checks uv + Node, creates .env, installs everything, builds the dashboard
+make serve       # dashboard on http://127.0.0.1:8000 (Yahoo Finance data)
+make demo        # the same on random demo data
+make desktop     # the dashboard in its own window, like the Windows app
+make             # list every target
+```
+
+Extra flags go through `ARGS`, e.g. `make serve PORT=9000 ARGS="--lookback 300"`.
+On Windows without make, run the `uv` commands directly: see
+[Windows and VPS](deploy-windows.md).
+
 ```bash
 make install     # Python deps (uv) + dashboard deps (npm)
 make test        # pytest
