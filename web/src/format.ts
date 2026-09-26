@@ -1,4 +1,4 @@
-import type { OrderBlock } from "./api";
+import type { Level } from "./api";
 
 export const DIGITS = 2;
 
@@ -7,15 +7,39 @@ export const fmtPrice = (v: number) =>
 
 export const fmtSigned = (v: number) => `${v >= 0 ? "+" : "−"}${fmtPrice(Math.abs(v))}`;
 
-/** Distance from price to the zone's nearest edge (positive above, negative below, 0 inside). */
-export function distance(ob: OrderBlock, price: number): number {
-  if (ob.bottom > price) return ob.bottom - price;
-  if (ob.top < price) return ob.top - price;
+/** "2,468.32" for a line, "2,468.32 – 2,471.79" for a zone. */
+export const fmtLevelPrice = (lv: Level) =>
+  lv.top === lv.bottom ? fmtPrice(lv.top) : `${fmtPrice(lv.bottom)} – ${fmtPrice(lv.top)}`;
+
+/** Distance from price to the level's nearest edge (positive above, negative below, 0 inside). */
+export function distance(lv: Level, price: number): number {
+  if (lv.bottom > price) return lv.bottom - price;
+  if (lv.top < price) return lv.top - price;
   return 0;
 }
 
-export const kindLabel = (ob: OrderBlock) => (ob.kind === "bullish" ? "BULL" : "BEAR");
-export const kindArrow = (ob: OrderBlock) => (ob.kind === "bullish" ? "▲" : "▼");
+/** Short tag used next to a level. */
+export const SHORT: Record<string, string> = { ob: "OB", liquidity: "LIQ", idm: "IDM" };
+
+/** Visual role: which color/mark the level gets (see theme + zonesPrimitive). */
+export type Role = "bull" | "bear" | "liquidity" | "idm";
+
+export function roleOf(lv: Level): Role {
+  if (lv.detector === "ob") return lv.kind === "bullish" ? "bull" : "bear";
+  if (lv.detector === "liquidity") return "liquidity";
+  return "idm";
+}
+
+export function detail(lv: Level): string {
+  if (lv.detector === "ob") return lv.touches === 0 ? "untested" : `tested ${lv.touches}×`;
+  if (lv.detector === "liquidity") return lv.meta.equal ? "equal pool" : lv.kind === "bsl" ? "buy stops" : "sell stops";
+  return lv.kind === "bullish" ? "after bullish BOS" : "after bearish BOS";
+}
+
+export function eventVerb(lv: Level): string {
+  if (lv.detector === "ob") return "mitigated";
+  return lv.meta.grab ? "grabbed" : "broken";
+}
 
 /** Scan times are the feed's clock (broker server time); show them as-is. */
 export const fmtFeedTime = (iso: string) => iso.replace("T", " ").slice(0, 16);

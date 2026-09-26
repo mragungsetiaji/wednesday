@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, parse_detectors
 from .engine import Engine
 from .feeds import build_feed
 from .report import format_scan
@@ -54,6 +55,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--swing-length", type=int, default=5, help="pivot bars on each side of a swing")
     p.add_argument("--zone", default="wick", choices=["wick", "body"])
     p.add_argument("--mitigation", default="close", choices=["close", "wick"])
+    p.add_argument("--detectors", default=_env("XAU_DETECTORS") or ",".join(DEFAULT_DETECTORS),
+                   help=f"comma separated: {', '.join(REGISTRY)}")
+    p.add_argument("--eq-tolerance", type=float, default=0.1,
+                   help="equal highs/lows: max gap as a multiple of ATR(14)")
+    p.add_argument("--idm-length", type=int, default=2, help="internal swing bars each side for inducement")
+    p.add_argument("--recent-bars", type=int, default=3, help="report levels swept/mitigated within N candles")
     p.add_argument("--delay", type=float, default=2.0, help="seconds after each minute close before polling")
     p.add_argument("--once", action="store_true", help="scan once and exit")
     p.add_argument("--check", action="store_true", help="test the feed connection, print details and exit")
@@ -87,9 +94,15 @@ def run(args: argparse.Namespace) -> None:
     cfg = ScanConfig(
         timeframes=tuple(parse_timeframes(args.timeframes)),
         lookback=args.lookback,
-        swing_length=args.swing_length,
-        zone=args.zone,
-        mitigation=args.mitigation,
+        detectors=parse_detectors(args.detectors),
+        params=DetectorParams(
+            swing_length=args.swing_length,
+            zone=args.zone,
+            mitigation=args.mitigation,
+            eq_tolerance=args.eq_tolerance,
+            idm_length=args.idm_length,
+        ),
+        recent_bars=args.recent_bars,
     )
     mt5_kwargs = {}
     if args.source == "mt5":

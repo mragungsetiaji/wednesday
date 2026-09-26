@@ -11,15 +11,24 @@ import type {
   Time,
 } from "lightweight-charts";
 
+import type { Role } from "./format";
 import { withAlpha, type ChartPalette } from "./theme";
 
+/**
+ * One level to draw. Mark by role:
+ * - bull / bear (order blocks): filled box
+ * - liquidity: solid line (2px for equal-high/low pools, with a light band if it spans a range)
+ * - idm: dotted neutral line
+ * Every mark carries a text label, so identity never depends on color alone.
+ */
 export interface Zone {
-  kind: "bullish" | "bearish";
+  role: Role;
   top: number;
   bottom: number;
-  startTime: number; // unix seconds of the order block candle
+  startTime: number; // unix seconds of the origin candle
   label: string;
-  faded: boolean; // zones from other timeframes are drawn lighter
+  faded: boolean; // levels from higher timeframes are drawn lighter/dashed
+  strong?: boolean; // equal-high/low pools
 }
 
 /** First candle index whose time is >= t (candle times are ascending). */
@@ -34,6 +43,12 @@ function indexAtOrAfter(times: number[], t: number): number {
   return lo;
 }
 
+const colorOf = (role: Role, p: ChartPalette) =>
+  role === "bull" ? p.bull : role === "bear" ? p.bear : role === "liquidity" ? p.liquidity : p.idm;
+
+// Priority for labels when they collide: order blocks, then liquidity, then IDM.
+const RANK: Record<Role, number> = { bull: 0, bear: 0, liquidity: 1, idm: 2 };
+
 class ZonesRenderer implements IPrimitivePaneRenderer {
   constructor(private readonly source: ZonesPrimitive) {}
 
@@ -43,53 +58,71 @@ class ZonesRenderer implements IPrimitivePaneRenderer {
     const timeScale = chart.timeScale();
 
     target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, horizontalPixelRatio: hr, verticalPixelRatio: vr }) => {
-      const boxes: { z: Zone; x: number; y: number; w: number; h: number }[] = [];
-      // Faded (other timeframe) zones first so the selected timeframe's boxes sit on top.
+      const drawn: { z: Zone; x: number; y: number; h: number }[] = [];
+      // Faded (higher timeframe) levels first so the selected timeframe sits on top.
       for (const z of [...zones].sort((a, b) => Number(b.faded) - Number(a.faded))) {
         const yTop = series.priceToCoordinate(z.top);
         const yBottom = series.priceToCoordinate(z.bottom);
         if (yTop === null || yBottom === null) continue;
-        // Map the OB time to a bar slot so zones from other timeframes line up too.
-        const idx = indexAtOrAfter(times, z.startTime);
-        const xStart = timeScale.logicalToCoordinate(idx as Logical) ?? 0;
+        // Map the origin time to a bar slot so levels from other timeframes line up too.
+        const xStart = timeScale.logicalToCoordinate(indexAtOrAfter(times, z.startTime) as Logical) ?? 0;
         const x = Math.max(0, Math.round(xStart * hr));
         const y = Math.round(Math.min(yTop, yBottom) * vr);
-        const h = Math.max(1, Math.round(Math.abs(yBottom - yTop) * vr));
+        const h = Math.round(Math.abs(yBottom - yTop) * vr);
         const w = bitmapSize.width - x;
         if (w <= 0) continue;
+        const color = colorOf(z.role, palette);
+        const lw = Math.max(1, Math.round(hr));
 
-        const color = z.kind === "bullish" ? palette.bull : palette.bear;
-        ctx.fillStyle = withAlpha(color, z.faded ? 0.08 : 0.2);
-        ctx.fillRect(x, y, w, h);
-        ctx.strokeStyle = withAlpha(color, z.faded ? 0.45 : 0.9);
-        ctx.lineWidth = Math.max(1, Math.round(hr));
-        if (z.faded) ctx.setLineDash([4 * hr, 3 * hr]);
-        ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+        if (z.role === "bull" || z.role === "bear") {
+          ctx.fillStyle = withAlpha(color, z.faded ? 0.08 : 0.2);
+          ctx.fillRect(x, y, w, Math.max(1, h));
+          ctx.strokeStyle = withAlpha(color, z.faded ? 0.45 : 0.9);
+          ctx.lineWidth = lw;
+          ctx.setLineDash(z.faded ? [4 * hr, 3 * hr] : []);
+          ctx.strokeRect(x + 0.5, y + 0.5, w - 1, Math.max(1, h) - 1);
+        } else {
+          if (h > 1) {
+            ctx.fillStyle = withAlpha(color, z.faded ? 0.05 : 0.12);
+            ctx.fillRect(x, y, w, h);
+          }
+          ctx.strokeStyle = withAlpha(color, z.faded ? 0.5 : 0.95);
+          ctx.lineWidth = (z.strong ? 2 : 1) * lw;
+          ctx.setLineDash(z.role === "idm" ? [1.5 * hr, 3 * hr] : z.faded ? [6 * hr, 4 * hr] : []);
+          for (const ly of h > 1 ? [y, y + h] : [y]) {
+            ctx.beginPath();
+            ctx.moveTo(x, ly + 0.5);
+            ctx.lineTo(bitmapSize.width, ly + 0.5);
+            ctx.stroke();
+          }
+        }
         ctx.setLineDash([]);
-        boxes.push({ z, x, y, w, h });
+        drawn.push({ z, x, y, h });
       }
 
-      // Text labels (identity is never carried by color alone). Selected timeframe
-      // labels win; any label that would overlap one already drawn is skipped.
+      // Labels: selected timeframe first, then by detector rank; skip any that would overlap.
       const fontPx = Math.round(11 * vr);
       ctx.font = `${fontPx}px ui-sans-serif, system-ui, sans-serif`;
       ctx.textBaseline = "top";
       const placed: { x: number; y: number; w: number; h: number }[] = [];
       const pad = 4 * hr;
-      for (const { z, x, y, h } of [...boxes].reverse()) {
+      const lh = fontPx + 2 * vr;
+      const order = [...drawn].sort((a, b) => Number(a.z.faded) - Number(b.z.faded) || RANK[a.z.role] - RANK[b.z.role]);
+      for (const { z, x, y, h } of order) {
         const tw = ctx.measureText(z.label).width;
-        const lh = fontPx + 2 * vr;
         const lx = Math.max(pad, Math.min(x + 6 * hr, bitmapSize.width - tw - pad));
-        // Supply labels above the box, demand labels below it: away from price action.
-        const ly = z.kind === "bullish" ? y + h + 3 * vr : y - lh - 1 * vr;
-        const rect = { x: lx - 2 * hr, y: ly, w: tw + 4 * hr, h: lh };
-        if (ly < 0 || ly + lh > bitmapSize.height) continue;
-        if (placed.some((p) => rect.x < p.x + p.w && p.x < rect.x + rect.w && rect.y < p.y + p.h && p.y < rect.y + rect.h)) continue;
-        placed.push(rect);
-        ctx.fillStyle = withAlpha(palette.surface, 0.75);
-        ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-        ctx.fillStyle = z.faded ? palette.muted : palette.text;
-        ctx.fillText(z.label, lx, ly + 1 * vr);
+        // Try above the mark, then below it.
+        for (const ly of [y - lh - 1 * vr, y + Math.max(h, 1) + 2 * vr]) {
+          const rect = { x: lx - 2 * hr, y: ly, w: tw + 4 * hr, h: lh };
+          if (ly < 0 || ly + lh > bitmapSize.height) continue;
+          if (placed.some((p) => rect.x < p.x + p.w && p.x < rect.x + rect.w && rect.y < p.y + p.h && p.y < rect.y + rect.h)) continue;
+          placed.push(rect);
+          ctx.fillStyle = withAlpha(palette.surface, 0.8);
+          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+          ctx.fillStyle = z.faded ? palette.muted : palette.text;
+          ctx.fillText(z.label, lx, ly + 1 * vr);
+          break;
+        }
       }
     });
   }
@@ -111,7 +144,7 @@ class ZonesPaneView implements IPrimitivePaneView {
   }
 }
 
-/** Series primitive that draws order block zones as boxes extending to the right edge. */
+/** Series primitive that draws levels (boxes and lines) extending to the right edge. */
 export class ZonesPrimitive implements ISeriesPrimitive<Time> {
   chart: IChartApi | null = null;
   series: ISeriesApi<SeriesType> | null = null;

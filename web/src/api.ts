@@ -1,35 +1,47 @@
-export type Kind = "bullish" | "bearish";
-
-export interface OrderBlock {
-  kind: Kind;
+/** A level from any detector: a zone, or a line when top === bottom. */
+export interface Level {
+  detector: string; // "ob" | "liquidity" | "idm" | future detectors
+  kind: string; // "bullish"/"bearish" (ob, idm), "bsl"/"ssl" (liquidity)
+  label: string;
   top: number;
   bottom: number;
   time: string;
-  break_time: string;
-  touches: number;
-  mitigated_time: string | null;
   time_unix: number;
-  break_time_unix: number;
+  confirmed_time: string;
+  touches: number;
+  ended_time: string | null;
+  ended_time_unix: number | null;
+  meta: { grab?: boolean; equal?: number; [k: string]: unknown };
+}
+
+export type NearestLevel = Level & { timeframe: string };
+
+export interface LevelSet {
+  active_count: number;
+  active: Level[];
+  above: Level | null;
+  below: Level | null;
+  inside: Level[];
+  recent: Level[];
 }
 
 export interface TimeframeScan {
   timeframe: string;
   candles: number;
-  active_count: number;
-  above: OrderBlock | null;
-  below: OrderBlock | null;
-  inside: OrderBlock[];
-  active: OrderBlock[];
+  detectors: Record<string, LevelSet>;
 }
-
-export type NearestOB = OrderBlock & { timeframe: string };
 
 export interface Scan {
   time: string;
   price: number;
+  detectors: string[];
+  nearest: Record<string, { above: NearestLevel | null; below: NearestLevel | null }>;
   timeframes: TimeframeScan[];
-  nearest_above: NearestOB | null;
-  nearest_below: NearestOB | null;
+}
+
+export interface DetectorInfo {
+  name: string;
+  title: string;
 }
 
 export interface ScanResponse {
@@ -42,9 +54,13 @@ export interface ScanResponse {
   config: {
     timeframes: string[];
     lookback: number;
+    detectors: DetectorInfo[];
+    recent_bars: number;
     swing_length: number;
     zone: string;
     mitigation: string;
+    eq_tolerance: number;
+    idm_length: number;
   };
   scan: Scan | null;
 }
@@ -61,7 +77,7 @@ export interface CandlesResponse {
   timeframe: string;
   price: number;
   candles: Candle[];
-  order_blocks: OrderBlock[];
+  levels: Level[];
 }
 
 async function getJson<T>(url: string): Promise<T> {

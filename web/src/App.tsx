@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { fetchCandles, fetchScan, type CandlesResponse, type ScanResponse } from "./api";
-import { NearestCard } from "./components/NearestCard";
+import { fetchCandles, fetchScan, type CandlesResponse, type Level, type ScanResponse } from "./api";
+import { EventsPanel } from "./components/EventsPanel";
+import { NearestPanel } from "./components/NearestPanel";
 import { PriceChart } from "./components/PriceChart";
 import { TimeframeTable } from "./components/TimeframeTable";
-import { fmtAgo, fmtFeedTime, fmtPrice, kindLabel } from "./format";
+import { fmtAgo, fmtFeedTime, fmtLevelPrice, fmtPrice, roleOf } from "./format";
 import { useChartPalette } from "./theme";
 import type { Zone } from "./zonesPrimitive";
 
@@ -37,22 +38,35 @@ function savePref(key: string, value: unknown) {
   }
 }
 
+function toZone(lv: Level, label: string, faded: boolean): Zone {
+  return {
+    role: roleOf(lv), top: lv.top, bottom: lv.bottom, startTime: lv.time_unix,
+    label, faded, strong: Boolean(lv.meta.equal),
+  };
+}
+
 export default function App() {
   const palette = useChartPalette();
   const now = useNow(1000);
   const [data, setData] = useState<ScanResponse | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [tf, setTfState] = useState<string>(() => loadPref("xau.tf", "1H"));
-  const [showOtherTf, setShowOtherTfState] = useState<boolean>(() => loadPref("xau.otherTf", true));
+  const [showHigherTf, setShowHigherTfState] = useState<boolean>(() => loadPref("xau.otherTf", true));
+  const [hidden, setHiddenState] = useState<string[]>(() => loadPref("xau.hiddenLayers", []));
   const [chart, setChart] = useState<CandlesResponse | null>(null);
 
   const setTf = useCallback((v: string) => {
     setTfState(v);
     savePref("xau.tf", v);
   }, []);
-  const setShowOtherTf = (v: boolean) => {
-    setShowOtherTfState(v);
+  const setShowHigherTf = (v: boolean) => {
+    setShowHigherTfState(v);
     savePref("xau.otherTf", v);
+  };
+  const toggleLayer = (name: string) => {
+    const next = hidden.includes(name) ? hidden.filter((n) => n !== name) : [...hidden, name];
+    setHiddenState(next);
+    savePref("xau.hiddenLayers", next);
   };
 
   // Poll the scan; the server rescans once per minute and bumps `version`.
@@ -77,8 +91,12 @@ export default function App() {
   }, []);
 
   const version = data?.version ?? 0;
-  const lookback = data?.config.lookback ?? 200;
-  const timeframes = data?.config.timeframes ?? [];
+  const config = data?.config;
+  const lookback = config?.lookback ?? 200;
+  const timeframes = useMemo(() => config?.timeframes ?? [], [config]);
+  const allDetectors = useMemo(() => config?.detectors ?? [], [config]);
+  const detectors = useMemo(() => allDetectors.filter((d) => !hidden.includes(d.name)), [allDetectors, hidden]);
+
   useEffect(() => {
     if (timeframes.length && !timeframes.includes(tf)) setTf(timeframes[0]);
   }, [timeframes, tf, setTf]);
@@ -99,21 +117,18 @@ export default function App() {
 
   const zones = useMemo<Zone[]>(() => {
     if (!scan || !chart || chart.timeframe !== tf) return [];
-    const own: Zone[] = chart.order_blocks.map((ob) => ({
-      kind: ob.kind, top: ob.top, bottom: ob.bottom, startTime: ob.time_unix,
-      label: `${tf} ${kindLabel(ob)} ${fmtPrice(ob.bottom)}–${fmtPrice(ob.top)}`, faded: false,
-    }));
-    if (!showOtherTf) return own;
+    const shown = new Set(detectors.map((d) => d.name));
+    const own = chart.levels
+      .filter((lv) => shown.has(lv.detector))
+      .map((lv) => toZone(lv, `${tf} ${lv.label} ${fmtLevelPrice(lv)}`, false));
+    if (!showHigherTf) return own;
     // Only higher timeframes: they are the ones that matter when trading a lower one.
     const idx = scan.timeframes.findIndex((t) => t.timeframe === tf);
     const higher = scan.timeframes.slice(0, Math.max(0, idx)).flatMap((t) =>
-      t.active.map((ob) => ({
-        kind: ob.kind, top: ob.top, bottom: ob.bottom, startTime: ob.time_unix,
-        label: `${t.timeframe} ${kindLabel(ob)}`, faded: true,
-      })),
+      detectors.flatMap((d) => (t.detectors[d.name]?.active ?? []).map((lv) => toZone(lv, `${t.timeframe} ${lv.label}`, true))),
     );
     return [...higher, ...own];
-  }, [scan, chart, tf, showOtherTf]);
+  }, [scan, chart, tf, showHigherTf, detectors]);
 
   const lastOk = data?.scanned_at ? Date.parse(data.scanned_at) : null;
   const status = fetchError
@@ -128,16 +143,28 @@ export default function App() {
             ? { cls: "warn", text: "Stale" }
             : { cls: "ok", text: "Live" };
 
-  const insideTfs = scan?.timeframes.filter((t) => t.inside.length > 0) ?? [];
+  const insideNotes = scan
+    ? scan.timeframes.flatMap((t) =>
+        detectors.flatMap((d) => (t.detectors[d.name]?.inside ?? []).map((lv) => `${t.timeframe} ${lv.label} ${fmtLevelPrice(lv)}`)),
+      )
+    : [];
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
           <span className="symbol">{data?.symbol ?? "XAUUSD"}</span>
-          <span className="muted small">Order block screener</span>
+          <span className="muted small">SMC screener</span>
         </div>
         <div className="price num">{scan ? fmtPrice(scan.price) : "—"}</div>
+        <div className="layers" role="group" aria-label="Detectors shown">
+          {allDetectors.map((d) => (
+            <button key={d.name} type="button" className={`chip layer-${d.name}`}
+              aria-pressed={!hidden.includes(d.name)} onClick={() => toggleLayer(d.name)}>
+              {d.title}
+            </button>
+          ))}
+        </div>
         <div className="status">
           <span className={`pill ${status.cls}`}>
             <span className="dot" aria-hidden="true" />
@@ -156,19 +183,16 @@ export default function App() {
         </div>
       )}
 
-      {insideTfs.length > 0 && scan && (
-        <div className="banner info" role="status">
-          Price is inside {insideTfs.map((t) =>
-            `${t.timeframe} ${t.inside.map((ob) => `${kindLabel(ob)} ${fmtPrice(ob.bottom)}–${fmtPrice(ob.top)}`).join(", ")}`,
-          ).join(" · ")}
-        </div>
+      {insideNotes.length > 0 && (
+        <div className="banner info" role="status">Price is inside {insideNotes.join(" · ")}</div>
       )}
 
-      {scan ? (
+      {scan && config ? (
         <>
           <div className="nearest-row">
-            <NearestCard title="Nearest above" ob={scan.nearest_above} price={scan.price} onSelect={setTf} />
-            <NearestCard title="Nearest below" ob={scan.nearest_below} price={scan.price} onSelect={setTf} />
+            <NearestPanel side="above" scan={scan} detectors={detectors} onSelect={setTf} />
+            <NearestPanel side="below" scan={scan} detectors={detectors} onSelect={setTf} />
+            <EventsPanel scan={scan} detectors={detectors} recentBars={config.recent_bars} onSelect={setTf} />
           </div>
 
           <main className="main-grid">
@@ -183,26 +207,28 @@ export default function App() {
                   ))}
                 </div>
                 <label className="toggle">
-                  <input type="checkbox" checked={showOtherTf} onChange={(e) => setShowOtherTf(e.target.checked)} />
-                  Higher TF zones
+                  <input type="checkbox" checked={showHigherTf} onChange={(e) => setShowHigherTf(e.target.checked)} />
+                  Higher TF levels
                 </label>
               </div>
               <PriceChart candles={chart?.timeframe === tf ? chart.candles : []} zones={zones}
                 palette={palette} resetKey={tf} />
               <div className="chart-foot muted small">
-                <span><i className="swatch bullish" /> ▲ Bullish OB (demand)</span>
-                <span><i className="swatch bearish" /> ▼ Bearish OB (supply)</span>
-                {showOtherTf && <span><i className="swatch faded" /> dashed = higher timeframe</span>}
+                <span><span className="tag role-bull" /> Bullish OB</span>
+                <span><span className="tag role-bear" /> Bearish OB</span>
+                <span><span className="tag role-liquidity" /> BSL / SSL (thick = EQH/EQL)</span>
+                <span><span className="tag role-idm" /> IDM</span>
+                {showHigherTf && <span>faded / dashed = higher TF</span>}
                 <span>times = broker server time</span>
               </div>
             </section>
 
-            <TimeframeTable rows={scan.timeframes} price={scan.price} selected={tf} onSelect={setTf} />
+            <TimeframeTable rows={scan.timeframes} detectors={detectors} price={scan.price} selected={tf} onSelect={setTf} />
           </main>
 
           <footer className="muted small foot">
-            lookback {data!.config.lookback} candles · swing {data!.config.swing_length} · zone{" "}
-            {data!.config.zone} · mitigation by {data!.config.mitigation}
+            lookback {config.lookback} candles · swing {config.swing_length} · OB zone {config.zone}, mitigated by{" "}
+            {config.mitigation} · equal levels ≤ {config.eq_tolerance}×ATR · IDM swing {config.idm_length}
           </footer>
         </>
       ) : (

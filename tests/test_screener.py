@@ -3,9 +3,16 @@ import pandas as pd
 import pytest
 
 from xau_screener.feeds import M1Buffer, SyntheticFeed
-from xau_screener.orderblock import detect_order_blocks
+from xau_screener.detectors import DetectorParams
+from xau_screener.detectors.orderblock import OrderBlockDetector
+from xau_screener.structure import Context
 from xau_screener.scanner import ScanConfig, scan, split_by_price
 from xau_screener.timeframes import TIMEFRAMES_BY_NAME, parse_timeframes, resample_ohlcv
+
+
+def detect_order_blocks(df, swing_length=5, zone="wick", mitigation="close"):
+    params = DetectorParams(swing_length=swing_length, zone=zone, mitigation=mitigation)
+    return OrderBlockDetector(params).detect(Context(df))
 
 
 def candles(rows, start="2026-01-05 00:00", freq="5min"):
@@ -68,8 +75,8 @@ def test_detects_bullish_order_block():
     ob = bull[0]
     assert (ob.bottom, ob.top) == (98, 101.5)
     assert ob.time == df.index[6]
-    assert ob.break_time == df.index[9]
-    assert not ob.mitigated
+    assert ob.confirmed_time == df.index[9]
+    assert ob.active and ob.label == "BULL OB"
 
     body = detect_order_blocks(df, swing_length=2, zone="body")
     assert [(b.bottom, b.top) for b in body if b.kind == "bullish"] == [(99, 101)]
@@ -81,7 +88,7 @@ def test_bullish_order_block_mitigated_by_close_below():
     blocks = detect_order_blocks(pd.concat([df, extra]), swing_length=2)
     ob = next(b for b in blocks if b.kind == "bullish")
     assert ob.touches == 1  # first extra candle wicks into 98-101.5
-    assert ob.mitigated_time == extra.index[1]
+    assert ob.ended_time == extra.index[1]
 
 
 def test_detects_bearish_order_block_as_mirror():
@@ -113,7 +120,7 @@ def test_split_by_price():
 
 
 def test_scan_end_to_end_with_synthetic_feed():
-    cfg = ScanConfig(lookback=100, swing_length=3)
+    cfg = ScanConfig(lookback=100, params=DetectorParams(swing_length=3))
     feed = SyntheticFeed(seed=7, history=cfg.required_m1_bars() + 500, end=pd.Timestamp("2026-03-02 12:00"))
     buf = M1Buffer(feed, max_bars=cfg.required_m1_bars())
     m1 = buf.update()
@@ -125,11 +132,25 @@ def test_scan_end_to_end_with_synthetic_feed():
 
     result = scan(m1, cfg)
     assert [r.timeframe.name for r in result.results] == ["4H", "1H", "30M", "15M", "5M"]
+    assert result.detectors == ("ob", "liquidity", "idm")
     for r in result.results:
         assert r.candles == 100
-        if r.above:
-            assert r.above.bottom > result.price and not r.above.mitigated
-        if r.below:
-            assert r.below.top < result.price and not r.below.mitigated
-    assert any(r.active for r in result.results)
-    assert result.to_dict()["timeframes"][0]["timeframe"] == "4H"
+        assert set(r.sets) == {"ob", "liquidity", "idm"}
+        for s in r.sets.values():
+            if s.above:
+                assert s.above.bottom > result.price and s.above.active
+            if s.below:
+                assert s.below.top < result.price and s.below.active
+            assert all(not lv.active for lv in s.recent)
+    assert any(r.sets["ob"].active for r in result.results)
+    assert any(r.sets["liquidity"].active for r in result.results)
+    d = result.to_dict()
+    assert d["timeframes"][0]["timeframe"] == "4H"
+    assert set(d["nearest"]) == {"ob", "liquidity", "idm"}
+
+
+def test_scan_detector_selection():
+    cfg = ScanConfig(lookback=50, detectors=("liquidity",), timeframes=(TIMEFRAMES_BY_NAME["5M"],))
+    feed = SyntheticFeed(seed=1, history=cfg.required_m1_bars(), end=pd.Timestamp("2026-03-02 12:00"))
+    result = scan(feed.fetch_m1(cfg.required_m1_bars()), cfg)
+    assert list(result.results[0].sets) == ["liquidity"]

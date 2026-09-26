@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+from xau_screener.detectors import DetectorParams
 from xau_screener.engine import Engine
 from xau_screener.feeds import SyntheticFeed
 from xau_screener.scanner import ScanConfig
@@ -10,7 +11,7 @@ from xau_screener.server import create_app
 
 @pytest.fixture
 def engine():
-    cfg = ScanConfig(lookback=100, swing_length=3)
+    cfg = ScanConfig(lookback=100, params=DetectorParams(swing_length=3))
     feed = SyntheticFeed(seed=7, history=cfg.required_m1_bars() + 100, end=pd.Timestamp("2026-03-02 12:00"))
     return Engine(feed, cfg, "XAUUSD")
 
@@ -31,11 +32,17 @@ def test_scan_and_candles(engine, tmp_path):
     assert body["version"] == 1 and body["error"] is None
     scan = body["scan"]
     assert [t["timeframe"] for t in scan["timeframes"]] == ["4H", "1H", "30M", "15M", "5M"]
+    assert [d["name"] for d in body["config"]["detectors"]] == ["ob", "liquidity", "idm"]
+    assert body["config"]["swing_length"] == 3
     for t in scan["timeframes"]:
-        assert t["active_count"] == len(t["active"])
-    if scan["nearest_above"]:
-        assert scan["nearest_above"]["bottom"] > scan["price"]
-        assert scan["nearest_above"]["timeframe"] in {"4H", "1H", "30M", "15M", "5M"}
+        assert set(t["detectors"]) == {"ob", "liquidity", "idm"}
+        for d in t["detectors"].values():
+            assert d["active_count"] == len(d["active"])
+    above = scan["nearest"]["ob"]["above"]
+    if above:
+        assert above["bottom"] > scan["price"]
+        assert above["timeframe"] in {"4H", "1H", "30M", "15M", "5M"}
+        assert isinstance(above["time_unix"], int)
 
     res = client.get("/api/candles?tf=15m&limit=50").json()
     assert res["timeframe"] == "15M"
@@ -43,7 +50,8 @@ def test_scan_and_candles(engine, tmp_path):
     times = [c["time"] for c in res["candles"]]
     assert times == sorted(times)
     tf15 = next(t for t in scan["timeframes"] if t["timeframe"] == "15M")
-    assert len(res["order_blocks"]) == tf15["active_count"]
+    assert len(res["levels"]) == sum(d["active_count"] for d in tf15["detectors"].values())
+    assert {lv["detector"] for lv in res["levels"]} <= {"ob", "liquidity", "idm"}
     assert client.get("/api/candles?tf=2H").status_code == 404
 
 
