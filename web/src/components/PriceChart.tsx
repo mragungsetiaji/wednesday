@@ -74,6 +74,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const quarterSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const quartersRef = useRef<QuartersPrimitive | null>(null);
+  const quarterPaneHeight = useRef(0);
   const fittedKey = useRef<string | null>(null);
   const [hover, setHover] = useState<Candle | null>(null);
 
@@ -97,10 +98,17 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       quartersPrimitive.update({ hoverTime: param.time === undefined ? null : (param.time as number) });
     });
     quartersRef.current = quartersPrimitive;
+    // Resizing the chart rescales every pane; keep the quarterly pane at its fixed height.
+    const resize = new ResizeObserver(() => {
+      const h = quarterPaneHeight.current;
+      if (h) requestAnimationFrame(() => chartRef.current?.panes()[QUARTER_PANE]?.setHeight(h));
+    });
+    resize.observe(containerRef.current!);
     chartRef.current = chart;
     seriesRef.current = series;
     zonesRef.current = primitive;
     return () => {
+      resize.disconnect();
       chart.remove();
       chartRef.current = null;
       quarterSeriesRef.current = null;
@@ -174,6 +182,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     if (!quarterRows.length) {
       if (qs) chart.removeSeries(qs);
       quarterSeriesRef.current = null;
+      quarterPaneHeight.current = 0;
       return;
     }
     if (!qs) {
@@ -187,7 +196,8 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     }
     qs.setData(candles.map((c) => ({ time: c.time as UTCTimestamp, value: 0 })));
     primitive.update({ blocks: quarters?.rows ?? {}, rows: quarterRows, times: candles.map((c) => c.time) });
-    chart.panes()[QUARTER_PANE]?.setHeight(quarterRows.length * ROW_PX + 10);
+    quarterPaneHeight.current = quarterRows.length * ROW_PX + 10;
+    chart.panes()[QUARTER_PANE]?.setHeight(quarterPaneHeight.current);
   }, [candles, quarters, quarterRows]);
 
   const shown = hover ?? candles[candles.length - 1];

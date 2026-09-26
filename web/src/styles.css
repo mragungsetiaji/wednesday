@@ -374,16 +374,149 @@ p {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+.chart-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s1) var(--s2) var(--s1) var(--s3);
+  border-top: 1px solid var(--line);
+}
 .legend {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
   gap: var(--s1) var(--s4);
   margin: 0;
-  padding: var(--s2) var(--s3);
+  padding: var(--s1) 0;
   list-style: none;
-  border-top: 1px solid var(--line);
   font-size: var(--text-xs);
   color: var(--text-2);
+}
+
+/* Square icon-only control, e.g. full screen. */
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  transition: background-color 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
+}
+.icon-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.icon-button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.icon-button:disabled {
+  opacity: 0.4;
+}
+
+/* ---------- Full screen charts ---------- */
+.focus {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  outline: none;
+  animation: focus-in 180ms var(--ease-out);
+}
+@keyframes focus-in {
+  from { opacity: 0; transform: scale(0.99); }
+}
+.focus-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+  min-height: 48px;
+  padding: var(--s1) var(--s4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-sm);
+}
+.focus-symbol {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+.focus-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+}
+.focus-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.seg {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  transition: background-color 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
+}
+.seg:hover {
+  color: var(--text);
+}
+.seg:active {
+  transform: scale(0.96);
+}
+.seg[aria-pressed="true"] {
+  background: var(--hover);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}
+
+/* 1px of --line between panes, like TradingView's split layouts. */
+.focus-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+}
+.focus-grid.layout-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.focus-grid.layout-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+}
+.pane-head {
+  display: flex;
+  align-items: center;
+  padding: var(--s1) var(--s2);
+  border-bottom: 1px solid var(--line);
+}
+.tabs-compact .tab {
+  height: 22px;
+  padding-inline: 8px;
+  font-size: var(--text-xs);
 }
 .legend li {
   display: inline-flex;
@@ -753,6 +886,22 @@ p {
   }
   .quarter-groups {
     grid-template-columns: minmax(0, 1fr);
+  }
+  /* Narrow screens stack the panes and scroll instead of squeezing them side by side. */
+  .focus-grid {
+    overflow-y: auto;
+  }
+  .focus-grid.layout-2,
+  .focus-grid.layout-4 {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: minmax(360px, 1fr);
+  }
+  .pane .chart-wrap {
+    /* the pane sets the height here, not the dashboard's chart size */
+    flex: 1;
+    height: auto;
+    min-height: 0;
   }
 }
 

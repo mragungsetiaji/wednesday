@@ -24,6 +24,18 @@ The timeframe tabs carry each timeframe's structure direction (↑ / ↓).
 **Mid OBs** and **Higher timeframes** can be switched off above the chart, and
 each detector can be hidden from the top bar.
 
+## Full screen and multiple charts
+
+The button at the bottom right of the chart opens the charts full screen,
+TradingView style. Pick a layout at the top: **one chart**, **two side by side**
+or **four in a 2 × 2 grid**. Each chart has its own timeframe tabs; the first
+one follows the dashboard's timeframe, the others are remembered in this
+browser, as is the layout. Mid OBs, higher timeframes and quarters switch for
+all charts at once. **Esc** or **Exit** goes back. On a phone the charts stack
+and scroll.
+
+![Four charts: 1H, 15M, 30M and 5M](images/fullscreen-4.png)
+
 ## Quarterly theory pane
 
 Under the candles, a pane splits time the way quarterly theory does, in New

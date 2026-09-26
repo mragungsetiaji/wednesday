@@ -48,3 +48,26 @@ export const SlidersIcon = (p: IconProps) => (
     <circle cx="10.5" cy="11.5" r="1.75" fill="var(--surface, #1a1a19)" />
   </Svg>
 );
+
+/** Corners out: enter full screen. */
+export const ExpandIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" />
+  </Svg>
+);
+
+/** Corners in: leave full screen. */
+export const CollapseIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 2.5V6H2.5M13.5 6H10V2.5M10 13.5V10h3.5M2.5 10H6v3.5" />
+  </Svg>
+);
+
+/** Chart layout: one, two side by side, or a 2×2 grid. */
+export const LayoutIcon = ({ panes, ...p }: IconProps & { panes: 1 | 2 | 4 }) => (
+  <Svg {...p}>
+    <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+    {panes >= 2 && <path d="M8 2.5v11" />}
+    {panes === 4 && <path d="M2 8h12" />}
+  </Svg>
+);

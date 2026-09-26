@@ -1,21 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import {
-  fetchCandles, fetchQuarters, fetchScan,
-  type CandlesResponse, type Level, type QuarterRow, type QuartersResponse, type ScanResponse,
-} from "./api";
+import { fetchQuarters, fetchScan, type QuartersResponse, type ScanResponse } from "./api";
+import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
+import { ChartFocus } from "./components/ChartFocus";
 import { EventsPanel } from "./components/EventsPanel";
-import { PriceChart, type ChartEvent } from "./components/PriceChart";
+import { PriceChart } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
 import { SettingsPage } from "./components/SettingsPage";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtAgo, fmtFeedTime, fmtPrice } from "./format";
-import { ChartIcon, Direction, SlidersIcon } from "./icons";
-import { buildRail, contextZone, levelKey, railZone } from "./rail";
+import { ChartIcon, Direction, ExpandIcon, SlidersIcon } from "./icons";
+import { usePref } from "./prefs";
+import { buildRail } from "./rail";
 import { useChartPalette } from "./theme";
-import type { Zone } from "./zonesPrimitive";
 
 const POLL_MS = 5000;
 const STALE_MS = 150_000; // no successful scan for 2.5 minutes
@@ -27,32 +26,6 @@ function useNow(ms: number) {
     return () => clearInterval(id);
   }, [ms]);
   return now;
-}
-
-function loadPref<T>(key: string, fallback: T): T {
-  try {
-    const v = localStorage.getItem(key);
-    return v === null ? fallback : (JSON.parse(v) as T);
-  } catch {
-    return fallback;
-  }
-}
-
-function savePref(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* storage unavailable: the preference just isn't remembered */
-  }
-}
-
-function usePref<T>(key: string, fallback: T): [T, (v: T) => void] {
-  const [value, setValue] = useState<T>(() => loadPref(key, fallback));
-  const set = useCallback((v: T) => {
-    setValue(v);
-    savePref(key, v);
-  }, [key]);
-  return [value, set];
 }
 
 type View = "chart" | "settings";
@@ -72,22 +45,7 @@ function useView(): [View, (v: View) => void] {
   return [view, go];
 }
 
-/** Which side of the bar an event marker goes: sweeps of highs above, of lows below. */
-function eventAbove(lv: Level): boolean {
-  if (lv.detector === "liquidity") return lv.kind === "bsl";
-  return lv.kind === "bearish";
-}
-
-/** Quarterly rows worth drawing on a timeframe: 90-minute blocks get too thin on 4H. */
-const quarterRowsFor = (tf: string): QuarterRow[] => (tf === "4H" ? ["week", "session"] : ["week", "session", "q90"]);
-
 const CLOCK_NAMES: Record<string, string> = { UTC: "UTC", "NY+7": "broker server time (New York +7)" };
-
-function eventText(lv: Level): string {
-  if (lv.detector === "ob") return `${lv.kind === "bullish" ? "Bull" : "Bear"} OB taken`;
-  const what = lv.detector === "liquidity" ? lv.kind.toUpperCase() : "IDM";
-  return `${what} ${lv.meta.grab ? "grab" : "break"}`;
-}
 
 export default function App() {
   const palette = useChartPalette();
@@ -99,7 +57,7 @@ export default function App() {
   const [showMidOb, setShowMidOb] = usePref("xau.midOb", true);
   const [hidden, setHidden] = usePref<string[]>("xau.hiddenLayers", []);
   const [showQuarters, setShowQuarters] = usePref("xau.quarters", true);
-  const [chart, setChart] = useState<CandlesResponse | null>(null);
+  const [focus, setFocus] = useState(false);
   const [quarters, setQuarters] = useState<QuartersResponse | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [view, setView] = useView();
@@ -137,19 +95,7 @@ export default function App() {
     if (timeframes.length && !timeframes.includes(tf)) setTf(timeframes[0]);
   }, [timeframes, tf, setTf]);
 
-  useEffect(() => {
-    if (!version) {
-      setChart(null); // feed (re)starting: don't keep showing the previous source's candles
-      return;
-    }
-    let alive = true;
-    fetchCandles(tf, lookback)
-      .then((res) => alive && setChart(res))
-      .catch((e) => alive && setFetchError(e instanceof Error ? e.message : String(e)));
-    return () => {
-      alive = false;
-    };
-  }, [tf, version, lookback]);
+  const chart = useCandles(tf, version, lookback, setFetchError);
 
   useEffect(() => {
     if (!version) {
@@ -168,42 +114,11 @@ export default function App() {
   const quarterRows = useMemo(() => (showQuarters ? quarterRowsFor(tf) : []), [showQuarters, tf]);
 
   const rail = useMemo(() => (scan ? buildRail(scan, detectors) : []), [scan, detectors]);
-  const tfScan = scan?.timeframes.find((t) => t.timeframe === tf) ?? null;
 
-  const zones = useMemo<Zone[]>(() => {
-    if (!scan || !chart || chart.timeframe !== tf) return [];
-    const shown = new Set(detectors.map((d) => d.name));
-    const pinned = new Set(rail.map((i) => levelKey(i.tf, i.level)));
-    const keep = (t: string, lv: Level) =>
-      shown.has(lv.detector) && (showMidOb || lv.meta.priority !== "middle") && !pinned.has(levelKey(t, lv));
-
-    const own = chart.levels.filter((lv) => keep(tf, lv)).map((lv) => contextZone(tf, lv, false));
-    const idx = scan.timeframes.findIndex((t) => t.timeframe === tf);
-    const higher = showHigherTf
-      ? scan.timeframes.slice(0, Math.max(0, idx)).flatMap((t) =>
-          detectors.flatMap((d) =>
-            (t.detectors[d.name]?.active ?? []).filter((lv) => keep(t.timeframe, lv)).map((lv) => contextZone(t.timeframe, lv, true)),
-          ),
-        )
-      : [];
-    const bias = tfScan?.bias;
-    const structure: Zone[] = bias
-      ? [{
-          id: `bos-${tf}`, role: "structure", mark: "segment", top: bias.level, bottom: bias.level,
-          startTime: bias.swing_time_unix, endTime: bias.break_time_unix, label: bias.event,
-        }]
-      : [];
-    return [...higher, ...own, ...structure, ...rail.map(railZone)];
-  }, [scan, chart, tf, tfScan, showHigherTf, showMidOb, detectors, rail]);
-
-  const events = useMemo<ChartEvent[]>(() => {
-    if (!tfScan) return [];
-    return detectors.flatMap((d) =>
-      (tfScan.detectors[d.name]?.recent ?? [])
-        .filter((lv) => lv.ended_time_unix !== null)
-        .map((lv) => ({ time: lv.ended_time_unix!, above: eventAbove(lv), text: eventText(lv) })),
-    );
-  }, [tfScan, detectors]);
+  const layers = useMemo<LayerOptions>(() => ({ detectors, showHigherTf, showMidOb }), [detectors, showHigherTf, showMidOb]);
+  const zones = useMemo(() => (scan && chart ? buildZones(scan, chart, tf, rail, layers) : []), [scan, chart, tf, rail, layers]);
+  const events = useMemo(() => (scan ? buildEvents(scan, tf, detectors) : []), [scan, tf, detectors]);
+  const closeFocus = useCallback(() => setFocus(false), []);
 
   const lastOk = data?.scanned_at ? Date.parse(data.scanned_at) : null;
   const status = fetchError
@@ -312,26 +227,32 @@ export default function App() {
                 </div>
               </div>
               <PriceChart
-                candles={chart?.timeframe === tf ? chart.candles : []}
+                candles={chart?.candles ?? []}
                 zones={zones}
                 events={events}
                 highlight={highlight}
                 palette={palette}
                 resetKey={tf}
-                loading={!chart || chart.timeframe !== tf}
+                loading={!chart}
                 quarters={quarters}
                 quarterRows={quarterRows}
               />
-              <ul className="legend" aria-label="Chart legend">
-                <li><span className="key key-setup" /> S / B: limit entry, dashed stop</li>
-                <li><span className="key key-bull" /> Bullish OB</li>
-                <li><span className="key key-bear" /> Bearish OB</li>
-                <li><span className="key key-liq" /> BSL / SSL</li>
-                <li><span className="key key-idm" /> IDM</li>
-                <li><span className="key key-bos" /> Last break</li>
-                {quarterRows.length > 0 && <li><span className="key key-quarter" /> Quarters: green closed up</li>}
-                <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
-              </ul>
+              <div className="chart-foot">
+                <ul className="legend" aria-label="Chart legend">
+                  <li><span className="key key-setup" /> S / B: limit entry, dashed stop</li>
+                  <li><span className="key key-bull" /> Bullish OB</li>
+                  <li><span className="key key-bear" /> Bearish OB</li>
+                  <li><span className="key key-liq" /> BSL / SSL</li>
+                  <li><span className="key key-idm" /> IDM</li>
+                  <li><span className="key key-bos" /> Last break</li>
+                  {quarterRows.length > 0 && <li><span className="key key-quarter" /> Quarters: green closed up</li>}
+                  <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
+                </ul>
+                <button type="button" className="icon-button" onClick={() => setFocus(true)} disabled={!scan}
+                  title="Full screen: one, two or four charts" aria-label="Full screen charts">
+                  <ExpandIcon size={15} />
+                </button>
+              </div>
             </section>
 
             {scan ? (
@@ -369,6 +290,30 @@ export default function App() {
             </div>
           )}
         </>
+      )}
+
+      {focus && scan && data && (
+        <ChartFocus
+          symbol={data.symbol}
+          scan={scan}
+          timeframes={timeframes}
+          version={version}
+          lookback={lookback}
+          rail={rail}
+          layers={layers}
+          palette={palette}
+          quarters={quarters}
+          showQuarters={showQuarters}
+          toggles={[
+            { label: "Mid OBs", checked: showMidOb, onChange: setShowMidOb },
+            { label: "Higher timeframes", checked: showHigherTf, onChange: setShowHigherTf },
+            { label: "Quarters", checked: showQuarters, onChange: setShowQuarters },
+          ]}
+          tf={tf}
+          onTf={setTf}
+          status={status}
+          onClose={closeFocus}
+        />
       )}
     </div>
   );

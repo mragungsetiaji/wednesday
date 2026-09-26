@@ -45,6 +45,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **Finds the nearest levels** above and below price: order blocks (extreme and mid), BSL / SSL with equal highs and lows, and inducement.
 - **Ranks limit setups**: entry on the order block's body, stop on the opposite edge capped at 3.00, extreme first, then nearest.
 - **Maps everything to the chart**: every setup and level in the ladder is pinned on the chart under the same tag.
+- **Full screen with 1, 2 or 4 charts**, each on its own timeframe, TradingView style.
 - **Quarterly theory pane** under the chart: every weekday, session (Tokyo, London, NY AM, NY PM) and 90-minute quarter as a green or red block, plus how often each one closed green.
 - **Pings you on Telegram** when price trades into an order block.
 - **Free data by default** (Yahoo Finance), MetaTrader 5 when you're ready; history stored in SQLite or PostgreSQL.
