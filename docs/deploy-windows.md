@@ -89,7 +89,7 @@ port 8000 to your own IP.
 
 Settings and every stored M1 bar live in `data\xau.db` (SQLite). Back that file
 up with the rest of the folder; deleting it only means the history is fetched
-again. To use PostgreSQL instead, see the README (*Data sources and storage*).
+again. To use PostgreSQL instead, see [Data sources and storage](data-sources.md#storage).
 
 Logs go to `logs/screener.log` (rotated at 5 MB, 5 files kept) when
 `XAU_LOG_FILE` is set; every scan table is written there too.
