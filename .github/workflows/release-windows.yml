@@ -28,6 +28,9 @@ jobs:
             $version = "$base-dev.$env:GITHUB_RUN_NUMBER"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
+          # The app shows this in its status bar.
+          (Get-Content src/wednesday/__init__.py) -replace '^__version__ = ".*"', "__version__ = `"$version`"" |
+            Set-Content src/wednesday/__init__.py
 
       - uses: actions/setup-node@v4
         with:

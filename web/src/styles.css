@@ -46,6 +46,7 @@
   --radius: 6px;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --topbar-h: 52px;
+  --statusbar-h: 26px;
 }
 
 @media (prefers-color-scheme: light) {
@@ -260,7 +261,7 @@ p {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 344px;
   /* Leave the details below peeking into the first viewport. */
-  height: clamp(520px, calc(100dvh - var(--topbar-h) - 140px), 720px);
+  height: clamp(520px, calc(100dvh - var(--topbar-h) - var(--statusbar-h) - 140px), 720px);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
@@ -415,6 +416,29 @@ p {
 }
 .icon-button:disabled {
   opacity: 0.4;
+}
+
+/* ---------- Status bar (bottom) ---------- */
+.statusbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  margin-top: auto;
+  height: var(--statusbar-h);
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  padding-inline: var(--s3);
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+.statusbar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 /* ---------- Full screen charts ---------- */
@@ -640,7 +664,7 @@ p {
 .news-card {
   position: fixed;
   right: var(--s4);
-  bottom: var(--s4);
+  bottom: calc(var(--statusbar-h) + var(--s4));
   z-index: 60;
   width: min(340px, calc(100vw - 2 * var(--s4)));
   padding: 2px;
@@ -1845,7 +1869,7 @@ fieldset:disabled .switch {
 .lab-label {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  height: calc(100dvh - var(--topbar-h) - 47px);
+  height: calc(100dvh - var(--topbar-h) - var(--statusbar-h) - 47px);
   min-height: 520px;
   background: var(--surface);
 }
@@ -2835,4 +2859,9 @@ fieldset:disabled .switch {
 .terms-check {
   align-items: flex-start;
   line-height: 1.5;
+}
+
+/* Full screen covers the status bar: the news card sits at the corner. */
+.focus .news-card {
+  bottom: var(--s4);
 }

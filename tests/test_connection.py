@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
+import wednesday
 from wednesday import engine as engine_mod
 from wednesday import mt5_terminals
 from wednesday import secret_store
@@ -187,6 +188,7 @@ def test_reconnect_and_terminals_endpoints(tmp_path, monkeypatch):
         assert runtime.engine is not before
         assert body["running"]["conn"] in {"connecting", "connected"}
         assert body["running"]["max_attempts"] is None  # demo data keeps retrying
+        assert api.get("/api/status").json()["app_version"] == wednesday.__version__
         assert api.get("/api/mt5/terminals").json()["terminals"][0]["name"] == "MT5"
     finally:
         runtime.stop()

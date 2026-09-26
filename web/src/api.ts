@@ -87,6 +87,7 @@ export interface ScanResponse {
   error: string | null;
   error_at: string | null;
   conn: FeedConn;
+  app_version: string;
   config: {
     timeframes: string[];
     lookback: number;

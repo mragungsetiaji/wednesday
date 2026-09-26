@@ -13,6 +13,7 @@ import { PriceChart } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
 import { SettingsPage } from "./components/SettingsPage";
+import { StatusBar } from "./components/StatusBar";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtAgo, fmtFeedTime, fmtPrice } from "./format";
@@ -379,6 +380,8 @@ export default function App() {
           )}
         </>
       )}
+
+      <StatusBar version={data?.app_version} />
 
       {/* Full screen renders its own copy: the browser only shows the full screen element. */}
       {!(focus && scan && data) && <NewsAlert events={upcomingNews} />}

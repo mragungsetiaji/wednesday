@@ -99,3 +99,11 @@ export const CrossIcon = (p: IconProps) => (
     <path d="M4 4l8 8M12 4l-8 8" />
   </Svg>
 );
+
+/** Tag: the app version. */
+export const TagIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 2.5h5l6 6-5 5-6-6z" />
+    <circle cx="5.5" cy="5.5" r="0.75" />
+  </Svg>
+);

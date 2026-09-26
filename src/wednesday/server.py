@@ -16,6 +16,7 @@ from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import __version__
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
 from .brief import BRIEF_KEY, BriefError, BriefSettings
@@ -85,6 +86,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                 "error": st.error,
                 "error_at": _iso(st.error_at),
                 "conn": st.conn,
+                "app_version": __version__,
                 "config": cfg.to_dict(),
             }
 
