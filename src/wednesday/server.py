@@ -21,6 +21,7 @@ from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .news import CALENDAR_KEY, CalendarSettings
 from .engine import Engine, Runtime
 from .lab.api import lab_router
+from .plugins import PLUGIN_API, features, load_plugins
 from .quarters import quarters_payload, utc_to_feed
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
@@ -303,6 +304,15 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return {"ok": True}
 
     app.include_router(lab_router(lambda: runtime.lab if runtime else None, current, current_source))
+
+    # Plugins mount their routes before the dashboard's catch-all static mount below.
+    plugins = load_plugins(app, runtime) if runtime else []
+    app.state.plugins = plugins
+
+    @app.get("/api/plugins")
+    def get_plugins() -> dict:
+        """Installed plugins and the features they provide (the dashboard unlocks screens from this)."""
+        return {"api": PLUGIN_API, "plugins": [p.to_dict() for p in plugins], "features": features(plugins)}
 
     ui = Path(ui_dir or os.environ.get("XAU_UI_DIR") or DEFAULT_UI_DIR)
     if (ui / "index.html").is_file():

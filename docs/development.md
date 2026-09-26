@@ -36,6 +36,7 @@ src/wednesday/
   storage.py      SQLAlchemy store: settings, M1 history, alert log, Lab labels (SQLite / PostgreSQL)
   lab/            machine learning: tags, per-minute dataset + causal features, trade outcomes,
                   training, model files (zip + safe unpickler), the /api/lab routes
+  plugins.py      loads plugins (entry point group wednesday.plugins): routes, hooks, jobs
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)
 scripts/          Windows VPS: auto-restart wrapper + Task Scheduler installer

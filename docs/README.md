@@ -10,4 +10,5 @@
 | [Telegram alerts](alerts.md) | Setup and how entries into an order block are detected |
 | [Configuration](configuration.md) | Make targets, CLI options, `.env` |
 | [Windows and VPS](deploy-windows.md) | MT5 on Windows, running 24/7 on a VPS |
+| [Plugins](plugins.md) | Extra features from a separate package: entry point, context, hooks, versioning |
 | [Development](development.md) | Project layout, tests, how a scan flows |

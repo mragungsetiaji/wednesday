@@ -16,6 +16,7 @@ import pandas as pd
 
 from .bias import BIAS_KEY, TradeBias, active
 from .feeds import DataFeed, M1Buffer, build_feed
+from .plugins import Hooks
 from .scanner import ScanConfig, ScanResult, scan
 from .settings import DataSettings
 from .storage import Store
@@ -129,6 +130,7 @@ class Runtime:
         self.brief = brief  # BriefRunner or None
         self.calendar = calendar  # news.Calendar or None
         self.lab = lab  # lab.service.Lab or None (needs a database)
+        self.hooks = Hooks()  # filled by plugins (see plugins.py)
         self.bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
         self._lock = threading.Lock()
         self.settings = settings
@@ -154,9 +156,12 @@ class Runtime:
         engine = self.engine
         if self.alerts is not None:
             try:
-                self.alerts.check(self.settings.source, engine.symbol, result, engine.state.m1, self.active_bias())
+                sent = self.alerts.check(self.settings.source, engine.symbol, result, engine.state.m1, self.active_bias())
             except Exception:  # an alert problem must never stop scanning
                 log.exception("alert check failed")
+            else:
+                self.hooks.run_on_alert(sent, result)
+        self.hooks.run_after_scan(result, engine)
         if self.on_result:
             self.on_result(result)
 
@@ -168,6 +173,7 @@ class Runtime:
         self.engine.run_forever(self.delay, self._after_scan)
 
     def stop(self) -> None:
+        self.hooks.shutdown()
         self.engine.stop()
 
     def apply(self, settings: DataSettings) -> None:

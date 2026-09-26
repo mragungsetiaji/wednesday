@@ -137,6 +137,7 @@ uv run wednesday --serve
 | [Telegram alerts](docs/alerts.md) | Bot setup and when alerts fire |
 | [Configuration](docs/configuration.md) | Make targets, CLI options, `.env` |
 | [Windows and VPS](docs/deploy-windows.md) | Running 24/7 next to an MT5 terminal |
+| [Plugins](docs/plugins.md) | Add features from a separate Python package |
 | [Development](docs/development.md) | Project layout and how a scan flows |
 
 > [!NOTE]

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { fetchSettings, saveSettings, type DataSettings, type SettingsResponse } from "../api";
 import { fmtFeedTime } from "../format";
+import { usePlugins } from "../plugins";
 import { AlertsSettings } from "./AlertsSettings";
 import { BriefSettingsForm } from "./BriefSettingsForm";
 import { CalendarSettingsForm } from "./CalendarSettingsForm";
@@ -267,7 +268,42 @@ export function SettingsPage() {
             <p className="empty">Storage is off (started with <code>--db none</code>).</p>
           )}
         </section>
+
+        <PluginsSection />
       </aside>
     </main>
+  );
+}
+
+/** Installed plugins: what loaded, what didn't and why. */
+function PluginsSection() {
+  const { data } = usePlugins();
+  if (!data) return null;
+  return (
+    <section aria-labelledby="plugins-h">
+      <h3 id="plugins-h">Plugins</h3>
+      {data.plugins.length === 0 ? (
+        <p className="empty">None installed. Plugins are Python packages that add features; see docs/plugins.md.</p>
+      ) : (
+        <table className="data compact">
+          <thead>
+            <tr>
+              <th scope="col">Plugin</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.plugins.map((p) => (
+              <tr key={p.name}>
+                <td>{p.name}{p.version && <span className="muted num"> {p.version}</span>}</td>
+                <td>
+                  {p.loaded ? (p.features.length ? p.features.join(", ") : "Loaded") : <span className="text-error">{p.error}</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }

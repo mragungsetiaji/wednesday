@@ -545,3 +545,22 @@ export const fetchPredictions = (tf: string, limit: number, threshold: number) =
     `/api/lab/predictions?tf=${encodeURIComponent(tf)}&limit=${limit}&threshold=${threshold}`);
 export const reviewBlock = (b: MlBlock, verdict: "valid" | "invalid") =>
   send<{ verdict: string; outcome: string | null }>("POST", "/api/lab/reviews", { ...b, verdict });
+
+// ---- Plugins (e.g. the paid wednesday-ee package) ----
+
+export interface PluginInfo {
+  name: string;
+  version: string | null;
+  api: number | null;
+  features: string[];
+  loaded: boolean;
+  error: string | null;
+}
+
+export interface PluginsResponse {
+  api: number;
+  plugins: PluginInfo[];
+  features: string[]; // feature ids provided by loaded plugins; screens unlock from these
+}
+
+export const fetchPlugins = () => getJson<PluginsResponse>("/api/plugins");
