@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError
 from .engine import Engine, Runtime
+from .quarters import quarters_payload
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
 
@@ -31,9 +32,10 @@ def _iso(dt) -> str | None:
     return dt.isoformat() if dt is not None else None
 
 
-def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | None = None) -> FastAPI:
+def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | None = None,
+               clock: str = "UTC") -> FastAPI:
     """Serve a fixed :class:`Engine`, or a :class:`Runtime` whose data source the dashboard can change."""
-    app = FastAPI(title="XAU SMC Screener", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    app = FastAPI(title="Wednesday", docs_url="/api/docs", openapi_url="/api/openapi.json")
     runtime = target if isinstance(target, Runtime) else None
     cfg = target.cfg
 
@@ -44,6 +46,11 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     def current_source() -> str:
         return runtime.settings.source if runtime else source
 
+    def current_clock() -> str:
+        return runtime.settings.resolved_clock if runtime else clock
+
+    quarters_cache: dict = {}
+
     def status() -> dict:
         engine = current()
         st = engine.state
@@ -51,6 +58,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             return {
                 "symbol": engine.symbol,
                 "source": current_source(),
+                "clock": current_clock(),
                 "version": st.version,
                 "scanned_at": _iso(st.scanned_at),
                 "error": st.error,
@@ -88,6 +96,18 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             ],
             "levels": levels,
         }
+
+    @app.get("/api/quarters")
+    def get_quarters() -> dict:
+        """Quarterly theory blocks (week, session, 90 minutes) over the loaded M1 history."""
+        engine = current()
+        version, _, m1 = engine.snapshot()
+        if m1 is None:
+            raise HTTPException(503, "no data yet")
+        key = (id(engine), version, current_clock())
+        if quarters_cache.get("key") != key:
+            quarters_cache.update(key=key, value=quarters_payload(m1, current_clock()))
+        return quarters_cache["value"]
 
     def settings_payload() -> dict:
         engine = current()

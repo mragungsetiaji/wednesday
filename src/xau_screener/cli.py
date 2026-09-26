@@ -53,6 +53,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="data source (default: saved in the dashboard, else XAU_SOURCE, else yfinance)")
     p.add_argument("--symbol", help="default per source: GC=F for yfinance, XAUUSD for mt5")
     p.add_argument("--csv", help="M1 CSV path for --source csv (XAU_CSV)")
+    p.add_argument("--clock", help="the feed's clock for the quarterly view: UTC, NY+7 (most MT5 brokers), UTC+3 or a "
+                                   "time zone like Europe/London (XAU_CLOCK; default: NY+7 for mt5, else UTC)")
     p.add_argument("--db", default=_env("XAU_DB_URL") or DEFAULT_DB_URL,
                    help="database URL for settings and M1 history (XAU_DB_URL); 'none' disables storage")
     p.add_argument("--reset-settings", action="store_true", help="forget data source settings saved from the dashboard")
@@ -141,6 +143,7 @@ def run(args: argparse.Namespace) -> None:
     data = resolve({
         "source": args.source, "symbol": args.symbol, "csv_path": args.csv,
         "mt5_login": args.mt5_login, "mt5_server": args.mt5_server, "mt5_path": args.mt5_path,
+        "clock": args.clock,
     }, store)
     if errors := data.validate():
         raise SystemExit("; ".join(errors))

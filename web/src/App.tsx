@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { fetchCandles, fetchScan, type CandlesResponse, type Level, type ScanResponse } from "./api";
+import {
+  fetchCandles, fetchQuarters, fetchScan,
+  type CandlesResponse, type Level, type QuarterRow, type QuartersResponse, type ScanResponse,
+} from "./api";
 import { EventsPanel } from "./components/EventsPanel";
 import { PriceChart, type ChartEvent } from "./components/PriceChart";
+import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
 import { SettingsPage } from "./components/SettingsPage";
 import { StructurePanel } from "./components/StructurePanel";
@@ -74,6 +78,11 @@ function eventAbove(lv: Level): boolean {
   return lv.kind === "bearish";
 }
 
+/** Quarterly rows worth drawing on a timeframe: 90-minute blocks get too thin on 4H. */
+const quarterRowsFor = (tf: string): QuarterRow[] => (tf === "4H" ? ["week", "session"] : ["week", "session", "q90"]);
+
+const CLOCK_NAMES: Record<string, string> = { UTC: "UTC", "NY+7": "broker server time (New York +7)" };
+
 function eventText(lv: Level): string {
   if (lv.detector === "ob") return `${lv.kind === "bullish" ? "Bull" : "Bear"} OB taken`;
   const what = lv.detector === "liquidity" ? lv.kind.toUpperCase() : "IDM";
@@ -89,7 +98,9 @@ export default function App() {
   const [showHigherTf, setShowHigherTf] = usePref("xau.otherTf", true);
   const [showMidOb, setShowMidOb] = usePref("xau.midOb", true);
   const [hidden, setHidden] = usePref<string[]>("xau.hiddenLayers", []);
+  const [showQuarters, setShowQuarters] = usePref("xau.quarters", true);
   const [chart, setChart] = useState<CandlesResponse | null>(null);
+  const [quarters, setQuarters] = useState<QuartersResponse | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [view, setView] = useView();
 
@@ -139,6 +150,22 @@ export default function App() {
       alive = false;
     };
   }, [tf, version, lookback]);
+
+  useEffect(() => {
+    if (!version) {
+      setQuarters(null);
+      return;
+    }
+    let alive = true;
+    fetchQuarters()
+      .then((res) => alive && setQuarters(res))
+      .catch(() => alive && setQuarters(null)); // the pane just stays empty; the scan banner covers feed errors
+    return () => {
+      alive = false;
+    };
+  }, [version]);
+
+  const quarterRows = useMemo(() => (showQuarters ? quarterRowsFor(tf) : []), [showQuarters, tf]);
 
   const rail = useMemo(() => (scan ? buildRail(scan, detectors) : []), [scan, detectors]);
   const tfScan = scan?.timeframes.find((t) => t.timeframe === tf) ?? null;
@@ -198,6 +225,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="ticker">
+          <span className="brand">Wednesday</span>
           <h1>{data?.symbol ?? "XAUUSD"}</h1>
           <span className="ticker-price num">{scan ? fmtPrice(scan.price) : "—"}</span>
         </div>
@@ -277,6 +305,10 @@ export default function App() {
                     <input type="checkbox" checked={showHigherTf} onChange={(e) => setShowHigherTf(e.target.checked)} />
                     Higher timeframes
                   </label>
+                  <label className="toggle">
+                    <input type="checkbox" checked={showQuarters} onChange={(e) => setShowQuarters(e.target.checked)} />
+                    Quarters
+                  </label>
                 </div>
               </div>
               <PriceChart
@@ -287,6 +319,8 @@ export default function App() {
                 palette={palette}
                 resetKey={tf}
                 loading={!chart || chart.timeframe !== tf}
+                quarters={quarters}
+                quarterRows={quarterRows}
               />
               <ul className="legend" aria-label="Chart legend">
                 <li><span className="key key-setup" /> S / B: limit entry, dashed stop</li>
@@ -295,7 +329,8 @@ export default function App() {
                 <li><span className="key key-liq" /> BSL / SSL</li>
                 <li><span className="key key-idm" /> IDM</li>
                 <li><span className="key key-bos" /> Last break</li>
-                <li className="muted">Times are broker server time</li>
+                {quarterRows.length > 0 && <li><span className="key key-quarter" /> Quarters: green closed up</li>}
+                <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
               </ul>
             </section>
 
@@ -324,6 +359,7 @@ export default function App() {
             <div className="details">
               <StructurePanel scan={scan} selected={tf} onSelect={setTf} />
               <EventsPanel scan={scan} detectors={detectors} recentBars={config.recent_bars} onSelect={setTf} />
+              {quarters && <QuartersPanel quarters={quarters} />}
               <TimeframeTable rows={scan.timeframes} detectors={detectors} price={scan.price} selected={tf} onSelect={setTf} />
               <p className="settings">
                 Lookback {config.lookback} candles, swing {config.swing_length}. OB {config.zone},{" "}

@@ -12,6 +12,7 @@ import os
 import sys
 from dataclasses import asdict, dataclass, fields
 
+from .quarters import clock_error
 from .storage import Store
 
 SETTINGS_KEY = "data_source"
@@ -22,21 +23,25 @@ SOURCES = {
         "description": "Free, no account. COMEX gold futures (GC=F), not spot, and only the last ~7 days of 1-minute bars; "
         "history grows as the screener keeps storing bars.",
         "default_symbol": "GC=F",
+        "default_clock": "UTC",
     },
     "mt5": {
         "title": "MetaTrader 5",
         "description": "Your broker's XAUUSD from a running MT5 terminal on the same Windows machine. Candles match the MT5 chart.",
         "default_symbol": "XAUUSD",
+        "default_clock": "NY+7",
     },
     "csv": {
         "title": "CSV file",
         "description": "M1 bars from a CSV (time, open, high, low, close[, volume]) that another process keeps appending to.",
         "default_symbol": "XAUUSD",
+        "default_clock": "UTC",
     },
     "synthetic": {
         "title": "Demo data",
         "description": "Random-walk prices for trying the dashboard. Not real market data.",
         "default_symbol": "XAUUSD",
+        "default_clock": "UTC",
     },
 }
 
@@ -51,10 +56,15 @@ class DataSettings:
     mt5_login: int | None = None
     mt5_server: str | None = None
     mt5_path: str | None = None
+    clock: str | None = None  # the feed's clock; None = the source's default (see quarters.py)
 
     @property
     def resolved_symbol(self) -> str:
         return self.symbol or SOURCES[self.source]["default_symbol"]
+
+    @property
+    def resolved_clock(self) -> str:
+        return self.clock or SOURCES.get(self.source, SOURCES[DEFAULT_SOURCE])["default_clock"]
 
     def validate(self) -> list[str]:
         errors = []
@@ -64,6 +74,8 @@ class DataSettings:
             errors.append("A CSV file path is required for the CSV source")
         if self.symbol is not None and not self.symbol.strip():
             errors.append("Symbol can't be blank")
+        if self.clock is not None and (err := clock_error(self.clock)):
+            errors.append(err)
         return errors
 
     def to_dict(self) -> dict:
@@ -112,6 +124,7 @@ def from_env() -> DataSettings:
         mt5_login=int(login) if login else None,
         mt5_server=_env("MT5_SERVER"),
         mt5_path=_env("MT5_PATH"),
+        clock=_env("XAU_CLOCK"),
     )
 
 
@@ -121,10 +134,14 @@ def resolve(cli: dict, store: Store | None) -> DataSettings:
     saved = store.get_setting(SETTINGS_KEY) if store else None
     if saved:
         base = DataSettings.from_dict({**base.to_dict(), **{k: v for k, v in saved.items() if v is not None}})
-        # A saved source switch also resets the symbol unless one was saved with it.
+        # A saved source switch also resets the symbol and clock unless they were saved with it.
         if saved.get("source") and saved.get("symbol") is None:
             base.symbol = None
+        if saved.get("source") and saved.get("clock") is None:
+            base.clock = None
     explicit = {k: v for k, v in cli.items() if v is not None}
     if explicit.get("source") and explicit["source"] != base.source and "symbol" not in explicit:
         base.symbol = None  # don't carry e.g. GC=F over to MT5
+        if "clock" not in explicit:
+            base.clock = None  # nor Yahoo's UTC clock
     return DataSettings.from_dict({**base.to_dict(), **explicit})

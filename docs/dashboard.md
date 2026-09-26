@@ -24,6 +24,32 @@ The timeframe tabs carry each timeframe's structure direction (↑ / ↓).
 **Mid OBs** and **Higher timeframes** can be switched off above the chart, and
 each detector can be hidden from the top bar.
 
+## Quarterly theory pane
+
+Under the candles, a pane splits time the way quarterly theory does, in New
+York hours with the trading day starting at 18:00 NY:
+
+| Row | Blocks |
+| --- | --- |
+| Week | Mon (Q1), Tue (Q2), Wed (Q3), Thu (Q4), Fri |
+| Session | Tokyo 18:00, London 00:00, NY AM 06:00, NY PM 12:00 (New York time) |
+| 90m | each session in four 90-minute quarters, Q1–Q4 (hidden on 4H, too thin) |
+
+A block is **green** when that period closed above its open and **red** when it
+closed below. The running block is outlined only. Hovering the chart adds the
+week, session and 90m move under the cursor to the readout at the top left.
+Switch the pane off with **Quarters** above the chart.
+
+The **Quarters** panel below the chart counts how often each weekday, session and
+90-minute quarter closed green, with the average move, over the stored history
+(the running block excluded). The history grows as the screener keeps storing
+bars, so the counts get more meaningful over time.
+
+![Quarters panel](images/quarters.png)
+
+The blocks need to know what clock the bar times are in: see
+[Feed clock](data-sources.md#feed-clock).
+
 ## Level ladder
 
 Beside the chart, the **Levels** ladder lists what matters around price in the

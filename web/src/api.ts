@@ -76,6 +76,7 @@ export interface DetectorInfo {
 export interface ScanResponse {
   symbol: string;
   source: string;
+  clock: string; // the feed's clock, e.g. "UTC" or "NY+7"
   version: number;
   scanned_at: string | null;
   error: string | null;
@@ -121,11 +122,44 @@ export const fetchScan = () => getJson<ScanResponse>("/api/scan");
 export const fetchCandles = (tf: string, limit: number) =>
   getJson<CandlesResponse>(`/api/candles?tf=${encodeURIComponent(tf)}&limit=${limit}`);
 
+/** Quarterly theory rows: weekdays, the four sessions of a day, and 90-minute quarters. */
+export type QuarterRow = "week" | "session" | "q90";
+
+export interface QuarterBlock {
+  row: QuarterRow;
+  label: string; // "Wed", "NY AM", "Q3"
+  day: string; // trading day (starts 18:00 New York the evening before)
+  start_unix: number;
+  end_unix: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  change: number;
+  live: boolean; // still running
+}
+
+export interface QuarterStat {
+  label: string;
+  count: number;
+  green: number;
+  avg_change: number | null;
+}
+
+export interface QuartersResponse {
+  clock: string;
+  rows: Record<QuarterRow, QuarterBlock[]>;
+  stats: Record<QuarterRow, QuarterStat[]>;
+}
+
+export const fetchQuarters = () => getJson<QuartersResponse>("/api/quarters");
+
 export interface SourceInfo {
   id: string;
   title: string;
   description: string;
   default_symbol: string;
+  default_clock: string;
   available: boolean;
   unavailable_reason: string | null;
 }
@@ -137,6 +171,7 @@ export interface DataSettings {
   mt5_login: number | null;
   mt5_server: string | null;
   mt5_path: string | null;
+  clock: string | null; // null = the source default
 }
 
 export interface SettingsResponse {

@@ -77,3 +77,21 @@ def test_serves_built_ui(engine, tmp_path):
     (tmp_path / "index.html").write_text("<html>dashboard</html>")
     client = TestClient(create_app(engine, ui_dir=tmp_path))
     assert "dashboard" in client.get("/").text
+
+
+def test_quarters_endpoint(tmp_path):
+    from xau_screener.engine import Runtime
+    from xau_screener.scanner import ScanConfig
+    from xau_screener.settings import DataSettings
+    from xau_screener.timeframes import TIMEFRAMES_BY_NAME
+
+    cfg = ScanConfig(lookback=20, timeframes=(TIMEFRAMES_BY_NAME["1H"],))
+    runtime = Runtime(cfg, DataSettings(source="synthetic"), None)
+    api = TestClient(create_app(runtime, ui_dir=tmp_path))
+    assert api.get("/api/quarters").status_code == 503
+    runtime.engine.feed.connect()
+    runtime.engine.step()
+    body = api.get("/api/quarters").json()
+    assert body["clock"] == "UTC" and api.get("/api/status").json()["clock"] == "UTC"
+    assert {"week", "session", "q90"} <= body["rows"].keys()
+    assert body["rows"]["session"] and body["stats"]["week"][2]["label"] == "Wed"

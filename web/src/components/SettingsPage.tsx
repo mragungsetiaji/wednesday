@@ -4,7 +4,7 @@ import { fetchSettings, saveSettings, type DataSettings, type SettingsResponse }
 import { fmtFeedTime } from "../format";
 import { AlertsSettings } from "./AlertsSettings";
 
-const EMPTY: DataSettings = { source: "yfinance", symbol: null, csv_path: null, mt5_login: null, mt5_server: null, mt5_path: null };
+const EMPTY: DataSettings = { source: "yfinance", symbol: null, csv_path: null, mt5_login: null, mt5_server: null, mt5_path: null, clock: null };
 
 const same = (a: DataSettings, b: DataSettings) => JSON.stringify(a) === JSON.stringify(b);
 const orNull = (v: string) => (v.trim() === "" ? null : v.trim());
@@ -104,7 +104,7 @@ export function SettingsPage() {
             {data.sources.map((s) => (
               <label key={s.id} className={`choice${form.source === s.id ? " is-checked" : ""}${s.available ? "" : " is-disabled"}`}>
                 <input type="radio" name="source" value={s.id} checked={form.source === s.id} disabled={!s.available}
-                  onChange={() => set({ source: s.id, symbol: null })} />
+                  onChange={() => set({ source: s.id, symbol: null, clock: null })} />
                 <span className="choice-body">
                   <span className="choice-title">
                     {s.title}
@@ -122,6 +122,19 @@ export function SettingsPage() {
             <Field label="Symbol" hint={`Leave empty for ${source?.default_symbol ?? "the default"}.`}>
               <input type="text" value={form.symbol ?? ""} placeholder={source?.default_symbol} spellCheck={false}
                 onChange={(e) => set({ symbol: orNull(e.target.value) })} />
+            </Field>
+            <Field label="Feed clock"
+              hint={`The time zone of the bar times, for the quarterly view. Leave empty for ${source?.default_clock ?? "UTC"}. NY+7 is New York time plus 7 hours, the server time of most MT5 gold brokers.`}>
+              <input type="text" list="clock-options" value={form.clock ?? ""} placeholder={source?.default_clock} spellCheck={false}
+                onChange={(e) => set({ clock: orNull(e.target.value) })} />
+              <datalist id="clock-options">
+                <option value="UTC" />
+                <option value="NY+7" />
+                <option value="UTC+2" />
+                <option value="UTC+3" />
+                <option value="Europe/London" />
+                <option value="Asia/Jakarta" />
+              </datalist>
             </Field>
 
             {form.source === "csv" && (

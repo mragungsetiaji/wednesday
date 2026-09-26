@@ -2,6 +2,7 @@ import {
   CandlestickSeries,
   ColorType,
   CrosshairMode,
+  LineSeries,
   createChart,
   createSeriesMarkers,
   type IChartApi,
@@ -13,8 +14,9 @@ import {
 } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
 
-import type { Candle } from "../api";
+import type { Candle, QuarterBlock, QuarterRow, QuartersResponse } from "../api";
 import { fmtPrice } from "../format";
+import { QuartersPrimitive } from "../quartersPrimitive";
 import type { ChartPalette } from "../theme";
 import { ZonesPrimitive, type Zone } from "../zonesPrimitive";
 
@@ -32,6 +34,22 @@ interface Props {
   palette: ChartPalette;
   resetKey: string; // refit the view when this changes (e.g. timeframe switch)
   loading: boolean;
+  quarters: QuartersResponse | null;
+  quarterRows: QuarterRow[]; // rows of the quarterly pane, [] hides it
+}
+
+const ROW_PX = 22;
+const QUARTER_PANE = 1;
+
+const fmtChange = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmtPrice(Math.abs(v))}`;
+
+/** The block of each row that contains t. */
+function blocksAt(quarters: QuartersResponse | null, rows: QuarterRow[], t: number): QuarterBlock[] {
+  if (!quarters) return [];
+  return rows.flatMap((row) => {
+    const b = quarters.rows[row].find((q) => t >= q.start_unix && t < q.end_unix);
+    return b ? [b] : [];
+  });
 }
 
 /** Open time of the candle containing t (last candle time <= t). */
@@ -48,12 +66,14 @@ function candleAt(times: number[], t: number): number {
 
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
-export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading }: Props) {
+export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const zonesRef = useRef<ZonesPrimitive | null>(null);
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const quarterSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const quartersRef = useRef<QuartersPrimitive | null>(null);
   const fittedKey = useRef<string | null>(null);
   const [hover, setHover] = useState<Candle | null>(null);
 
@@ -69,16 +89,21 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     primitive.update({ font: FONT, formatPrice: fmtPrice });
     series.attachPrimitive(primitive);
     markersRef.current = createSeriesMarkers(series, []);
+    const quartersPrimitive = new QuartersPrimitive(palette);
+    quartersPrimitive.update({ font: FONT });
     chart.subscribeCrosshairMove((param) => {
       const bar = param.seriesData.get(series) as Candle | undefined;
       setHover(bar && "open" in bar ? { ...bar, time: param.time as number } : null);
+      quartersPrimitive.update({ hoverTime: param.time === undefined ? null : (param.time as number) });
     });
+    quartersRef.current = quartersPrimitive;
     chartRef.current = chart;
     seriesRef.current = series;
     zonesRef.current = primitive;
     return () => {
       chart.remove();
       chartRef.current = null;
+      quarterSeriesRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -91,6 +116,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
         fontFamily: FONT,
         fontSize: 11,
         attributionLogo: false,
+        panes: { separatorColor: palette.grid, separatorHoverColor: palette.grid, enableResize: false },
       },
       grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },
       rightPriceScale: { borderColor: palette.grid },
@@ -100,6 +126,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
         horzLine: { color: palette.muted, labelBackgroundColor: palette.grid },
       },
     });
+    quartersRef.current?.update({ palette });
     seriesRef.current?.applyOptions({
       upColor: palette.bull,
       downColor: palette.bear,
@@ -136,7 +163,35 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     zonesRef.current?.update({ highlight });
   }, [highlight]);
 
+  // Quarterly pane: an empty series whose only job is to host the blocks primitive; its
+  // invisible points on the candle times keep it on the shared time scale. Removing the
+  // series removes the pane.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const primitive = quartersRef.current;
+    if (!chart || !primitive) return;
+    let qs = quarterSeriesRef.current;
+    if (!quarterRows.length) {
+      if (qs) chart.removeSeries(qs);
+      quarterSeriesRef.current = null;
+      return;
+    }
+    if (!qs) {
+      // Its price scale stays visible (hiding one pane's scale trips the library); blank labels instead.
+      qs = chart.addSeries(LineSeries, {
+        lineVisible: false, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
+        priceFormat: { type: "custom", formatter: () => "" },
+      }, QUARTER_PANE);
+      qs.attachPrimitive(primitive);
+      quarterSeriesRef.current = qs;
+    }
+    qs.setData(candles.map((c) => ({ time: c.time as UTCTimestamp, value: 0 })));
+    primitive.update({ blocks: quarters?.rows ?? {}, rows: quarterRows, times: candles.map((c) => c.time) });
+    chart.panes()[QUARTER_PANE]?.setHeight(quarterRows.length * ROW_PX + 10);
+  }, [candles, quarters, quarterRows]);
+
   const shown = hover ?? candles[candles.length - 1];
+  const quarterNow = shown ? blocksAt(quarters, quarterRows, shown.time) : [];
   return (
     <div className="chart-wrap" aria-busy={loading}>
       {shown && (
@@ -145,6 +200,11 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
           <span><i>H</i>{fmtPrice(shown.high)}</span>
           <span><i>L</i>{fmtPrice(shown.low)}</span>
           <span><i>C</i>{fmtPrice(shown.close)}</span>
+          {quarterNow.map((b) => (
+            <span key={b.row} className={`q ${b.change > 0 ? "up" : b.change < 0 ? "down" : ""}`}>
+              <i>{b.label}</i>{fmtChange(b.change)}
+            </span>
+          ))}
         </div>
       )}
       {loading && <div className="chart-skeleton" aria-hidden="true" />}

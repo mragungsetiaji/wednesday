@@ -31,6 +31,7 @@ xau-screener ...` commands directly (see [deploy-windows.md](deploy-windows.md))
 | --- | --- | --- |
 | `--source` | `yfinance` | `yfinance`, `mt5`, `csv` or `synthetic` (`XAU_SOURCE`) |
 | `--symbol` | per source | Symbol to scan (`XAU_SYMBOL`) |
+| `--clock` | per source | The feed's clock for the quarterly view: `UTC`, `NY+7`, `UTC+3`, `Europe/London` (`XAU_CLOCK`; default `NY+7` for MT5, else `UTC`) |
 | `--timeframes` | `4H,1H,30M,15M,5M` | Timeframes to scan (always processed high to low) |
 | `--lookback` | `200` | Closed candles per timeframe searched for levels |
 | `--swing-length` | `5` | Bars on each side needed to confirm a swing high/low |
@@ -61,6 +62,7 @@ bars are fetched each minute.
 | Variable | Used for |
 | --- | --- |
 | `XAU_SOURCE`, `XAU_SYMBOL` | Data source and symbol |
+| `XAU_CLOCK` | The feed's clock ([Feed clock](data-sources.md#feed-clock)) |
 | `XAU_DB_URL` | Storage URL |
 | `MT5_LOGIN`, `MT5_PASSWORD`, `MT5_SERVER`, `MT5_PATH` | MetaTrader 5 connection; the password is only read from here |
 | `XAU_MAX_SL`, `XAU_DETECTORS` | Strategy settings |

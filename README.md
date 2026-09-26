@@ -40,6 +40,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **Finds the nearest levels** above and below price: order blocks (extreme and mid), BSL / SSL with equal highs and lows, and inducement.
 - **Ranks limit setups**: entry on the order block's body, stop on the opposite edge capped at 3.00, extreme first, then nearest.
 - **Maps everything to the chart**: every setup and level in the ladder is pinned on the chart under the same tag.
+- **Quarterly theory pane** under the chart: every weekday, session (Tokyo, London, NY AM, NY PM) and 90-minute quarter as a green or red block, plus how often each one closed green.
 - **Pings you on Telegram** when price trades into an order block.
 - **Free data by default** (Yahoo Finance), MetaTrader 5 when you're ready; history stored in SQLite or PostgreSQL.
 
@@ -53,6 +54,8 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
     <td align="center"><sub>Switch data source live, set up alerts</sub></td>
   </tr>
 </table>
+
+> **Why "Wednesday"?** Watching gold through quarterly theory, the Wednesday and New York blocks kept coming up green. The quarterly pane shows those blocks on the chart and its stats count how often that holds.
 
 ## Quick start
 
@@ -89,7 +92,7 @@ uv run xau-screener --serve
 | | |
 | --- | --- |
 | [Detectors and the limit strategy](docs/detectors.md) | How order blocks, liquidity and inducement are found, and how setups are ranked |
-| [Dashboard](docs/dashboard.md) | Chart, level ladder, panels |
+| [Dashboard](docs/dashboard.md) | Chart, level ladder, quarterly pane, panels |
 | [Data sources and storage](docs/data-sources.md) | Yahoo Finance, MT5, CSV, SQLite / PostgreSQL |
 | [Telegram alerts](docs/alerts.md) | Bot setup and when alerts fire |
 | [Configuration](docs/configuration.md) | Make targets, CLI options, `.env` |

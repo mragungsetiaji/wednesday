@@ -41,6 +41,22 @@ uv run xau-screener --source csv --csv data/xauusd_m1.csv
 uv run xau-screener --source synthetic --once    # demo data, one scan
 ```
 
+## Feed clock
+
+Bar times are kept in the feed's own clock (candles line up with your MT5
+chart). The quarterly view converts them to New York time, so it needs to know
+that clock. Set it in **Settings > Feed clock**, `XAU_CLOCK` or `--clock`:
+
+| Value | Meaning |
+| --- | --- |
+| `UTC` | Default for Yahoo Finance, CSV and demo data |
+| `NY+7` | New York time plus 7 hours, default for MT5: the server time of most gold brokers (midnight there is the 17:00 NY close, UTC+2 in winter and UTC+3 in summer) |
+| `UTC+2`, `UTC+3`, ... | A fixed offset with no daylight saving |
+| `Europe/London`, `Asia/Jakarta`, ... | Any IANA time zone |
+
+If your broker doesn't follow the NY+7 convention, compare the time of the last
+candle in MT5 with the time in New York and pick the matching value.
+
 ## MetaTrader 5
 
 The MT5 Python API talks to a terminal running on the same Windows machine, so

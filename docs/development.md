@@ -24,9 +24,10 @@ src/xau_screener/
   detectors/      order blocks, liquidity (BSL/SSL, EQH/EQL), inducement + registry
   feeds.py        MT5, yfinance, CSV, synthetic feeds + rolling M1 buffer
   scanner.py      multi-timeframe scan, nearest level above/below, limit setups
+  quarters.py     quarterly theory blocks (weekday, session, 90m) in New York time + green stats
   report.py       console table
   engine.py       scan loop shared by the console and the web server
-  server.py       FastAPI: /api/scan, /api/candles, /api/settings, /api/alerts, serves the dashboard
+  server.py       FastAPI: /api/scan, /api/candles, /api/quarters, /api/settings, /api/alerts, serves the dashboard
   settings.py     data source settings, source catalog, precedence rules
   alerts.py       Telegram alerts when price enters an order block
   storage.py      SQLAlchemy store: settings, M1 history, alert log (SQLite / PostgreSQL)
