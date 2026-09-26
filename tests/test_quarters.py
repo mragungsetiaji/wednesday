@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from xau_screener.quarters import clock_error, quarter_blocks, quarter_stats, quarters_payload, to_new_york
-from xau_screener.settings import DataSettings
+from wednesday.quarters import clock_error, quarter_blocks, quarter_stats, quarters_payload, to_new_york
+from wednesday.settings import DataSettings
 
 
 def m1_utc(start, end, slope):

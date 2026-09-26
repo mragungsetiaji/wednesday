@@ -1,11 +1,11 @@
 import pandas as pd
 
-from xau_screener.detectors import DetectorParams
-from xau_screener.detectors.orderblock import OrderBlockDetector
-from xau_screener.levels import Level
-from xau_screener.scanner import LevelSet, ScanResult, TimeframeResult
-from xau_screener.structure import Context
-from xau_screener.timeframes import TIMEFRAMES_BY_NAME
+from wednesday.detectors import DetectorParams
+from wednesday.detectors.orderblock import OrderBlockDetector
+from wednesday.levels import Level
+from wednesday.scanner import LevelSet, ScanResult, TimeframeResult
+from wednesday.structure import Context
+from wednesday.timeframes import TIMEFRAMES_BY_NAME
 
 
 def candles(rows, start="2026-01-05 00:00", freq="5min"):

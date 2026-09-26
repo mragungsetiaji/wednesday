@@ -1,10 +1,10 @@
 import pandas as pd
 import pytest
 
-from xau_screener.detectors import DetectorParams, parse_detectors
-from xau_screener.detectors.inducement import InducementDetector
-from xau_screener.detectors.liquidity import LiquidityDetector
-from xau_screener.structure import Context, analyze_structure
+from wednesday.detectors import DetectorParams, parse_detectors
+from wednesday.detectors.inducement import InducementDetector
+from wednesday.detectors.liquidity import LiquidityDetector
+from wednesday.structure import Context, analyze_structure
 
 
 def candles(rows, start="2026-01-05 00:00", freq="5min"):
@@ -88,7 +88,7 @@ def test_bullish_inducement_after_bos():
 
 def _ctx_with_breaks(directions):
     """Context whose structure(2) has the given break directions (synthetic, bypasses detection)."""
-    from xau_screener.structure import Break, Structure, Swing
+    from wednesday.structure import Break, Structure, Swing
 
     df = candles([bar(100) for _ in range(20)])
     ctx = Context(df)
@@ -99,7 +99,7 @@ def _ctx_with_breaks(directions):
 
 
 def test_latest_bias_bos_vs_choch():
-    from xau_screener.structure import latest_bias
+    from wednesday.structure import latest_bias
 
     assert latest_bias(_ctx_with_breaks([]), 2) is None
     b = latest_bias(_ctx_with_breaks(["bullish"]), 2)
@@ -113,7 +113,7 @@ def test_latest_bias_bos_vs_choch():
 
 
 def test_bias_from_real_structure():
-    from xau_screener.structure import latest_bias
+    from wednesday.structure import latest_bias
 
     mids = [100, 102, 104, 105, 103, 101, 102, 104, 106.5, 107, 105, 106.5, 108, 107.5]
     b = latest_bias(Context(candles([bar(m) for m in mids])), 2)

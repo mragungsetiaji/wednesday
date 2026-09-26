@@ -36,9 +36,9 @@ Where a setting comes from, strongest first:
 symbol to that source's default (`GC=F` for Yahoo, `XAUUSD` for MT5).
 
 ```bash
-uv run xau-screener --source mt5 --symbol XAUUSD # MT5 terminal running and logged in
-uv run xau-screener --source csv --csv data/xauusd_m1.csv
-uv run xau-screener --source synthetic --once    # demo data, one scan
+uv run wednesday --source mt5 --symbol XAUUSD # MT5 terminal running and logged in
+uv run wednesday --source csv --csv data/xauusd_m1.csv
+uv run wednesday --source synthetic --once    # demo data, one scan
 ```
 
 ## Feed clock
@@ -63,7 +63,7 @@ The MT5 Python API talks to a terminal running on the same Windows machine, so
 the screener and the terminal always live together. Test the connection first:
 
 ```bash
-uv run xau-screener --source mt5 --check
+uv run wednesday --source mt5 --check
 ```
 
 If the terminal is already open and logged in, no credentials are needed.

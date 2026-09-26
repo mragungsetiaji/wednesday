@@ -17,7 +17,7 @@ cd web && npm install && npm run dev
 ## Project layout
 
 ```
-src/xau_screener/
+src/wednesday/
   timeframes.py   timeframe list + M1 -> higher timeframe resampling
   structure.py    shared swings / break of structure / ATR (computed once per timeframe)
   levels.py       Level: the common output of every detector

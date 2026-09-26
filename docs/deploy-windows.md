@@ -14,8 +14,8 @@ live together: on your PC while testing, on the VPS in production.
 
    ```powershell
    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-   git clone <repo-url> xau-screener
-   cd xau-screener
+   git clone <repo-url> wednesday
+   cd wednesday
    uv sync --extra mt5
    copy .env.example .env   # set XAU_SOURCE=mt5 and XAU_SYMBOL (credentials optional if MT5 is logged in)
    ```
@@ -28,7 +28,7 @@ live together: on your PC while testing, on the VPS in production.
    bars were loaded:
 
    ```powershell
-   uv run xau-screener --source mt5 --check
+   uv run wednesday --source mt5 --check
    ```
 
    If it reports fewer M1 bars than needed, open an M1 chart of the symbol and
@@ -37,8 +37,8 @@ live together: on your PC while testing, on the VPS in production.
 5. One scan, then the live loop:
 
    ```powershell
-   uv run xau-screener --once
-   uv run xau-screener
+   uv run wednesday --once
+   uv run wednesday
    ```
 
 ## 2. Production (Windows VPS)
@@ -57,10 +57,10 @@ Do the same setup as above on the VPS (MT5, uv, `uv sync --extra mt5`, `.env`,
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\install_task.ps1
-   Start-ScheduledTask -TaskName "XAU Screener"
+   Start-ScheduledTask -TaskName "Wednesday"
    ```
 
-   The task waits 60 s after logon, then runs `scripts\run_screener.ps1`,
+   The task waits 60 s after logon, then runs `scripts\run_wednesday.ps1`,
    which restarts the screener 30 s after any exit. Inside the screener, a
    failed MT5 fetch triggers a reconnect, and any error just retries on the
    next minute.
@@ -98,22 +98,22 @@ Useful commands on the VPS:
 
 ```powershell
 Get-Content logs\screener.log -Tail 50 -Wait        # follow the log
-Get-ScheduledTask -TaskName "XAU Screener" | Get-ScheduledTaskInfo
-Stop-ScheduledTask -TaskName "XAU Screener"
-Unregister-ScheduledTask -TaskName "XAU Screener"   # remove
+Get-ScheduledTask -TaskName "Wednesday" | Get-ScheduledTaskInfo
+Stop-ScheduledTask -TaskName "Wednesday"
+Unregister-ScheduledTask -TaskName "Wednesday"   # remove
 ```
 
 ## Updating the VPS
 
 ```powershell
-Stop-ScheduledTask -TaskName "XAU Screener"
+Stop-ScheduledTask -TaskName "Wednesday"
 # if a python.exe from the bot is still alive, stop it (check the path before killing)
-Get-Process python -ErrorAction SilentlyContinue | Where-Object Path -like "*xau-screener*" | Stop-Process
+Get-Process python -ErrorAction SilentlyContinue | Where-Object Path -like "*wednesday*" | Stop-Process
 git pull
 uv sync --extra mt5
 cd web; npm install; npm run build; cd ..
-uv run xau-screener --check
-Start-ScheduledTask -TaskName "XAU Screener"
+uv run wednesday --check
+Start-ScheduledTask -TaskName "Wednesday"
 ```
 
 ## Timezone note

@@ -88,8 +88,8 @@ Extra flags go through `ARGS`, e.g. `make serve PORT=9000 ARGS="--lookback 300"`
 
 ```powershell
 uv sync --extra mt5
-uv run xau-screener --source mt5 --check   # test the MT5 connection
-uv run xau-screener --serve
+uv run wednesday --source mt5 --check   # test the MT5 connection
+uv run wednesday --serve
 ```
 
 ## Docs

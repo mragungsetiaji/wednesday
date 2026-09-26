@@ -2,12 +2,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from xau_screener.feeds import M1Buffer, SyntheticFeed
-from xau_screener.detectors import DetectorParams
-from xau_screener.detectors.orderblock import OrderBlockDetector
-from xau_screener.structure import Context
-from xau_screener.scanner import ScanConfig, scan, split_by_price
-from xau_screener.timeframes import TIMEFRAMES_BY_NAME, parse_timeframes, resample_ohlcv
+from wednesday.feeds import M1Buffer, SyntheticFeed
+from wednesday.detectors import DetectorParams
+from wednesday.detectors.orderblock import OrderBlockDetector
+from wednesday.structure import Context
+from wednesday.scanner import ScanConfig, scan, split_by_price
+from wednesday.timeframes import TIMEFRAMES_BY_NAME, parse_timeframes, resample_ohlcv
 
 
 def detect_order_blocks(df, swing_length=5, **kw):

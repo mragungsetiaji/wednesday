@@ -21,11 +21,11 @@ never commit real credentials.
 
 Variables: `HOST`, `PORT`, and `ARGS` for extra CLI flags, e.g.
 `make serve PORT=9000 ARGS="--lookback 300"`. On Windows, run the `uv run
-xau-screener ...` commands directly (see [deploy-windows.md](deploy-windows.md)).
+wednesday ...` commands directly (see [deploy-windows.md](deploy-windows.md)).
 
 ## Command line options
 
-`uv run xau-screener --help` lists everything. The useful ones:
+`uv run wednesday --help` lists everything. The useful ones:
 
 | Option | Default | Meaning |
 | --- | --- | --- |

@@ -98,7 +98,7 @@ levels price is inside plus recent sweeps.
 
 ## Adding a detector
 
-1. Create `src/xau_screener/detectors/<name>.py` with a `Detector` subclass:
+1. Create `src/wednesday/detectors/<name>.py` with a `Detector` subclass:
    set `name` and `title`, implement `detect(ctx) -> list[Level]`. Use
    `ctx.structure(length)` for swings / BOS and `ctx.atr` instead of recomputing,
    and set `ended_time` on levels that were mitigated or swept.

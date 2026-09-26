@@ -1,11 +1,11 @@
 # Registers a Task Scheduler task that starts the screener when this user logs on.
 # Run once on the VPS from the repo folder:  powershell -ExecutionPolicy Bypass -File scripts\install_task.ps1
 param(
-    [string]$TaskName = "XAU Screener",
+    [string]$TaskName = "Wednesday",
     [int]$DelaySeconds = 60  # give the MT5 terminal time to start and log in first
 )
 $root = Split-Path -Parent $PSScriptRoot
-$script = Join-Path $PSScriptRoot "run_screener.ps1"
+$script = Join-Path $PSScriptRoot "run_wednesday.ps1"
 
 $action = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File `"$script`"" `

@@ -2,11 +2,11 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from xau_screener.detectors import DetectorParams
-from xau_screener.engine import Engine
-from xau_screener.feeds import SyntheticFeed
-from xau_screener.scanner import ScanConfig
-from xau_screener.server import create_app
+from wednesday.detectors import DetectorParams
+from wednesday.engine import Engine
+from wednesday.feeds import SyntheticFeed
+from wednesday.scanner import ScanConfig
+from wednesday.server import create_app
 
 
 @pytest.fixture
@@ -80,10 +80,10 @@ def test_serves_built_ui(engine, tmp_path):
 
 
 def test_quarters_endpoint(tmp_path):
-    from xau_screener.engine import Runtime
-    from xau_screener.scanner import ScanConfig
-    from xau_screener.settings import DataSettings
-    from xau_screener.timeframes import TIMEFRAMES_BY_NAME
+    from wednesday.engine import Runtime
+    from wednesday.scanner import ScanConfig
+    from wednesday.settings import DataSettings
+    from wednesday.timeframes import TIMEFRAMES_BY_NAME
 
     cfg = ScanConfig(lookback=20, timeframes=(TIMEFRAMES_BY_NAME["1H"],))
     runtime = Runtime(cfg, DataSettings(source="synthetic"), None)

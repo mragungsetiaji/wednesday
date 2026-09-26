@@ -2057,7 +2057,7 @@ wheels = [
 ]
 
 [[package]]
-name = "xau-screener"
+name = "wednesday"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

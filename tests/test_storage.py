@@ -4,14 +4,14 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from xau_screener.detectors import DetectorParams
-from xau_screener.engine import Engine, Runtime
-from xau_screener.feeds import DataFeed, M1Buffer, YFinanceFeed
-from xau_screener.scanner import ScanConfig
-from xau_screener.server import create_app
-from xau_screener.settings import SETTINGS_KEY, DataSettings
-from xau_screener.storage import Store
-from xau_screener.timeframes import TIMEFRAMES_BY_NAME
+from wednesday.detectors import DetectorParams
+from wednesday.engine import Engine, Runtime
+from wednesday.feeds import DataFeed, M1Buffer, YFinanceFeed
+from wednesday.scanner import ScanConfig
+from wednesday.server import create_app
+from wednesday.settings import SETTINGS_KEY, DataSettings
+from wednesday.storage import Store
+from wednesday.timeframes import TIMEFRAMES_BY_NAME
 
 
 def bars(start, n, base=2650.0):
@@ -97,7 +97,7 @@ def test_buffer_persists_and_resumes_from_store(store):
 
 
 def test_synthetic_feed_is_not_stored(store):
-    from xau_screener.feeds import SyntheticFeed
+    from wednesday.feeds import SyntheticFeed
 
     cfg = ScanConfig(lookback=20, timeframes=(TIMEFRAMES_BY_NAME["5M"],))
     engine = Engine(SyntheticFeed(history=500), cfg, "XAUUSD", store)
@@ -139,7 +139,7 @@ class FailingConnectFeed(ListFeed):
 
 
 def test_engine_retries_connect_and_reports_error(monkeypatch):
-    import xau_screener.engine as engine_mod
+    import wednesday.engine as engine_mod
 
     monkeypatch.setattr(engine_mod, "seconds_to_next_minute", lambda delay: 0.01)
     cfg = ScanConfig(lookback=5, timeframes=(TIMEFRAMES_BY_NAME["5M"],))
@@ -190,7 +190,7 @@ def test_settings_api_switches_source_live(store, tmp_path):
 
 
 def test_settings_api_read_only_for_fixed_engine(tmp_path):
-    from xau_screener.feeds import SyntheticFeed
+    from wednesday.feeds import SyntheticFeed
 
     cfg = ScanConfig(lookback=20, timeframes=(TIMEFRAMES_BY_NAME["5M"],))
     client = TestClient(create_app(Engine(SyntheticFeed(history=500), cfg, "XAUUSD"), source="synthetic", ui_dir=tmp_path))

@@ -262,7 +262,7 @@ export default function App() {
       {(fetchError || data?.error) && (
         <div className="banner" role="alert">
           {fetchError ? (
-            `Can't reach the screener API (${fetchError}). Start it with: uv run xau-screener --serve`
+            `Can't reach the screener API (${fetchError}). Start it with: uv run wednesday --serve`
           ) : (
             <>
               {scan ? "The last scan failed" : "No data yet"}: {data?.error?.replace(/[.\s]+$/, "")}.{" "}

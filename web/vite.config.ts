@@ -1,7 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// In dev, API calls go to the Python server (uv run xau-screener --serve).
+// In dev, API calls go to the Python server (uv run wednesday --serve).
 export default defineConfig({
   plugins: [react()],
   server: {

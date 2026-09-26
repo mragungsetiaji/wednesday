@@ -1,4 +1,4 @@
-# XAU screener: common tasks on macOS and Linux. Needs uv and Node 20+.
+# Wednesday: common tasks on macOS and Linux. Needs uv and Node 20+.
 # `make` lists the targets. Pass extra CLI flags with ARGS, e.g. make scan ARGS="--source synthetic".
 
 SHELL := /bin/bash
@@ -43,25 +43,25 @@ $(UI_BUILD): $(WEB)/node_modules $(UI_SOURCES)
 	cd $(WEB) && $(NPM) run build
 
 serve: $(UI_BUILD) ## Scan loop + dashboard on http://HOST:PORT (source from Settings or .env)
-	$(UV) run xau-screener --serve --host $(HOST) --port $(PORT) $(ARGS)
+	$(UV) run wednesday --serve --host $(HOST) --port $(PORT) $(ARGS)
 
 demo: $(UI_BUILD) ## Dashboard on demo data, no market data needed
-	$(UV) run xau-screener --serve --source synthetic --host $(HOST) --port $(PORT) $(ARGS)
+	$(UV) run wednesday --serve --source synthetic --host $(HOST) --port $(PORT) $(ARGS)
 
 dev: $(WEB)/node_modules ## Demo API + Vite dev server with hot reload on http://localhost:5173
 	$(MAKE) -j2 dev-api dev-ui
 
 dev-api:
-	$(UV) run xau-screener --serve --source synthetic --port $(PORT) $(ARGS)
+	$(UV) run wednesday --serve --source synthetic --port $(PORT) $(ARGS)
 
 dev-ui:
 	cd $(WEB) && XAU_API=http://127.0.0.1:$(PORT) $(NPM) run dev
 
 scan: ## One scan in the console
-	$(UV) run xau-screener --once $(ARGS)
+	$(UV) run wednesday --once $(ARGS)
 
 check: ## Test the data feed connection
-	$(UV) run xau-screener --check $(ARGS)
+	$(UV) run wednesday --check $(ARGS)
 
 test: ## Run the Python tests
 	$(UV) run pytest -q
@@ -70,10 +70,10 @@ typecheck: $(WEB)/node_modules ## Type-check the dashboard
 	cd $(WEB) && $(NPM) run typecheck
 
 telegram-chats: ## List chats that messaged your bot, to find TELEGRAM_CHAT_ID
-	$(UV) run xau-screener --telegram-chats
+	$(UV) run wednesday --telegram-chats
 
 telegram-test: ## Send a Telegram test message
-	$(UV) run xau-screener --telegram-test
+	$(UV) run wednesday --telegram-test
 
 clean: ## Remove build output and caches (keeps data/ and .env)
 	rm -rf $(WEB)/dist .pytest_cache

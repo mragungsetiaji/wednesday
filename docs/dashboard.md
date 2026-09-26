@@ -1,7 +1,7 @@
 # Dashboard
 
 ```bash
-make serve          # or: uv run xau-screener --serve
+make serve          # or: uv run wednesday --serve
 ```
 
 Opens on http://127.0.0.1:8000. It refreshes every few seconds; the server

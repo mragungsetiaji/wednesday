@@ -19,7 +19,7 @@ from .report import format_scan
 from .scanner import ScanConfig
 from .timeframes import parse_timeframes
 
-log = logging.getLogger("xau_screener")
+log = logging.getLogger("wednesday")
 
 
 def load_env_file(path: str | Path) -> None:
@@ -48,7 +48,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     known, _ = pre.parse_known_args(argv)
     load_env_file(known.env_file)
 
-    p = argparse.ArgumentParser(prog="xau-screener", description=__doc__, parents=[pre])
+    p = argparse.ArgumentParser(prog="wednesday", description=__doc__, parents=[pre])
     p.add_argument("--source", choices=list(SOURCES),
                    help="data source (default: saved in the dashboard, else XAU_SOURCE, else yfinance)")
     p.add_argument("--symbol", help="default per source: GC=F for yfinance, XAUUSD for mt5")

@@ -7,16 +7,16 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from xau_screener import alerts as alerts_mod
-from xau_screener.alerts import AlertManager, AlertSettings, TelegramClient, TelegramError, format_alert
-from xau_screener.detectors import DetectorParams
-from xau_screener.engine import Runtime
-from xau_screener.levels import Level
-from xau_screener.scanner import LevelSet, ScanConfig, ScanResult, TimeframeResult
-from xau_screener.server import create_app
-from xau_screener.settings import DataSettings
-from xau_screener.storage import Store
-from xau_screener.timeframes import TIMEFRAMES_BY_NAME
+from wednesday import alerts as alerts_mod
+from wednesday.alerts import AlertManager, AlertSettings, TelegramClient, TelegramError, format_alert
+from wednesday.detectors import DetectorParams
+from wednesday.engine import Runtime
+from wednesday.levels import Level
+from wednesday.scanner import LevelSet, ScanConfig, ScanResult, TimeframeResult
+from wednesday.server import create_app
+from wednesday.settings import DataSettings
+from wednesday.storage import Store
+from wednesday.timeframes import TIMEFRAMES_BY_NAME
 
 T0 = pd.Timestamp("2026-03-02 10:00")
 

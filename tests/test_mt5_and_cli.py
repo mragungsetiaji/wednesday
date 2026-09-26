@@ -5,8 +5,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from xau_screener import cli
-from xau_screener.feeds import MT5Feed
+from wednesday import cli
+from wednesday.feeds import MT5Feed
 
 
 class FakeMT5(types.ModuleType):
@@ -109,8 +109,8 @@ def test_mt5_feed_unknown_symbol(fake_mt5):
 
 
 def test_env_file_and_cli_precedence(tmp_path, monkeypatch):
-    from xau_screener.settings import SETTINGS_KEY, resolve
-    from xau_screener.storage import Store
+    from wednesday.settings import SETTINGS_KEY, resolve
+    from wednesday.storage import Store
 
     env = tmp_path / ".env"
     env.write_text('# comment\nXAU_SOURCE=mt5\nXAU_SYMBOL=XAUUSD.m\nMT5_LOGIN=555\nMT5_SERVER="Broker-Live"\n', encoding="utf-8")

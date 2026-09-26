@@ -15,7 +15,7 @@ Zone 2,470.16 – 2,471.97 · price 2,471.50
 1. Create a bot with [@BotFather](https://t.me/BotFather) and put the token in
    `.env` as `TELEGRAM_BOT_TOKEN`.
 2. Send the bot any message, then run `make telegram-chats`
-   (or `uv run xau-screener --telegram-chats`) and put the printed id in `.env`
+   (or `uv run wednesday --telegram-chats`) and put the printed id in `.env`
    as `TELEGRAM_CHAT_ID`.
 3. Restart, then `make telegram-test` or **Settings > Send test message**.
 
