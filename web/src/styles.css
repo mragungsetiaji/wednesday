@@ -243,8 +243,8 @@ p {
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 344px;
-  height: calc(100dvh - var(--topbar-h));
-  min-height: 560px;
+  /* Leave the details below peeking into the first viewport. */
+  height: clamp(520px, calc(100dvh - var(--topbar-h) - 140px), 720px);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
@@ -411,13 +411,6 @@ p {
   margin: 0;
   padding: var(--s1) var(--s2);
   list-style: none;
-}
-/* Above-price rows sit on the price line, like the chart's y axis. */
-.ladder.above {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
 }
 
 .ladder-row {
@@ -672,16 +665,12 @@ p {
   .layers {
     margin-inline-start: 0;
   }
-  .workspace {
-    height: auto;
-    min-height: 620px;
-  }
 }
 
 @media (max-width: 900px) {
   .workspace {
     grid-template-columns: 1fr;
-    min-height: 0;
+    height: auto;
   }
   .chart-wrap {
     flex: none;
@@ -692,9 +681,6 @@ p {
     overflow: visible;
     border-inline-start: 0;
     border-top: 1px solid var(--line);
-  }
-  .ladder.above {
-    flex: none;
   }
   .ladder-now {
     position: static;
