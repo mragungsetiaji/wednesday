@@ -235,14 +235,14 @@ class Store:
             self._upsert(bars_table, rows[i : i + 5000], ["source", "symbol", "time"])
         return len(rows)
 
-    def load_bars(self, source: str, symbol: str, limit: int) -> pd.DataFrame:
+    def load_bars(self, source: str, symbol: str, limit: int, before: int | None = None) -> pd.DataFrame:
+        """The latest ``limit`` stored M1 bars, or the latest opening before ``before`` (unix seconds)."""
         t = bars_table
-        q = (
-            select(t.c.time, t.c.open, t.c.high, t.c.low, t.c.close, t.c.volume)
-            .where(t.c.source == source, t.c.symbol == symbol)
-            .order_by(t.c.time.desc())
-            .limit(limit)
-        )
+        q = select(t.c.time, t.c.open, t.c.high, t.c.low, t.c.close, t.c.volume).where(
+            t.c.source == source, t.c.symbol == symbol)
+        if before is not None:
+            q = q.where(t.c.time < before)
+        q = q.order_by(t.c.time.desc()).limit(limit)
         with self.engine.connect() as conn:
             rows = conn.execute(q).all()
         if not rows:

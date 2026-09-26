@@ -44,6 +44,7 @@ interface Props {
   news?: NewsMark[]; // high-impact releases as vertical lines, [] hides them
   ml?: LabMark[]; // the active model's blocks, [] hides them
   mlHighlight?: string | null;
+  onNeedOlder?: () => void; // the view reached the first candle: load older ones
 }
 
 const ROW_PX = 22;
@@ -78,7 +79,7 @@ function candleAt(times: number[], t: number): number {
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
-  ml = NO_ML, mlHighlight = null }: Props) {
+  ml = NO_ML, mlHighlight = null, onNeedOlder }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -92,6 +93,8 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const candlesRef = useRef<Candle[]>([]);
   const syncRef = useRef(sync);
   syncRef.current = sync;
+  const needOlderRef = useRef(onNeedOlder);
+  needOlderRef.current = onNeedOlder;
   const fittedKey = useRef<string | null>(null);
   const [hover, setHover] = useState<Candle | null>(null);
 
@@ -129,6 +132,10 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       }
     });
     quartersRef.current = quartersPrimitive;
+    // Near the left edge: page in older candles. New data keeps the view anchored on the right.
+    chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (range && range.from < 10) needOlderRef.current?.();
+    });
     // Resizing the chart rescales every pane; keep the quarterly pane at its fixed height.
     const resize = new ResizeObserver(() => {
       const h = quarterPaneHeight.current;

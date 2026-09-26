@@ -139,6 +139,16 @@ export const fetchScan = () => getJson<ScanResponse>("/api/scan");
 export const fetchCandles = (tf: string, limit: number) =>
   getJson<CandlesResponse>(`/api/candles?tf=${encodeURIComponent(tf)}&limit=${limit}`);
 
+/** Candles opening before `before` (unix), for scrolling back; `has_more` is false at the start of the history. */
+export interface OlderCandles {
+  timeframe: string;
+  candles: Candle[];
+  has_more: boolean;
+}
+
+export const fetchOlderCandles = (tf: string, before: number, limit: number) =>
+  getJson<OlderCandles>(`/api/candles?tf=${encodeURIComponent(tf)}&limit=${limit}&before=${before}`);
+
 /** Quarterly theory rows: weekdays, the four sessions of a day, and 90-minute quarters. */
 export type QuarterRow = "week" | "session" | "q90";
 

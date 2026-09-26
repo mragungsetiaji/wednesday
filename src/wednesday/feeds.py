@@ -15,13 +15,17 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
-from .timeframes import M1, normalize_ohlcv
+from .timeframes import M1, OHLCV_COLUMNS, Timeframe, normalize_ohlcv
 
 if TYPE_CHECKING:
     from .settings import DataSettings
     from .storage import Store
 
 log = logging.getLogger(__name__)
+
+# The MetaTrader5 module's constant for each chart timeframe.
+MT5_TIMEFRAMES = {"5M": "TIMEFRAME_M5", "15M": "TIMEFRAME_M15", "30M": "TIMEFRAME_M30",
+                  "1H": "TIMEFRAME_H1", "4H": "TIMEFRAME_H4"}
 
 
 class DataFeed(ABC):
@@ -30,6 +34,8 @@ class DataFeed(ABC):
     # Keep retrying a failed connection every minute. MT5 doesn't: connecting starts the
     # terminal, so retrying would reopen it every minute after the trader closed it.
     retry_connect = True
+    # fetch_history serves each timeframe's own candles (the chart's older history).
+    native_history = False
 
     def connect(self) -> None:  # noqa: B027 - optional hook
         """Open connections / log in. Called once before the first fetch."""
@@ -45,6 +51,13 @@ class DataFeed(ABC):
         """Live price if the feed has one; otherwise the scanner uses the last M1 close."""
         return None
 
+    def fetch_history(self, tf: Timeframe, before: pd.Timestamp, count: int) -> pd.DataFrame:
+        """Up to ``count`` closed ``tf`` candles opening before ``before`` (oldest first).
+
+        Only for feeds with ``native_history``; the others' history is the stored M1 bars.
+        """
+        raise NotImplementedError
+
     def describe(self) -> dict:
         """Connection details shown by ``--check``."""
         return {"feed": self.name}
@@ -58,6 +71,7 @@ class MT5Feed(DataFeed):
     """
 
     name = "mt5"
+    native_history = True
     retry_connect = False
 
     def __init__(self, symbol: str = "XAUUSD", login: int | None = None,
@@ -125,6 +139,23 @@ class MT5Feed(DataFeed):
         df.index = pd.to_datetime(df["time"], unit="s")  # broker server time
         df = df.rename(columns={"tick_volume": "volume"})
         return normalize_ohlcv(df)
+
+    def fetch_history(self, tf: Timeframe, before: pd.Timestamp, count: int) -> pd.DataFrame:
+        """The terminal's own ``tf`` candles, so scrolling back needs no M1 history."""
+        if self._mt5 is None:
+            self.reconnect()
+        mt5 = self._mt5
+        frame = getattr(mt5, MT5_TIMEFRAMES[tf.name])
+        # Times are broker server time as unix seconds, both ways: pass ``before`` as-is.
+        rates = mt5.copy_rates_from(self.symbol, frame, int(before.timestamp()) - 1, count)
+        if rates is None:
+            raise RuntimeError(f"MT5 returned no {tf.name} history: {mt5.last_error()}")
+        if len(rates) == 0:
+            return pd.DataFrame(columns=OHLCV_COLUMNS, index=pd.DatetimeIndex([]), dtype=float)
+        df = pd.DataFrame(rates)
+        df.index = pd.to_datetime(df["time"], unit="s")
+        df = normalize_ohlcv(df.rename(columns={"tick_volume": "volume"}))
+        return df[df.index < before]
 
     def last_price(self) -> float | None:
         tick = self._mt5.symbol_info_tick(self.symbol) if self._mt5 else None

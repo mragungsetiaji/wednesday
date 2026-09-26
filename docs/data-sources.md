@@ -97,6 +97,22 @@ default lookback wants ~48k M1 bars, about 5 weeks.
 
 The database also keeps the saved settings and the Telegram alert log.
 
+## Scrolling back
+
+The chart opens on the last `--lookback` candles of a timeframe, the ones the
+scan uses. Drag it to the left and older candles load as you reach the edge,
+300 at a time, with no effect on the scan. They come from the M1 bars in
+memory first, then:
+
+- **MT5**: the terminal's own candles of that timeframe (H1, H4, ...), not M1,
+  so going back months is quick. How far depends on the history the terminal
+  has downloaded and on **Max bars in chart**.
+- **Yahoo Finance and CSV**: the M1 bars stored in the database, so as far back
+  as the screener has been running (Yahoo itself only gives ~7 days of M1).
+- **Demo data**: only what is in memory.
+
+Older candles show prices only; levels are drawn from the latest scan.
+
 ## Adding a source
 
 Subclass `feeds.DataFeed` and implement `fetch_m1(count)`, returning closed M1

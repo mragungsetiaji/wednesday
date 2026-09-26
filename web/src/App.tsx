@@ -16,7 +16,7 @@ import { SettingsPage } from "./components/SettingsPage";
 import { StatusBar } from "./components/StatusBar";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
-import { fmtAgo, fmtFeedTime, fmtPrice } from "./format";
+import { fmtPrice } from "./format";
 import { BookIcon, ChartIcon, Direction, ExpandIcon, FlaskIcon, SlidersIcon } from "./icons";
 import { predictionMark } from "./labPrimitive";
 import { useMl } from "./mlData";
@@ -132,7 +132,7 @@ export default function App() {
     if (timeframes.length && !timeframes.includes(tf)) setTf(timeframes[0]);
   }, [timeframes, tf, setTf]);
 
-  const chart = useCandles(tf, version, lookback, setFetchError);
+  const [chart, loadOlder] = useCandles(tf, version, lookback, setFetchError);
   const [ml, refreshMl] = useMl(tf, version, showMl && view === "chart", mlThreshold, lookback);
   const mlMarks = useMemo(() => (ml?.blocks ?? []).map(predictionMark), [ml]);
 
@@ -197,15 +197,6 @@ export default function App() {
             <span className="ticker-price num">{scan ? fmtPrice(scan.price) : "—"}</span>
           </div>
         )}
-        {view !== "journal" && <p className="meta">
-          <span className={`live ${status.cls}`}>
-            <span className="dot" aria-hidden="true" />
-            {status.text}
-          </span>
-          {data?.source && <span>{data.source}</span>}
-          <span>scanned {fmtAgo(data?.scanned_at ?? null, now)}</span>
-          {scan && <span>bar {fmtFeedTime(scan.time)}</span>}
-        </p>}
         {view === "chart" && (
           <div className="layers" role="group" aria-label="Detectors">
             {allDetectors.map((d) => (
@@ -311,6 +302,7 @@ export default function App() {
                 palette={palette}
                 resetKey={tf}
                 loading={!chart}
+                onNeedOlder={loadOlder}
                 quarters={quarters}
                 quarterRows={quarterRows}
                 swings={showSwings ? chart?.swings : undefined}
@@ -381,7 +373,8 @@ export default function App() {
         </>
       )}
 
-      <StatusBar version={data?.app_version} />
+      <StatusBar version={data?.app_version} status={status} source={data?.source}
+        scannedAt={data?.scanned_at ?? null} barTime={scan?.time ?? null} now={now} />
 
       {/* Full screen renders its own copy: the browser only shows the full screen element. */}
       {!(focus && scan && data) && <NewsAlert events={upcomingNews} />}

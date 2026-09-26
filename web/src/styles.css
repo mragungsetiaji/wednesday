@@ -440,6 +440,42 @@ p {
   gap: 6px;
   white-space: nowrap;
 }
+.statusbar .live {
+  font-weight: 600;
+}
+.statusbar-feed {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s3);
+}
+/* Live: the dot glows and sends out a soft ring, like a power light. */
+.live.ok .dot {
+  position: relative;
+  animation: live-glow 2s ease-in-out infinite;
+}
+.live.ok .dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: live-ring 2s var(--ease-out) infinite;
+}
+@keyframes live-glow {
+  0%, 100% { box-shadow: 0 0 2px 0 color-mix(in srgb, var(--ok) 60%, transparent); }
+  50% { box-shadow: 0 0 6px 1px color-mix(in srgb, var(--ok) 80%, transparent); }
+}
+@keyframes live-ring {
+  from { transform: scale(1); opacity: 0.6; }
+  to { transform: scale(2.6); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live.ok .dot,
+  .live.ok .dot::after {
+    animation: none;
+  }
+}
 
 /* ---------- Full screen charts ---------- */
 .focus {
@@ -1332,7 +1368,7 @@ p {
 .layers + .nav {
   margin-inline-start: 0;
 }
-.topbar > .meta + .nav {
+.topbar > .ticker + .nav {
   margin-inline-start: auto;
 }
 .nav-item {

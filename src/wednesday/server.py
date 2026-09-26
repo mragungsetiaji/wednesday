@@ -25,6 +25,7 @@ from .engine import RECONNECT_ATTEMPTS, Engine, Runtime
 from .lab.api import lab_router
 from .journal.api import journal_router
 from .features import catalog as feature_catalog
+from .history import older_candles
 from .plugins import PLUGIN_API, features, load_plugins
 from .quarters import quarters_payload, utc_to_feed
 from .mt5_terminals import find_terminals
@@ -41,6 +42,13 @@ DEFAULT_UI_DIR = (Path(sys._MEIPASS) if getattr(sys, "frozen", False)
 def _unix(ts: pd.Timestamp) -> int:
     # Feed times are naive (broker server time); the chart shows them as-is by treating them as UTC.
     return int(ts.timestamp())
+
+
+def _candle_rows(candles: pd.DataFrame) -> list[dict]:
+    return [
+        {"time": _unix(t), "open": r.open, "high": r.high, "low": r.low, "close": r.close}
+        for t, r in zip(candles.index, candles.itertuples(index=False))
+    ]
 
 
 def _iso(dt) -> str | None:
@@ -112,10 +120,18 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return {**status(), "scan": result.to_dict(trade_bias()) if result else None}
 
     @app.get("/api/candles")
-    def get_candles(tf: str = Query("1H"), limit: int = Query(200, ge=10, le=2000)) -> dict:
+    def get_candles(tf: str = Query("1H"), limit: int = Query(200, ge=10, le=2000),
+                    before: int | None = Query(None)) -> dict:
+        """The latest candles with their levels; with ``before`` (unix), older candles only, for scrolling back."""
         timeframe = TIMEFRAMES_BY_NAME.get(tf.upper())
         if timeframe is None:
             raise HTTPException(404, f"unknown timeframe {tf!r}")
+        if before is not None:
+            try:
+                older, more = older_candles(current(), timeframe, before, limit)
+            except RuntimeError as exc:  # MT5 closed or not connected
+                raise HTTPException(503, str(exc)) from exc
+            return {"timeframe": timeframe.name, "candles": _candle_rows(older), "has_more": more}
         _, result, m1 = current().snapshot()
         if result is None or m1 is None:
             raise HTTPException(503, "no data yet")
@@ -127,10 +143,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return {
             "timeframe": timeframe.name,
             "price": result.price,
-            "candles": [
-                {"time": _unix(t), "open": r.open, "high": r.high, "low": r.low, "close": r.close}
-                for t, r in zip(candles.index, candles.itertuples(index=False))
-            ],
+            "candles": _candle_rows(candles),
             "levels": levels,
             "swings": swings,  # confirmed swing points labelled HH / LH / HL / LL
         }

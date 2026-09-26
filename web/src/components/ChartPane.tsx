@@ -29,7 +29,7 @@ interface Props {
 
 /** One chart of the full-screen layout, with its own timeframe. */
 export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers, palette, quarters, showQuarters, label, sync, news }: Props) {
-  const chart = useCandles(tf, version, lookback);
+  const [chart, loadOlder] = useCandles(tf, version, lookback);
   const zones = useMemo(() => (chart ? buildZones(scan, chart, tf, rail, layers) : []), [scan, chart, tf, rail, layers]);
   const events = useMemo(() => buildEvents(scan, tf, layers.detectors), [scan, tf, layers.detectors]);
   const rows = useMemo(() => (showQuarters ? quarterRowsFor(tf) : []), [showQuarters, tf]);
@@ -62,6 +62,7 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
         palette={palette}
         resetKey={tf}
         loading={!chart}
+        onNeedOlder={loadOlder}
         quarters={quarters}
         quarterRows={rows}
         sync={sync}
