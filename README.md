@@ -70,6 +70,8 @@ Full screen, split into two or four charts. Hover one and the others follow to t
   <img src="docs/images/fullscreen-4.png" alt="Four charts full screen (1H, 15M, 4H, 5M) with linked crosshairs" width="100%">
 </picture>
 
+<img src="docs/images/fullscreen-4-light.png" alt="Four charts full screen (30M, 15M, 4H, 5M) on gold, light theme" width="100%">
+
 > **Why "Wednesday"?** Watching gold through quarterly theory, the Wednesday and New York blocks kept coming up green. The quarterly pane shows those blocks on the chart and its stats count how often that holds.
 
 ## Quick start
