@@ -85,6 +85,37 @@ def analyze_structure(high: np.ndarray, low: np.ndarray, close: np.ndarray, leng
     return Structure(length, swings, breaks)
 
 
+@dataclass(frozen=True)
+class SwingPoint:
+    """A confirmed swing with its structure label against the previous swing of the same kind."""
+
+    kind: Literal["high", "low"]
+    time: pd.Timestamp
+    price: float
+    label: Literal["HH", "LH", "HL", "LL"] | None  # None for the first swing of its kind
+
+    def to_dict(self) -> dict:
+        return {"kind": self.kind, "time": self.time.isoformat(), "time_unix": int(self.time.timestamp()),
+                "price": self.price, "label": self.label}
+
+
+def label_swings(structure: Structure, times: pd.Index) -> list[SwingPoint]:
+    """HH/LH for swing highs, HL/LL for swing lows, each against the previous one of its kind."""
+    prev: dict[str, float] = {}
+    out = []
+    for s in sorted(structure.swings, key=lambda s: s.index):
+        ref = prev.get(s.kind)
+        if ref is None:
+            label = None
+        elif s.kind == "high":
+            label = "HH" if s.price > ref else "LH"
+        else:
+            label = "HL" if s.price > ref else "LL"
+        prev[s.kind] = s.price
+        out.append(SwingPoint(s.kind, times[s.index], s.price, label))
+    return out
+
+
 class Context:
     """Closed candles of one timeframe plus lazily computed, shared analysis."""
 

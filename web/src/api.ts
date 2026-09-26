@@ -109,11 +109,21 @@ export interface Candle {
   close: number;
 }
 
+/** A confirmed swing point, labelled against the previous swing of its kind. */
+export interface SwingPoint {
+  kind: "high" | "low";
+  time: string;
+  time_unix: number;
+  price: number;
+  label: "HH" | "LH" | "HL" | "LL" | null;
+}
+
 export interface CandlesResponse {
   timeframe: string;
   price: number;
   candles: Candle[];
   levels: Level[];
+  swings: SwingPoint[];
 }
 
 async function getJson<T>(url: string): Promise<T> {

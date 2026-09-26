@@ -14,7 +14,7 @@ import {
 } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
 
-import type { Candle, QuarterBlock, QuarterRow, QuartersResponse } from "../api";
+import type { Candle, QuarterBlock, QuarterRow, QuartersResponse, SwingPoint } from "../api";
 import type { CrosshairBus } from "../crosshairSync";
 import { fmtPrice } from "../format";
 import { QuartersPrimitive } from "../quartersPrimitive";
@@ -38,9 +38,11 @@ interface Props {
   quarters: QuartersResponse | null;
   quarterRows: QuarterRow[]; // rows of the quarterly pane, [] hides it
   sync?: { bus: CrosshairBus; id: number }; // crosshair linked with other charts
+  swings?: SwingPoint[]; // HH / LH / HL / LL labels at swing points, [] hides them
 }
 
 const ROW_PX = 22;
+const NO_SWINGS: SwingPoint[] = []; // stable default, so the markers effect doesn't rerun every render
 const QUARTER_PANE = 1;
 
 const fmtChange = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmtPrice(Math.abs(v))}`;
@@ -68,7 +70,7 @@ function candleAt(times: number[], t: number): number {
 
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
-export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync }: Props) {
+export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -170,14 +172,25 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
         color: palette.accent,
         text: e.text,
         size: 1,
-      }))
-      .sort((a, b) => (a.time as number) - (b.time as number));
-    markersRef.current?.setMarkers(markers);
+      }));
+    // Swing labels: small dots with HH/LH above swing highs, HL/LL below swing lows, in muted ink.
+    const known = new Set(times);
+    const swingMarkers: SeriesMarker<Time>[] = swings
+      .filter((sw) => sw.label && known.has(sw.time_unix))
+      .map((sw) => ({
+        time: sw.time_unix as UTCTimestamp,
+        position: sw.kind === "high" ? ("aboveBar" as const) : ("belowBar" as const),
+        shape: "circle" as const,
+        color: palette.muted,
+        text: sw.label!,
+        size: 0.4,
+      }));
+    markersRef.current?.setMarkers([...markers, ...swingMarkers].sort((a, b) => (a.time as number) - (b.time as number)));
     if (candles.length && fittedKey.current !== resetKey) {
       chartRef.current?.timeScale().fitContent();
       fittedKey.current = resetKey;
     }
-  }, [candles, zones, events, palette, resetKey]);
+  }, [candles, zones, events, swings, palette, resetKey]);
 
   useEffect(() => {
     zonesRef.current?.update({ highlight });

@@ -18,10 +18,12 @@ found on it:
 - **Liquidity** (BSL / SSL, EQH / EQL) and **inducement** as lines.
 - **Higher-timeframe levels**, faded, so you see where a 5M setup sits inside the 1H picture.
 - The **latest break of structure** (BOS / CHoCH) as a dashed segment.
+- **Swing labels**: `HH` / `LH` above swing highs and `HL` / `LL` below swing
+  lows, so the structure reads at a glance.
 - **Recent sweeps** as markers on the candle that swept.
 
 The timeframe tabs carry each timeframe's structure direction (↑ / ↓).
-**Mid OBs** and **Higher timeframes** can be switched off above the chart, and
+**Mid OBs**, **Higher timeframes**, **Swings** and **Quarters** can be switched off above the chart, and
 each detector can be hidden from the top bar.
 
 ## Full screen and multiple charts

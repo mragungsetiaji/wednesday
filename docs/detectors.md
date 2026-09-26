@@ -17,6 +17,9 @@ object (a `Level`: a zone, or a line when top equals bottom). Choose them with
   side. It only exists once those right-side bars have closed (no look-ahead).
 - **Break of structure (BOS)**: a candle *closes* above the latest unbroken
   swing high (bullish) or below the latest unbroken swing low (bearish).
+- **Swing labels**: each confirmed swing is labelled against the previous swing
+  of its kind: `HH` / `LH` for highs (higher or lower high), `HL` / `LL` for lows.
+  The chart shows them at every swing point (toggle *Swings*).
 - **Change of character (CHoCH)**: the first break against the previous run of
   breaks.
 

@@ -11,7 +11,7 @@ from .bias import TradeBias, setup_risk
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, build_detectors
 from .detectors.orderblock import PRIORITY_RANK
 from .levels import Level
-from .structure import Bias, Context, latest_bias
+from .structure import Bias, Context, SwingPoint, label_swings, latest_bias
 from .timeframes import TIMEFRAMES, Timeframe, resample_ohlcv
 
 
@@ -67,6 +67,7 @@ class TimeframeResult:
     candles: int
     sets: dict[str, LevelSet]  # detector name -> results
     bias: Bias | None = None  # latest break of structure (external swings)
+    swings: list[SwingPoint] = field(default_factory=list)  # labelled HH/LH/HL/LL
 
 
 @dataclass
@@ -163,7 +164,8 @@ def scan_timeframe(m1: pd.DataFrame, tf: Timeframe, price: float, cfg: ScanConfi
         recent = [lv for lv in levels if not lv.active and recent_from is not None and lv.ended_time >= recent_from]
         sets[det.name] = LevelSet(active, above, below, inside, recent)
     bias = latest_bias(ctx, cfg.params.swing_length) if len(candles) else None
-    return TimeframeResult(tf, len(candles), sets, bias), candles
+    swings = label_swings(ctx.structure(cfg.params.swing_length), ctx.times) if len(candles) else []
+    return TimeframeResult(tf, len(candles), sets, bias, swings), candles
 
 
 def scan(m1: pd.DataFrame, cfg: ScanConfig, price: float | None = None) -> ScanResult:

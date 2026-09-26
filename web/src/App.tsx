@@ -57,6 +57,7 @@ export default function App() {
   const [showMidOb, setShowMidOb] = usePref("xau.midOb", true);
   const [hidden, setHidden] = usePref<string[]>("xau.hiddenLayers", []);
   const [showQuarters, setShowQuarters] = usePref("xau.quarters", true);
+  const [showSwings, setShowSwings] = usePref("wed.swings", true);
   const [focus, setFocus] = useState(false);
   const [quarters, setQuarters] = useState<QuartersResponse | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
@@ -124,7 +125,8 @@ export default function App() {
 
   const rail = useMemo(() => (scan ? buildRail(scan, detectors) : []), [scan, detectors]);
 
-  const layers = useMemo<LayerOptions>(() => ({ detectors, showHigherTf, showMidOb }), [detectors, showHigherTf, showMidOb]);
+  const layers = useMemo<LayerOptions>(() => ({ detectors, showHigherTf, showMidOb, showSwings }),
+    [detectors, showHigherTf, showMidOb, showSwings]);
   const zones = useMemo(() => (scan && chart ? buildZones(scan, chart, tf, rail, layers) : []), [scan, chart, tf, rail, layers]);
   const events = useMemo(() => (scan ? buildEvents(scan, tf, detectors) : []), [scan, tf, detectors]);
   const closeFocus = useCallback(() => setFocus(false), []);
@@ -230,6 +232,10 @@ export default function App() {
                     Higher timeframes
                   </label>
                   <label className="toggle">
+                    <input type="checkbox" checked={showSwings} onChange={(e) => setShowSwings(e.target.checked)} />
+                    Swings
+                  </label>
+                  <label className="toggle">
                     <input type="checkbox" checked={showQuarters} onChange={(e) => setShowQuarters(e.target.checked)} />
                     Quarters
                   </label>
@@ -245,6 +251,7 @@ export default function App() {
                 loading={!chart}
                 quarters={quarters}
                 quarterRows={quarterRows}
+                swings={showSwings ? chart?.swings : undefined}
               />
               <div className="chart-foot">
                 <ul className="legend" aria-label="Chart legend">
@@ -254,6 +261,7 @@ export default function App() {
                   <li><span className="key key-liq" /> BSL / SSL</li>
                   <li><span className="key key-idm" /> IDM</li>
                   <li><span className="key key-bos" /> Last break</li>
+                  {showSwings && <li><span className="key key-swing" /> HH / HL / LH / LL swings</li>}
                   {quarterRows.length > 0 && <li><span className="key key-quarter" /> Quarters: green closed up</li>}
                   <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
                 </ul>
@@ -317,6 +325,7 @@ export default function App() {
           toggles={[
             { label: "Mid OBs", checked: showMidOb, onChange: setShowMidOb },
             { label: "Higher timeframes", checked: showHigherTf, onChange: setShowHigherTf },
+            { label: "Swings", checked: showSwings, onChange: setShowSwings },
             { label: "Quarters", checked: showQuarters, onChange: setShowQuarters },
           ]}
           tf={tf}

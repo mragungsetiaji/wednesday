@@ -97,6 +97,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         candles = resample_ohlcv(m1, timeframe, drop_incomplete=False).tail(limit)
         tf_result = next((r for r in result.results if r.timeframe.name == timeframe.name), None)
         levels = [lv.to_dict() for s in tf_result.sets.values() for lv in s.active] if tf_result else []
+        swings = [sw.to_dict() for sw in tf_result.swings] if tf_result else []
         return {
             "timeframe": timeframe.name,
             "price": result.price,
@@ -105,6 +106,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                 for t, r in zip(candles.index, candles.itertuples(index=False))
             ],
             "levels": levels,
+            "swings": swings,  # confirmed swing points labelled HH / LH / HL / LL
         }
 
     @app.get("/api/quarters")

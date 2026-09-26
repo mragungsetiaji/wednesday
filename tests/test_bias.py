@@ -181,3 +181,27 @@ def test_bias_and_brief_api(tmp_path, monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     res = api.post("/api/brief/generate")
     assert res.status_code == 422 and "OPENAI_API_KEY" in res.json()["detail"]
+
+
+def test_swings_are_labelled_against_the_previous_swing():
+    from wednesday.structure import Context, label_swings
+
+    ctx = Context(candles(HIGHER_LOW + RALLY))
+    labels = [(p.kind, p.label) for p in label_swings(ctx.structure(2), ctx.times)]
+    assert labels[0] == ("low", None)  # first swing low: nothing to compare with
+    assert ("high", None) in labels
+    lows = [p for p in label_swings(ctx.structure(2), ctx.times) if p.kind == "low"]
+    assert [p.label for p in lows[1:]] == ["HL" if b.price > a.price else "LL" for a, b in zip(lows, lows[1:])]
+    d = lows[0].to_dict()
+    assert set(d) == {"kind", "time", "time_unix", "price", "label"}
+
+
+def test_candles_endpoint_returns_swings(tmp_path):
+    cfg = ScanConfig(lookback=100, timeframes=(TIMEFRAMES_BY_NAME["1H"],), params=DetectorParams(swing_length=2))
+    runtime = Runtime(cfg, DataSettings(source="synthetic"), None)
+    api = TestClient(create_app(runtime, ui_dir=tmp_path))
+    runtime.engine.feed.connect()
+    runtime.engine.step()
+    swings = api.get("/api/candles?tf=1H&limit=100").json()["swings"]
+    assert swings and {s["label"] for s in swings} <= {"HH", "LH", "HL", "LL", None}
+    assert {"HH", "LH"} & {s["label"] for s in swings} and {"HL", "LL"} & {s["label"] for s in swings}

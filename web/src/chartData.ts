@@ -9,6 +9,7 @@ export interface LayerOptions {
   detectors: DetectorInfo[]; // the ones shown
   showHigherTf: boolean;
   showMidOb: boolean;
+  showSwings: boolean; // HH / HL / LH / LL labels at swing points
 }
 
 /** Candles of one timeframe, refetched after every scan. */

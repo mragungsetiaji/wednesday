@@ -63,6 +63,7 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
         quarters={quarters}
         quarterRows={rows}
         sync={sync}
+        swings={layers.showSwings ? chart?.swings : undefined}
       />
     </section>
   );
