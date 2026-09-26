@@ -39,7 +39,7 @@ const LIGHT: ChartPalette = {
   bear: "#e34948",
   liquidity: "#2a78d6",
   idm: "#52514e",
-  accent: "#a86b00",
+  accent: "#8f5b00",
   mode: "light",
 };
 

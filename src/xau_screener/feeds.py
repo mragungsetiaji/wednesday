@@ -9,17 +9,23 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from .timeframes import M1, normalize_ohlcv
 
+if TYPE_CHECKING:
+    from .settings import DataSettings
+    from .storage import Store
+
 log = logging.getLogger(__name__)
 
 
 class DataFeed(ABC):
     name = "base"
+    persist = True  # store fetched bars in the database
 
     def connect(self) -> None:  # noqa: B027 - optional hook
         """Open connections / log in. Called once before the first fetch."""
@@ -129,10 +135,11 @@ class MT5Feed(DataFeed):
 
 
 class YFinanceFeed(DataFeed):
-    """Yahoo Finance (``uv sync --extra yfinance``). Handy for testing off-MT5.
+    """Yahoo Finance: free, the default source.
 
-    Note: Yahoo only serves ~7 days of 1m data and ``GC=F`` is COMEX gold
-    futures, not spot XAUUSD, so levels differ from a broker chart.
+    Yahoo only serves ~7 days of 1m bars and ``GC=F`` is COMEX gold futures,
+    not spot XAUUSD, so levels differ from a broker chart by a few dollars.
+    Bars are UTC. Stored history (see ``M1Buffer``) grows beyond 7 days over time.
     """
 
     name = "yfinance"
@@ -140,15 +147,21 @@ class YFinanceFeed(DataFeed):
     def __init__(self, symbol: str = "GC=F"):
         self.symbol = symbol
 
+    def _history(self, period: str) -> pd.DataFrame:
+        import yfinance as yf
+
+        return yf.Ticker(self.symbol).history(period=period, interval="1m", auto_adjust=False)
+
     def fetch_m1(self, count: int) -> pd.DataFrame:
-        try:
-            import yfinance as yf
-        except ImportError as exc:
-            raise RuntimeError("yfinance is not installed. Run: uv sync --extra yfinance") from exc
-        df = yf.Ticker(self.symbol).history(period="7d", interval="1m", auto_adjust=False)
+        # Small updates only need today; the first load takes everything Yahoo has.
+        df = self._history("1d" if count <= 390 else "7d")
+        if df.empty and count <= 390:
+            df = self._history("5d")  # e.g. just after the weekly open
         if df.empty:
-            raise RuntimeError(f"yfinance returned no data for {self.symbol}")
-        df.index = df.index.tz_convert("UTC").tz_localize(None)
+            raise RuntimeError(f"Yahoo Finance returned no 1m data for {self.symbol}")
+        df = df.copy()
+        if df.index.tz is not None:
+            df.index = df.index.tz_convert("UTC").tz_localize(None)
         df = normalize_ohlcv(df)
         # Drop the still-forming minute.
         now = pd.Timestamp.now(tz="UTC").tz_localize(None).floor("min")
@@ -182,6 +195,7 @@ class SyntheticFeed(DataFeed):
     """Random-walk gold-like prices for demos and tests. Each fetch advances one minute."""
 
     name = "synthetic"
+    persist = False  # every run is a different random walk; storing it would splice unrelated series
 
     def __init__(self, start_price: float = 2650.0, seed: int | None = 42,
                  history: int = 60_000, end: pd.Timestamp | None = None):
@@ -213,36 +227,52 @@ class SyntheticFeed(DataFeed):
 class M1Buffer:
     """Rolling store of M1 bars: one big initial load, then small incremental updates."""
 
-    def __init__(self, feed: DataFeed, max_bars: int, update_bars: int = 30):
+    def __init__(self, feed: DataFeed, max_bars: int, update_bars: int = 30,
+                 store: Store | None = None, key: tuple[str, str] | None = None):
         self.feed = feed
         self.max_bars = max_bars
         self.update_bars = update_bars
+        self.store = store
+        self.key = key  # (source, symbol) the bars are stored under
         self.bars: pd.DataFrame | None = None
 
     def update(self) -> pd.DataFrame:
-        if self.bars is None or self.bars.empty:
-            self.bars = normalize_ohlcv(self.feed.fetch_m1(self.max_bars))
+        if self.bars is None:
+            # Start from stored history, so a restart doesn't refetch everything
+            # and short-history feeds (Yahoo: ~7 days) keep what they collected.
+            self.bars = self.store.load_bars(*self.key, self.max_bars) if self.store and self.key else None
+            if self.bars is not None and self.bars.empty:
+                self.bars = None
+        last = self.bars.index[-1] if self.bars is not None else None
+
+        if last is None:
+            fresh = normalize_ohlcv(self.feed.fetch_m1(self.max_bars))
         else:
             fresh = normalize_ohlcv(self.feed.fetch_m1(self.update_bars))
-            if not fresh.empty and fresh.index[0] > self.bars.index[-1] + M1:
-                # Gap bigger than the update window (e.g. reconnect): reload everything.
+            if not fresh.empty and fresh.index[0] > last + M1:
+                # Gap bigger than the update window (restart, reconnect): fetch all the feed has.
                 fresh = normalize_ohlcv(self.feed.fetch_m1(self.max_bars))
-            merged = pd.concat([self.bars, fresh])
-            self.bars = merged[~merged.index.duplicated(keep="last")].sort_index()
-        self.bars = self.bars.tail(self.max_bars)
+
+        if self.store and self.key and not fresh.empty:
+            new = fresh if last is None else fresh[fresh.index > last - 5 * M1]
+            self.store.save_bars(*self.key, new)
+
+        merged = fresh if self.bars is None else pd.concat([self.bars, fresh])
+        self.bars = merged[~merged.index.duplicated(keep="last")].sort_index().tail(self.max_bars)
         return self.bars
 
 
-def build_feed(source: str, symbol: str | None = None, csv_path: str | None = None, **mt5_kwargs) -> DataFeed:
-    source = source.lower()
+def build_feed(settings: DataSettings, mt5_password: str | None = None) -> DataFeed:
+    source, symbol = settings.source, settings.resolved_symbol
     if source == "mt5":
-        return MT5Feed(symbol or "XAUUSD", **mt5_kwargs)
+        return MT5Feed(symbol, login=settings.mt5_login, password=mt5_password,
+                       server=settings.mt5_server, path=settings.mt5_path)
     if source == "yfinance":
-        return YFinanceFeed(symbol or "GC=F")
+        return YFinanceFeed(symbol)
     if source == "csv":
-        if not csv_path:
-            raise ValueError("--csv is required with --source csv")
-        return CSVFeed(csv_path)
+        if not settings.csv_path:
+            raise ValueError("A CSV path is required for the CSV source")
+        return CSVFeed(settings.csv_path)
     if source == "synthetic":
         return SyntheticFeed()
     raise ValueError(f"Unknown source {source!r}")

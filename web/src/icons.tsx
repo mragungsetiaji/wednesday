@@ -30,3 +30,21 @@ export const ArrowDown = (p: IconProps) => (
 /** Direction arrow for a bullish/bearish reading. */
 export const Direction = ({ dir, ...p }: IconProps & { dir: "bullish" | "bearish" }) =>
   dir === "bullish" ? <ArrowUp {...p} /> : <ArrowDown {...p} />;
+
+/** Candles: the chart view. */
+export const ChartIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.5 2.5v11M11.5 2.5v11" />
+    <rect x="3" y="5" width="3" height="5" rx="0.5" />
+    <rect x="10" y="4" width="3" height="4" rx="0.5" />
+  </Svg>
+);
+
+/** Sliders: settings. */
+export const SlidersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2.5 4.5h11M2.5 11.5h11" />
+    <circle cx="6" cy="4.5" r="1.75" fill="var(--surface, #1a1a19)" />
+    <circle cx="10.5" cy="11.5" r="1.75" fill="var(--surface, #1a1a19)" />
+  </Svg>
+);

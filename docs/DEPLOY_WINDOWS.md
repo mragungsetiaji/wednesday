@@ -17,14 +17,18 @@ live together: on your PC while testing, on the VPS in production.
    git clone <repo-url> xau-screener
    cd xau-screener
    uv sync --extra mt5
-   copy .env.example .env   # then edit XAU_SYMBOL (credentials optional if MT5 is logged in)
+   copy .env.example .env   # set XAU_SOURCE=mt5 and XAU_SYMBOL (credentials optional if MT5 is logged in)
    ```
+
+   The default source is Yahoo Finance, so without `XAU_SOURCE=mt5` the screener
+   runs on free futures data. You can also switch later in the dashboard under
+   **Settings**; the choice is saved in the database and survives restarts.
 
 4. Test the connection. It prints the account, symbol, bid/ask and how many M1
    bars were loaded:
 
    ```powershell
-   uv run xau-screener --check
+   uv run xau-screener --source mt5 --check
    ```
 
    If it reports fewer M1 bars than needed, open an M1 chart of the symbol and
@@ -82,6 +86,10 @@ dashboard has **no login**, so keep `XAU_HOST=127.0.0.1` and reach it by one of:
 
 Only set `XAU_HOST=0.0.0.0` if the Windows firewall / VPS provider restricts
 port 8000 to your own IP.
+
+Settings and every stored M1 bar live in `data\xau.db` (SQLite). Back that file
+up with the rest of the folder; deleting it only means the history is fetched
+again. To use PostgreSQL instead, see the README (*Data sources and storage*).
 
 Logs go to `logs/screener.log` (rotated at 5 MB, 5 files kept) when
 `XAU_LOG_FILE` is set; every scan table is written there too.

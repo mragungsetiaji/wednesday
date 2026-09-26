@@ -29,22 +29,45 @@ price is inside plus recent sweeps/mitigations. See [Detectors](#detectors).
 ## Setup (uv)
 
 ```bash
-uv sync                      # core deps (pandas, numpy) + dev tools
+uv sync                      # everything for the default setup (Yahoo Finance + SQLite)
 uv sync --extra mt5          # MetaTrader 5 feed (Windows only)
-uv sync --extra yfinance     # Yahoo Finance feed (testing / non-Windows)
+uv sync --extra postgres     # PostgreSQL storage
 ```
 
 ## Run
 
 ```bash
-# MetaTrader 5 terminal must be running and logged in
-uv run xau-screener --source mt5 --symbol XAUUSD
+uv run xau-screener --serve                      # dashboard on http://127.0.0.1:8000, Yahoo Finance data
 
-# Other feeds
-uv run xau-screener --source yfinance            # GC=F futures, ~7 days of 1m only
+# Console only, or pick a source explicitly
+uv run xau-screener --source mt5 --symbol XAUUSD # MT5 terminal running and logged in
 uv run xau-screener --source csv --csv data/xauusd_m1.csv
 uv run xau-screener --source synthetic --once    # random-walk demo, no data needed
 ```
+
+## Data sources and storage
+
+| Source | Cost | Notes |
+| --- | --- | --- |
+| `yfinance` (default) | Free | COMEX gold futures `GC=F`, not spot; Yahoo only serves ~7 days of 1-minute bars |
+| `mt5` | Your broker | Spot XAUUSD from a running MT5 terminal on the same Windows machine |
+| `csv` | - | M1 bars from a file another process keeps appending to |
+| `synthetic` | - | Random-walk demo data, never stored |
+
+Pick the source in the dashboard under **Settings**: saving restarts the feed
+live, no server restart. The choice is saved and wins over `XAU_SOURCE` in
+`.env`; an explicit `--source` flag wins over both (`--reset-settings` forgets
+the saved choice). The MT5 password is only read from `MT5_PASSWORD` in `.env`
+and never stored.
+
+Every fetched M1 bar is stored per source and symbol, so a restart resumes
+from the database instead of refetching, and Yahoo's 7-day window stops being a
+limit: history keeps growing while the screener runs (4H with the default
+lookback wants ~48k M1 bars, about 5 weeks). Storage is **SQLite** at
+`data/xau.db` by default. For **PostgreSQL**, set
+`XAU_DB_URL=postgresql+psycopg://user:pass@host:5432/xau` and run
+`uv sync --extra postgres`; the tables are created on first start.
+`--db none` turns storage off.
 
 ## Web dashboard (React)
 
@@ -105,6 +128,7 @@ Useful options:
 | `--once` | off | Scan once and exit instead of looping every minute |
 | `--serve` | off | Also run the web dashboard + API (`XAU_SERVE=1`) |
 | `--host` / `--port` | `127.0.0.1` / `8000` | Dashboard address (`XAU_HOST`, `XAU_PORT`) |
+| `--db` | `sqlite:///data/xau.db` | Storage URL (`XAU_DB_URL`); `none` disables it |
 | `--check` | off | Test the feed connection (account, symbol, bars loaded) and exit |
 | `--log-file` | - | Rotating log file, includes every scan table (`XAU_LOG_FILE`) |
 | `--json-out` | - | Append each scan as a JSON line (for bots/dashboards) |
@@ -195,6 +219,8 @@ src/xau_screener/
   report.py       console table
   engine.py       scan loop shared by the console and the web server
   server.py       FastAPI: /api/scan, /api/candles, serves the built dashboard
+  settings.py     data source settings, source catalog, precedence rules
+  storage.py      SQLAlchemy store: saved settings + M1 history (SQLite / PostgreSQL)
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)
 scripts/          Windows VPS: auto-restart wrapper + Task Scheduler installer

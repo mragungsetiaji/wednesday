@@ -10,11 +10,12 @@ import os
 from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from .engine import Engine
+from .engine import Engine, Runtime
+from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
 
 DEFAULT_UI_DIR = Path(__file__).resolve().parents[2] / "web" / "dist"
@@ -29,16 +30,26 @@ def _iso(dt) -> str | None:
     return dt.isoformat() if dt is not None else None
 
 
-def create_app(engine: Engine, source: str = "", ui_dir: str | Path | None = None) -> FastAPI:
+def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | None = None) -> FastAPI:
+    """Serve a fixed :class:`Engine`, or a :class:`Runtime` whose data source the dashboard can change."""
     app = FastAPI(title="XAU SMC Screener", docs_url="/api/docs", openapi_url="/api/openapi.json")
-    cfg = engine.cfg
+    runtime = target if isinstance(target, Runtime) else None
+    cfg = target.cfg
+
+    def current() -> Engine:
+        # Looked up per request: applying new settings swaps the engine.
+        return runtime.engine if runtime else target
+
+    def current_source() -> str:
+        return runtime.settings.source if runtime else source
 
     def status() -> dict:
+        engine = current()
         st = engine.state
         with st.lock:
             return {
                 "symbol": engine.symbol,
-                "source": source,
+                "source": current_source(),
                 "version": st.version,
                 "scanned_at": _iso(st.scanned_at),
                 "error": st.error,
@@ -52,7 +63,7 @@ def create_app(engine: Engine, source: str = "", ui_dir: str | Path | None = Non
 
     @app.get("/api/scan")
     def get_scan() -> dict:
-        _, result, _ = engine.snapshot()
+        _, result, _ = current().snapshot()
         return {**status(), "scan": result.to_dict() if result else None}
 
     @app.get("/api/candles")
@@ -60,7 +71,7 @@ def create_app(engine: Engine, source: str = "", ui_dir: str | Path | None = Non
         timeframe = TIMEFRAMES_BY_NAME.get(tf.upper())
         if timeframe is None:
             raise HTTPException(404, f"unknown timeframe {tf!r}")
-        _, result, m1 = engine.snapshot()
+        _, result, m1 = current().snapshot()
         if result is None or m1 is None:
             raise HTTPException(503, "no data yet")
         # Include the still-forming candle so the chart matches the live price.
@@ -76,6 +87,54 @@ def create_app(engine: Engine, source: str = "", ui_dir: str | Path | None = Non
             ],
             "levels": levels,
         }
+
+    def settings_payload() -> dict:
+        engine = current()
+        _, _, m1 = engine.snapshot()
+        with engine.state.lock:
+            running = {
+                "source": current_source(),
+                "symbol": engine.symbol,
+                "version": engine.state.version,
+                "scanned_at": _iso(engine.state.scanned_at),
+                "error": engine.state.error,
+                "bars_loaded": 0 if m1 is None else len(m1),
+                "bars_needed": engine.buffer.max_bars,
+                "first_bar": _iso(m1.index[0]) if m1 is not None and len(m1) else None,
+                "last_bar": _iso(m1.index[-1]) if m1 is not None and len(m1) else None,
+            }
+        store = runtime.store if runtime else engine.store
+        return {
+            "editable": runtime is not None,
+            "settings": runtime.settings.to_dict() if runtime else None,
+            "sources": catalog(),
+            "mt5_password_set": bool(runtime and runtime.mt5_password),
+            "running": running,
+            "storage": {**store.describe(), "series": store.bar_stats()} if store else None,
+        }
+
+    @app.get("/api/settings")
+    def get_settings() -> dict:
+        return settings_payload()
+
+    @app.put("/api/settings")
+    def put_settings(body: dict = Body(...)) -> dict:
+        if runtime is None:
+            raise HTTPException(409, "Settings can only be changed when the server runs with --serve")
+        try:
+            new = DataSettings.from_dict({**DataSettings().to_dict(), **body})
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(422, f"Invalid settings: {exc}") from exc
+        errors = new.validate()
+        ok, reason = source_availability(new.source) if not errors else (True, None)
+        if not ok:
+            errors.append(reason)
+        if errors:
+            raise HTTPException(422, "; ".join(errors))
+        if runtime.store:
+            runtime.store.set_setting(SETTINGS_KEY, new.to_dict())
+        runtime.apply(new)
+        return settings_payload()
 
     ui = Path(ui_dir or os.environ.get("XAU_UI_DIR") or DEFAULT_UI_DIR)
     if (ui / "index.html").is_file():

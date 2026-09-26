@@ -11,8 +11,9 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, parse_detectors
-from .engine import Engine
-from .feeds import build_feed
+from .engine import Runtime
+from .settings import SETTINGS_KEY, SOURCES, resolve
+from .storage import DEFAULT_DB_URL, Store
 from .report import format_scan
 from .scanner import ScanConfig
 from .timeframes import parse_timeframes
@@ -39,17 +40,21 @@ def _env(name: str, cast=str):
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    # Settings resolve as: command line > environment / .env > built-in default.
+    # Scan settings resolve as: command line > environment / .env > built-in default.
+    # Data source settings add the ones saved from the dashboard (see settings.resolve).
     pre = argparse.ArgumentParser(add_help=False)
     pre.add_argument("--env-file", default=".env")
     known, _ = pre.parse_known_args(argv)
     load_env_file(known.env_file)
 
     p = argparse.ArgumentParser(prog="xau-screener", description=__doc__, parents=[pre])
-    p.add_argument("--source", default=_env("XAU_SOURCE") or "mt5",
-                   choices=["mt5", "yfinance", "csv", "synthetic"])
-    p.add_argument("--symbol", default=_env("XAU_SYMBOL"), help="XAUUSD for mt5 (default), GC=F for yfinance")
-    p.add_argument("--csv", help="M1 CSV path for --source csv")
+    p.add_argument("--source", choices=list(SOURCES),
+                   help="data source (default: saved in the dashboard, else XAU_SOURCE, else yfinance)")
+    p.add_argument("--symbol", help="default per source: GC=F for yfinance, XAUUSD for mt5")
+    p.add_argument("--csv", help="M1 CSV path for --source csv (XAU_CSV)")
+    p.add_argument("--db", default=_env("XAU_DB_URL") or DEFAULT_DB_URL,
+                   help="database URL for settings and M1 history (XAU_DB_URL); 'none' disables storage")
+    p.add_argument("--reset-settings", action="store_true", help="forget data source settings saved from the dashboard")
     p.add_argument("--timeframes", default="4H,1H,30M,15M,5M", help="scanned from high to low")
     p.add_argument("--lookback", type=int, default=200, help="closed candles per timeframe to search")
     p.add_argument("--swing-length", type=int, default=5, help="pivot bars on each side of a swing")
@@ -77,10 +82,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--json-out", default=_env("XAU_JSON_OUT"), help="append each scan as a JSON line to this file")
     p.add_argument("--log-file", default=_env("XAU_LOG_FILE"), help="also write logs and scans to this file (rotated)")
     p.add_argument("--digits", type=int, default=2)
-    p.add_argument("--mt5-login", type=int, default=_env("MT5_LOGIN", int))
-    p.add_argument("--mt5-password", default=_env("MT5_PASSWORD"), help="prefer MT5_PASSWORD in .env")
-    p.add_argument("--mt5-server", default=_env("MT5_SERVER"))
-    p.add_argument("--mt5-path", default=_env("MT5_PATH"), help="path to terminal64.exe")
+    p.add_argument("--mt5-login", type=int, help="MT5_LOGIN")
+    p.add_argument("--mt5-password", default=_env("MT5_PASSWORD"), help="prefer MT5_PASSWORD in .env; never stored")
+    p.add_argument("--mt5-server", help="MT5_SERVER")
+    p.add_argument("--mt5-path", help="path to terminal64.exe (MT5_PATH)")
     p.add_argument("-v", "--verbose", action="store_true")
     return p.parse_args(argv)
 
@@ -109,23 +114,31 @@ def run(args: argparse.Namespace) -> None:
         ),
         recent_bars=args.recent_bars,
     )
-    mt5_kwargs = {}
-    if args.source == "mt5":
-        mt5_kwargs = {"login": args.mt5_login, "password": args.mt5_password,
-                      "server": args.mt5_server, "path": args.mt5_path}
-    feed = build_feed(args.source, args.symbol, args.csv, **mt5_kwargs)
-    symbol = args.symbol or ("GC=F" if args.source == "yfinance" else "XAUUSD")
-    engine = Engine(feed, cfg, symbol)
+    store = None if args.db.lower() == "none" else Store(args.db)
+    if store and args.reset_settings:
+        store.delete_setting(SETTINGS_KEY)
+    data = resolve({
+        "source": args.source, "symbol": args.symbol, "csv_path": args.csv,
+        "mt5_login": args.mt5_login, "mt5_server": args.mt5_server, "mt5_path": args.mt5_path,
+    }, store)
+    if errors := data.validate():
+        raise SystemExit("; ".join(errors))
     json_path = Path(args.json_out) if args.json_out else None
 
     def publish(result) -> None:
-        report = format_scan(result, symbol, args.digits)
+        report = format_scan(result, runtime.engine.symbol, args.digits)
         print(report + "\n", flush=True)
         log.debug("scan\n%s", report)
         if json_path:
             record = {"scanned_at": datetime.now(timezone.utc).isoformat(), **result.to_dict()}
             with json_path.open("a") as fh:
                 fh.write(json.dumps(record) + "\n")
+
+    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish)
+    engine = runtime.engine
+    feed = engine.feed
+    if store:
+        log.info("storage: %s", store.describe()["url"])
 
     if args.check or args.once:
         feed.connect()
@@ -138,7 +151,7 @@ def run(args: argparse.Namespace) -> None:
             feed.close()
         return
 
-    log.info("feed=%s symbol=%s timeframes=%s lookback=%d (needs %d M1 bars)", feed.name, symbol,
+    log.info("feed=%s symbol=%s timeframes=%s lookback=%d (needs %d M1 bars)", feed.name, engine.symbol,
              ",".join(tf.name for tf in cfg.timeframes), cfg.lookback, engine.buffer.max_bars)
 
     if args.serve:
@@ -146,13 +159,13 @@ def run(args: argparse.Namespace) -> None:
 
         from .server import create_app
 
-        app = create_app(engine, source=args.source, ui_dir=args.ui_dir)
-        engine.start(args.delay, publish)
+        app = create_app(runtime, ui_dir=args.ui_dir)
+        runtime.start()
         log.info("dashboard on http://%s:%d", args.host, args.port)
         try:
             uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
         finally:
-            engine.stop()
+            runtime.stop()
         return
 
     try:
