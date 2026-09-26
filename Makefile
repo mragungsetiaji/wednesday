@@ -14,7 +14,7 @@ WEB  := web
 UI_BUILD   := $(WEB)/dist/index.html
 UI_SOURCES := $(shell find $(WEB)/src -type f 2>/dev/null) $(WEB)/index.html $(WEB)/vite.config.ts $(WEB)/package.json
 
-.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui scan check test typecheck telegram-chats telegram-test clean
+.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui desktop scan check test typecheck telegram-chats telegram-test clean
 
 help: ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -57,6 +57,9 @@ dev-api:
 dev-ui:
 	cd $(WEB) && XAU_API=http://127.0.0.1:$(PORT) $(NPM) run dev
 
+desktop: $(UI_BUILD) ## Dashboard in its own window, like the Windows app (settings in ~/.wednesday)
+	$(UV) run --extra desktop wednesday-desktop
+
 scan: ## One scan in the console
 	$(UV) run wednesday --once $(ARGS)
 
@@ -76,5 +79,5 @@ telegram-test: ## Send a Telegram test message
 	$(UV) run wednesday --telegram-test
 
 clean: ## Remove build output and caches (keeps data/ and .env)
-	rm -rf $(WEB)/dist .pytest_cache
+	rm -rf $(WEB)/dist .pytest_cache dist build
 	find . -path ./.venv -prune -o -path ./$(WEB)/node_modules -prune -o -name __pycache__ -type d -exec rm -rf {} +

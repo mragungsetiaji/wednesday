@@ -7,6 +7,7 @@ snapshots, so they never touch the data feed (MT5) directly.
 from __future__ import annotations
 
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,7 +29,9 @@ from .quarters import quarters_payload, utc_to_feed
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
 
-DEFAULT_UI_DIR = Path(__file__).resolve().parents[2] / "web" / "dist"
+# The Windows desktop build (PyInstaller) unpacks the dashboard next to the code, under sys._MEIPASS.
+DEFAULT_UI_DIR = (Path(sys._MEIPASS) if getattr(sys, "frozen", False)
+                  else Path(__file__).resolve().parents[2]) / "web" / "dist"
 
 
 def _unix(ts: pd.Timestamp) -> int:

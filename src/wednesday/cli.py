@@ -126,7 +126,15 @@ def telegram_command(args: argparse.Namespace, client: TelegramClient | None, sy
         raise SystemExit(str(exc)) from exc
 
 
-def run(args: argparse.Namespace) -> None:
+def serve_forever(app, host: str, port: int) -> None:
+    """Default dashboard server: uvicorn on this thread until Ctrl+C."""
+    import uvicorn
+
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
+def run(args: argparse.Namespace, serve=serve_forever) -> None:
+    """Run the scan loop. ``serve(app, host, port)`` hosts the dashboard with --serve (the desktop app swaps it)."""
     cfg = ScanConfig(
         timeframes=tuple(parse_timeframes(args.timeframes)),
         lookback=args.lookback,
@@ -198,15 +206,13 @@ def run(args: argparse.Namespace) -> None:
              ",".join(tf.name for tf in cfg.timeframes), cfg.lookback, engine.buffer.max_bars)
 
     if args.serve:
-        import uvicorn
-
         from .server import create_app
 
         app = create_app(runtime, ui_dir=args.ui_dir)
         runtime.start()
         log.info("dashboard on http://%s:%d", args.host, args.port)
         try:
-            uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+            serve(app, args.host, args.port)
         finally:
             runtime.stop()
         return
@@ -217,7 +223,7 @@ def run(args: argparse.Namespace) -> None:
         log.info("stopped")
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None, serve=serve_forever) -> None:
     args = parse_args(argv)
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     root = logging.getLogger()
@@ -234,7 +240,7 @@ def main(argv: list[str] | None = None) -> None:
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(fmt)
         root.addHandler(fh)
-    run(args)
+    run(args, serve)
 
 
 if __name__ == "__main__":

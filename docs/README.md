@@ -10,6 +10,7 @@
 | [Journal](journal.md) | MT5 sync and report import, gain and drawdown rebuilt from prices, what is checked |
 | [Telegram alerts](alerts.md) | Setup and how entries into an order block are detected |
 | [Configuration](configuration.md) | Make targets, CLI options, `.env` |
+| [Windows desktop app](desktop.md) | The installer, where settings live, building a release |
 | [Windows and VPS](deploy-windows.md) | MT5 on Windows, running 24/7 on a VPS |
 | [Plugins](plugins.md) | Extra features from a separate package: entry point, context, hooks, versioning |
 | [Development](development.md) | Project layout, tests, how a scan flows |

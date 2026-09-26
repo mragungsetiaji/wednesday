@@ -124,7 +124,9 @@ make           # list every target
 
 Extra flags go through `ARGS`, e.g. `make serve PORT=9000 ARGS="--lookback 300"`.
 
-**Windows / MT5**: run the `uv` commands directly, see [Windows and VPS](docs/deploy-windows.md).
+**Windows desktop app**: download `WednesdaySetup-<version>.exe` from [Releases](https://github.com/mragungsetiaji/wednesday/releases) and install it; no Python or Node needed. See [Windows desktop app](docs/desktop.md).
+
+**Windows / MT5 from source**: run the `uv` commands directly, see [Windows and VPS](docs/deploy-windows.md).
 
 ```powershell
 uv sync --extra mt5 --extra llm --extra ml

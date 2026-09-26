@@ -1,0 +1,80 @@
+# Windows desktop app: builds WednesdaySetup-<version>.exe and a portable zip.
+# Push a tag like v0.2.0 to publish them on a GitHub release; run it by hand
+# (Actions > Release Windows > Run workflow) for a test build kept as a workflow artifact.
+name: Release Windows
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          } else {
+            $base = (Select-String -Path pyproject.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+            $version = "$base-dev.$env:GITHUB_RUN_NUMBER"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build dashboard
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install Python dependencies
+        run: uv sync --frozen --no-dev --extra desktop --extra mt5 --extra llm --extra ml
+
+      - name: Build app (PyInstaller)
+        run: uv run --frozen --no-dev --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" packaging\wednesday.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Portable zip
+        shell: pwsh
+        run: Compress-Archive -Path dist\Wednesday -DestinationPath "dist\Wednesday-${{ steps.version.outputs.version }}-portable.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wednesday-windows-${{ steps.version.outputs.version }}
+          path: |
+            dist/WednesdaySetup-*.exe
+            dist/Wednesday-*-portable.zip
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/WednesdaySetup-*.exe
+            dist/Wednesday-*-portable.zip
+          generate_release_notes: true

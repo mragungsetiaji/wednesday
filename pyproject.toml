@@ -18,9 +18,13 @@ mt5 = ["MetaTrader5>=5.0.45; sys_platform == 'win32'"]
 postgres = ["psycopg[binary]>=3.1"]
 llm = ["anthropic>=1.0", "openai>=1.0"]
 ml = ["scikit-learn>=1.5", "pyarrow>=16"]
+desktop = ["pywebview>=5"]
 
 [project.scripts]
 wednesday = "wednesday.cli:main"
+
+[project.gui-scripts]
+wednesday-desktop = "wednesday.desktop:run"
 
 [dependency-groups]
 dev = [

@@ -13,6 +13,7 @@ never commit real credentials.
 | `make serve` | Scan loop + dashboard on `http://HOST:PORT` |
 | `make demo` | Dashboard on demo data, no market data needed |
 | `make dev` | Demo API + Vite dev server with hot reload on http://localhost:5173 |
+| `make desktop` | Dashboard in its own window, like the [Windows desktop app](desktop.md) |
 | `make scan` | One scan in the console |
 | `make check` | Test the data feed connection |
 | `make test` / `make typecheck` | Python tests / dashboard type check |
