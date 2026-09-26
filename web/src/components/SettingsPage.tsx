@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { fetchSettings, saveSettings, type DataSettings, type SettingsResponse } from "../api";
 import { fmtFeedTime } from "../format";
+import { AlertsSettings } from "./AlertsSettings";
 
 const EMPTY: DataSettings = { source: "yfinance", symbol: null, csv_path: null, mt5_login: null, mt5_server: null, mt5_path: null };
 
@@ -87,89 +88,92 @@ export function SettingsPage() {
 
   return (
     <main className="settings-page">
-      <form className="settings-form" onSubmit={submit} aria-labelledby="settings-h">
-        <div className="settings-intro">
-          <h2 id="settings-h">Data source</h2>
-          <p>Where the screener gets 1-minute bars. Saving restarts the feed; the chart reloads after the first scan.</p>
-        </div>
-
-        {!data.editable && (
-          <p className="notice">These settings are read-only because the server was started without <code>--serve</code>.</p>
-        )}
-
-        <fieldset className="choices" disabled={!data.editable || saving}>
-          <legend>Source</legend>
-          {data.sources.map((s) => (
-            <label key={s.id} className={`choice${form.source === s.id ? " is-checked" : ""}${s.available ? "" : " is-disabled"}`}>
-              <input type="radio" name="source" value={s.id} checked={form.source === s.id} disabled={!s.available}
-                onChange={() => set({ source: s.id, symbol: null })} />
-              <span className="choice-body">
-                <span className="choice-title">
-                  {s.title}
-                  {s.id === "yfinance" && <span className="badge">Default</span>}
-                </span>
-                <span className="choice-desc">{s.description}</span>
-                {!s.available && <span className="choice-warn">{s.unavailable_reason}</span>}
-              </span>
-            </label>
-          ))}
-        </fieldset>
-
-        <fieldset className="fields" disabled={!data.editable || saving}>
-          <legend>Connection</legend>
-          <Field label="Symbol" hint={`Leave empty for ${source?.default_symbol ?? "the default"}.`}>
-            <input type="text" value={form.symbol ?? ""} placeholder={source?.default_symbol} spellCheck={false}
-              onChange={(e) => set({ symbol: orNull(e.target.value) })} />
-          </Field>
-
-          {form.source === "csv" && (
-            <Field label="CSV file" hint="Columns: time, open, high, low, close, and optionally volume.">
-              <input type="text" value={form.csv_path ?? ""} placeholder="data/xauusd_m1.csv" spellCheck={false} required
-                onChange={(e) => set({ csv_path: orNull(e.target.value) })} />
-            </Field>
-          )}
-
-          {form.source === "mt5" && (
-            <>
-              <p className="field-note">
-                If the terminal is already open and logged in, leave these empty. The password is read from{" "}
-                <code>MT5_PASSWORD</code> in <code>.env</code> and never stored ({data.mt5_password_set ? "currently set" : "currently not set"}).
-              </p>
-              <div className="field-row">
-                <Field label="Login">
-                  <input type="text" inputMode="numeric" value={form.mt5_login ?? ""} placeholder="12345678"
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/\D/g, "");
-                      set({ mt5_login: v ? Number(v) : null });
-                    }} />
-                </Field>
-                <Field label="Server">
-                  <input type="text" value={form.mt5_server ?? ""} placeholder="Broker-Server" spellCheck={false}
-                    onChange={(e) => set({ mt5_server: orNull(e.target.value) })} />
-                </Field>
-              </div>
-              <Field label="Terminal path" hint="Lets the screener start the terminal itself when it isn't running.">
-                <input type="text" value={form.mt5_path ?? ""} placeholder="C:\Program Files\MetaTrader 5\terminal64.exe" spellCheck={false}
-                  onChange={(e) => set({ mt5_path: orNull(e.target.value) })} />
-              </Field>
-            </>
-          )}
-        </fieldset>
-
-        {data.editable && (
-          <div className="form-actions">
-            <button type="submit" className="button primary" disabled={!dirty || saving}>
-              {saving ? "Restarting feed…" : "Save and restart feed"}
-            </button>
-            <button type="button" className="button quiet" disabled={!dirty || saving} onClick={() => set(current)}>
-              Discard changes
-            </button>
-            <span className="form-status" role="status">
-              {saveError ? <span className="text-error">{saveError}</span> : saved && !dirty ? "Saved. The feed restarted." : dirty ? "Unsaved changes" : ""}
-            </span>
+      <div className="settings-main">
+        <form className="settings-form" onSubmit={submit} aria-labelledby="settings-h">
+          <div className="settings-intro">
+            <h2 id="settings-h">Data source</h2>
+            <p>Where the screener gets 1-minute bars. Saving restarts the feed; the chart reloads after the first scan.</p>
           </div>
-        )}
-      </form>
+
+          {!data.editable && (
+            <p className="notice">These settings are read-only because the server was started without <code>--serve</code>.</p>
+          )}
+
+          <fieldset className="choices" disabled={!data.editable || saving}>
+            <legend>Source</legend>
+            {data.sources.map((s) => (
+              <label key={s.id} className={`choice${form.source === s.id ? " is-checked" : ""}${s.available ? "" : " is-disabled"}`}>
+                <input type="radio" name="source" value={s.id} checked={form.source === s.id} disabled={!s.available}
+                  onChange={() => set({ source: s.id, symbol: null })} />
+                <span className="choice-body">
+                  <span className="choice-title">
+                    {s.title}
+                    {s.id === "yfinance" && <span className="badge">Default</span>}
+                  </span>
+                  <span className="choice-desc">{s.description}</span>
+                  {!s.available && <span className="choice-warn">{s.unavailable_reason}</span>}
+                </span>
+              </label>
+            ))}
+          </fieldset>
+
+          <fieldset className="fields" disabled={!data.editable || saving}>
+            <legend>Connection</legend>
+            <Field label="Symbol" hint={`Leave empty for ${source?.default_symbol ?? "the default"}.`}>
+              <input type="text" value={form.symbol ?? ""} placeholder={source?.default_symbol} spellCheck={false}
+                onChange={(e) => set({ symbol: orNull(e.target.value) })} />
+            </Field>
+
+            {form.source === "csv" && (
+              <Field label="CSV file" hint="Columns: time, open, high, low, close, and optionally volume.">
+                <input type="text" value={form.csv_path ?? ""} placeholder="data/xauusd_m1.csv" spellCheck={false} required
+                  onChange={(e) => set({ csv_path: orNull(e.target.value) })} />
+              </Field>
+            )}
+
+            {form.source === "mt5" && (
+              <>
+                <p className="field-note">
+                  If the terminal is already open and logged in, leave these empty. The password is read from{" "}
+                  <code>MT5_PASSWORD</code> in <code>.env</code> and never stored ({data.mt5_password_set ? "currently set" : "currently not set"}).
+                </p>
+                <div className="field-row">
+                  <Field label="Login">
+                    <input type="text" inputMode="numeric" value={form.mt5_login ?? ""} placeholder="12345678"
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/\D/g, "");
+                        set({ mt5_login: v ? Number(v) : null });
+                      }} />
+                  </Field>
+                  <Field label="Server">
+                    <input type="text" value={form.mt5_server ?? ""} placeholder="Broker-Server" spellCheck={false}
+                      onChange={(e) => set({ mt5_server: orNull(e.target.value) })} />
+                  </Field>
+                </div>
+                <Field label="Terminal path" hint="Lets the screener start the terminal itself when it isn't running.">
+                  <input type="text" value={form.mt5_path ?? ""} placeholder="C:\Program Files\MetaTrader 5\terminal64.exe" spellCheck={false}
+                    onChange={(e) => set({ mt5_path: orNull(e.target.value) })} />
+                </Field>
+              </>
+            )}
+          </fieldset>
+
+          {data.editable && (
+            <div className="form-actions">
+              <button type="submit" className="button primary" disabled={!dirty || saving}>
+                {saving ? "Restarting feed…" : "Save and restart feed"}
+              </button>
+              <button type="button" className="button quiet" disabled={!dirty || saving} onClick={() => set(current)}>
+                Discard changes
+              </button>
+              <span className="form-status" role="status">
+                {saveError ? <span className="text-error">{saveError}</span> : saved && !dirty ? "Saved. The feed restarted." : dirty ? "Unsaved changes" : ""}
+              </span>
+            </div>
+          )}
+        </form>
+        <AlertsSettings />
+      </div>
 
       <aside className="settings-side">
         <section aria-labelledby="running-h">

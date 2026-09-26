@@ -56,6 +56,23 @@ bars_table = Table(
 )
 
 
+alerts_table = Table(
+    "alert_log",
+    metadata,
+    Column("key", String(255), primary_key=True),  # one row per order block per source/symbol
+    Column("source", String(32), nullable=False),
+    Column("symbol", String(64), nullable=False),
+    Column("timeframe", String(8), nullable=False),
+    Column("kind", String(16), nullable=False),
+    Column("priority", String(16), nullable=False),
+    Column("entry", Float, nullable=False),
+    Column("price", Float, nullable=False),
+    Column("sent_at", String(40), nullable=False),  # ISO UTC
+    Column("status", String(16), nullable=False),  # "sent" or "failed"
+    Column("error", Text, nullable=True),
+)
+
+
 class Store:
     def __init__(self, url: str = DEFAULT_DB_URL):
         self.url = make_url(url)
@@ -134,6 +151,22 @@ class Store:
             return pd.Timestamp(ts, unit="s").isoformat() if ts is not None else None
 
         return [{"source": s, "symbol": sym, "bars": n, "first": iso(a), "last": iso(b)} for s, sym, n, a, b in rows]
+
+    # ---- alerts ---------------------------------------------------------
+    def alert_sent(self, key: str) -> bool:
+        t = alerts_table
+        with self.engine.connect() as conn:
+            row = conn.execute(select(t.c.status).where(t.c.key == key)).first()
+        return bool(row and row[0] == "sent")
+
+    def log_alert(self, row: dict) -> None:
+        self._upsert(alerts_table, [row], ["key"])
+
+    def recent_alerts(self, limit: int = 20) -> list[dict]:
+        t = alerts_table
+        q = select(t).order_by(t.c.sent_at.desc()).limit(limit)
+        with self.engine.connect() as conn:
+            return [dict(r._mapping) for r in conn.execute(q)]
 
     # ---- helpers --------------------------------------------------------
     def _upsert(self, table: Table, rows: list[dict], keys: list[str]) -> None:

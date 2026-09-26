@@ -181,3 +181,55 @@ export async function saveSettings(settings: DataSettings): Promise<SettingsResp
   }
   return res.json() as Promise<SettingsResponse>;
 }
+
+export interface AlertSettings {
+  enabled: boolean;
+  timeframes: string[];
+  priorities: string[];
+}
+
+export interface AlertRow {
+  key: string;
+  source: string;
+  symbol: string;
+  timeframe: string;
+  kind: string;
+  priority: string;
+  entry: number;
+  price: number;
+  sent_at: string;
+  status: "sent" | "failed";
+  error: string | null;
+}
+
+export interface AlertsResponse {
+  editable: boolean;
+  token_set: boolean;
+  chat_id_set: boolean;
+  configured: boolean;
+  settings: AlertSettings | null;
+  last_error: string | null;
+  recent: AlertRow[];
+}
+
+async function send<T>(method: string, url: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<T>;
+}
+
+export const fetchAlerts = () => getJson<AlertsResponse>("/api/alerts");
+export const saveAlerts = (s: AlertSettings) => send<AlertsResponse>("PUT", "/api/alerts", s);
+export const testAlert = () => send<{ ok: boolean }>("POST", "/api/alerts/test");

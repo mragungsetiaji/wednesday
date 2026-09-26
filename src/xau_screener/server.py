@@ -14,6 +14,7 @@ from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from .alerts import ALERTS_KEY, AlertSettings, TelegramError
 from .engine import Engine, Runtime
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
@@ -135,6 +136,46 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             runtime.store.set_setting(SETTINGS_KEY, new.to_dict())
         runtime.apply(new)
         return settings_payload()
+
+    def alerts_payload() -> dict:
+        alerts = runtime.alerts if runtime else None
+        client = alerts.client if alerts else None
+        store = runtime.store if runtime else None
+        return {
+            "editable": alerts is not None,
+            "token_set": bool(client and client.token),
+            "chat_id_set": bool(client and client.chat_id),
+            "configured": bool(alerts and alerts.configured),
+            "settings": alerts.settings.to_dict() if alerts else None,
+            "last_error": alerts.last_error if alerts else None,
+            "recent": store.recent_alerts(20) if store else [],
+        }
+
+    @app.get("/api/alerts")
+    def get_alerts() -> dict:
+        return alerts_payload()
+
+    @app.put("/api/alerts")
+    def put_alerts(body: dict = Body(...)) -> dict:
+        if not runtime or runtime.alerts is None:
+            raise HTTPException(409, "Alerts can only be changed when the server runs with --serve")
+        new = AlertSettings.from_dict(body)
+        if errors := new.validate():
+            raise HTTPException(422, "; ".join(errors))
+        if runtime.store:
+            runtime.store.set_setting(ALERTS_KEY, new.to_dict())
+        runtime.alerts.settings = new
+        return alerts_payload()
+
+    @app.post("/api/alerts/test")
+    def test_alert() -> dict:
+        if not runtime or runtime.alerts is None:
+            raise HTTPException(409, "Alerts are only available when the server runs with --serve")
+        try:
+            runtime.alerts.send_test(current().symbol)
+        except TelegramError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {"ok": True}
 
     ui = Path(ui_dir or os.environ.get("XAU_UI_DIR") or DEFAULT_UI_DIR)
     if (ui / "index.html").is_file():

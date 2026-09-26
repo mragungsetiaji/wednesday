@@ -26,6 +26,18 @@ nearest IDM: above 1H IDM ▼ 2485.15 (+11.35) | below 15M IDM ▲ 2439.56 (-34.
 many candles have tapped an order block since it formed, and *NOTES* lists levels
 price is inside plus recent sweeps/mitigations. See [Detectors](#detectors).
 
+## Quick start (macOS / Linux)
+
+```bash
+make setup     # checks uv + Node, creates .env, installs everything, builds the dashboard
+make serve     # dashboard on http://127.0.0.1:8000 (Yahoo Finance data by default)
+make demo      # same on random demo data, if you just want to look around
+make           # list every target: dev (hot reload), scan, check, test, telegram-chats, ...
+```
+
+Extra CLI flags go through `ARGS`, e.g. `make serve PORT=9000 ARGS="--lookback 300"`.
+On Windows, use the `uv` commands below directly (see [docs/DEPLOY_WINDOWS.md](docs/DEPLOY_WINDOWS.md)).
+
 ## Setup (uv)
 
 ```bash
@@ -137,6 +149,24 @@ Useful options:
 The 4H timeframe with `--lookback 200` needs about 48k M1 bars, which are loaded
 once at startup; after that only the last 30 bars are fetched each minute.
 
+## Telegram alerts
+
+When price trades into an active order block, the screener sends a Telegram
+message with the timeframe, extreme/mid, the limit entry, stop and risk, and
+that timeframe's structure. The check uses the high/low of the new M1 bars, so
+a wick into the zone counts even if the minute closes outside it. Each order
+block alerts once (the log is kept in the database, so restarts don't repeat
+alerts), and bars from before the order block was confirmed never trigger it.
+
+1. Create a bot with `@BotFather` and put the token in `.env` as `TELEGRAM_BOT_TOKEN`.
+2. Send the bot any message, run `make telegram-chats` (or `uv run xau-screener --telegram-chats`)
+   and put the printed id in `.env` as `TELEGRAM_CHAT_ID`.
+3. Restart, then `make telegram-test` or **Settings > Send test message**.
+
+In **Settings** you choose which timeframes and which order blocks (extreme,
+mid) alert, pause alerts, and see the recent alert log. The token and chat id
+stay in `.env`; they are never written to the database.
+
 ## Detectors
 
 All detectors run on the same closed candles of each timeframe and share one
@@ -220,6 +250,7 @@ src/xau_screener/
   engine.py       scan loop shared by the console and the web server
   server.py       FastAPI: /api/scan, /api/candles, serves the built dashboard
   settings.py     data source settings, source catalog, precedence rules
+  alerts.py       Telegram alerts when price enters an order block
   storage.py      SQLAlchemy store: saved settings + M1 history (SQLite / PostgreSQL)
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)

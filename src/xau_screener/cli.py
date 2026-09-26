@@ -11,6 +11,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, parse_detectors
+from .alerts import ALERTS_KEY, AlertManager, AlertSettings, TelegramClient, TelegramError
 from .engine import Runtime
 from .settings import SETTINGS_KEY, SOURCES, resolve
 from .storage import DEFAULT_DB_URL, Store
@@ -86,6 +87,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--mt5-password", default=_env("MT5_PASSWORD"), help="prefer MT5_PASSWORD in .env; never stored")
     p.add_argument("--mt5-server", help="MT5_SERVER")
     p.add_argument("--mt5-path", help="path to terminal64.exe (MT5_PATH)")
+    p.add_argument("--telegram-chats", action="store_true",
+                   help="list chats that messaged your bot (to find TELEGRAM_CHAT_ID) and exit")
+    p.add_argument("--telegram-test", action="store_true", help="send a Telegram test message and exit")
     p.add_argument("-v", "--verbose", action="store_true")
     return p.parse_args(argv)
 
@@ -97,6 +101,23 @@ def check(feed, buffer, cfg: ScanConfig) -> None:
     print(f"{'M1 bars':>10}: {len(m1)} ({m1.index[0]} -> {m1.index[-1]}), need {buffer.max_bars}")
     print(f"{'price':>10}: {feed.last_price() or m1['close'].iloc[-1]}")
     print("OK: feed is working")
+
+
+def telegram_command(args: argparse.Namespace, client: TelegramClient | None, symbol: str) -> None:
+    if client is None:
+        raise SystemExit("Set TELEGRAM_BOT_TOKEN in .env first (create a bot with @BotFather).")
+    try:
+        if args.telegram_chats:
+            chats = client.chats()
+            if not chats:
+                print("No chats yet. Send any message to your bot in Telegram, then run this again.")
+            for c in chats:
+                print(f"TELEGRAM_CHAT_ID={c['id']}    # {c['type']}: {c['name']}")
+        else:
+            AlertManager(None, client).send_test(symbol)
+            print("Test message sent.")
+    except TelegramError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 def run(args: argparse.Namespace) -> None:
@@ -134,7 +155,17 @@ def run(args: argparse.Namespace) -> None:
             with json_path.open("a") as fh:
                 fh.write(json.dumps(record) + "\n")
 
-    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish)
+    token, chat_id = _env("TELEGRAM_BOT_TOKEN"), _env("TELEGRAM_CHAT_ID")
+    client = TelegramClient(token, chat_id) if token else None
+    if args.telegram_chats or args.telegram_test:
+        telegram_command(args, client, data.resolved_symbol)
+        return
+    alert_settings = AlertSettings.from_dict(store.get_setting(ALERTS_KEY) if store else None)
+    alerts = AlertManager(store, client, alert_settings)
+    if alerts.configured:
+        log.info("telegram alerts %s for %s, %s OBs", "on" if alert_settings.enabled else "paused",
+                 ",".join(alert_settings.timeframes), "/".join(alert_settings.priorities))
+    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts)
     engine = runtime.engine
     feed = engine.feed
     if store:
@@ -169,7 +200,7 @@ def run(args: argparse.Namespace) -> None:
         return
 
     try:
-        engine.run_forever(args.delay, publish)
+        runtime.run_forever()
     except KeyboardInterrupt:
         log.info("stopped")
 

@@ -117,12 +117,13 @@ class Runtime:
     """Owns the running engine so the dashboard can switch data sources live."""
 
     def __init__(self, cfg: ScanConfig, settings: DataSettings, store: Store | None = None,
-                 mt5_password: str | None = None, delay: float = 2.0, on_result=None):
+                 mt5_password: str | None = None, delay: float = 2.0, on_result=None, alerts=None):
         self.cfg = cfg
         self.store = store
         self.mt5_password = mt5_password
         self.delay = delay
         self.on_result = on_result
+        self.alerts = alerts  # AlertManager or None
         self._lock = threading.Lock()
         self.settings = settings
         self.engine = self._build(settings)
@@ -131,8 +132,22 @@ class Runtime:
         feed = build_feed(settings, self.mt5_password)
         return Engine(feed, self.cfg, settings.resolved_symbol, self.store)
 
+    def _after_scan(self, result) -> None:
+        engine = self.engine
+        if self.alerts is not None:
+            try:
+                self.alerts.check(self.settings.source, engine.symbol, result, engine.state.m1)
+            except Exception:  # an alert problem must never stop scanning
+                log.exception("alert check failed")
+        if self.on_result:
+            self.on_result(result)
+
     def start(self) -> None:
-        self.engine.start(self.delay, self.on_result)
+        self.engine.start(self.delay, self._after_scan)
+
+    def run_forever(self) -> None:
+        """Console mode: scan in the calling thread."""
+        self.engine.run_forever(self.delay, self._after_scan)
 
     def stop(self) -> None:
         self.engine.stop()
@@ -144,4 +159,4 @@ class Runtime:
             self.engine.stop(timeout=30)
             self.settings = settings
             self.engine = new
-            new.start(self.delay, self.on_result)
+            new.start(self.delay, self._after_scan)
