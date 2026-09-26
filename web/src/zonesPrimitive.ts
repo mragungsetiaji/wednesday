@@ -18,8 +18,11 @@ import { withAlpha, type ChartPalette } from "./theme";
  * Something drawn on the chart. Marks:
  * - box:     order block body (bull/bear), optional dashed capped stop
  * - line:    liquidity (solid; 2px for equal pools) or IDM (dotted), to the right edge
- * - setup:   a limit setup: solid entry line, dashed stop, tinted risk band, pill with its id
+ * - setup:   a limit setup from its order block candle: solid entry line, dashed stop, tinted risk band, pill with its id
  * - segment: a break of structure, from the broken swing to the break candle
+ *
+ * Every mark starts at the bar holding the level's candle; a level from a lower
+ * timeframe starts at the bar that contains its candle.
  *
  * Pinned zones (the ones listed next to the chart) always carry a pill; when
  * they sit outside the visible price range the pill docks to the top/bottom edge.
@@ -51,6 +54,12 @@ function indexAtOrAfter(times: number[], t: number): number {
     else hi = mid;
   }
   return lo;
+}
+
+/** Index of the bar that contains time t (a lower-timeframe level falls inside a bigger bar). */
+function barIndexOf(times: number[], t: number): number {
+  const i = indexAtOrAfter(times, t);
+  return i < times.length && times[i] === t ? i : Math.max(0, i - 1);
 }
 
 function colorOf(role: Zone["role"], p: ChartPalette): string {
@@ -88,7 +97,7 @@ class ZonesRenderer implements IPrimitivePaneRenderer {
       const H = bitmapSize.height;
       const px = (v: number) => Math.round(v * hr);
       const py = (v: number) => Math.round(v * vr);
-      const xOf = (t: number) => Math.max(0, px(timeScale.logicalToCoordinate(indexAtOrAfter(times, t) as Logical) ?? 0));
+      const xOf = (t: number) => Math.max(0, px(timeScale.logicalToCoordinate(barIndexOf(times, t) as Logical) ?? 0));
       const yOf = (price: number) => {
         const y = series.priceToCoordinate(price);
         return y === null ? null : py(y);
@@ -120,8 +129,9 @@ class ZonesRenderer implements IPrimitivePaneRenderer {
       for (const z of order) {
         const color = colorOf(z.role, palette);
         const k = dim(z);
-        const x = z.mark === "setup" ? 0 : xOf(z.startTime);
-        if (x >= W) continue;
+        // A setup keeps its pill even when its order block candle is scrolled off to the right.
+        const x = Math.min(xOf(z.startTime), W);
+        if (x >= W && z.mark !== "setup") continue;
 
         if (z.mark === "segment") {
           const y = yOf(z.top);
@@ -141,12 +151,12 @@ class ZonesRenderer implements IPrimitivePaneRenderer {
           if (onScreen) {
             if (ys !== null) {
               ctx.fillStyle = withAlpha(color, (z.id === highlight ? 0.22 : 0.1) * k);
-              if (shapes) ctx.fillRect(0, Math.min(ye, ys), W, Math.max(1, Math.abs(ys - ye)));
+              if (shapes) ctx.fillRect(x, Math.min(ye, ys), W - x, Math.max(1, Math.abs(ys - ye)));
               ctx.strokeStyle = withAlpha(color, 0.8 * k);
-              hline(0, W, ys, lw, [3 * hr, 3 * hr]);
+              hline(x, W, ys, lw, [3 * hr, 3 * hr]);
             }
             ctx.strokeStyle = withAlpha(color, k);
-            hline(0, W, ye, (z.id === highlight ? 2 : 1.5) * lw, []);
+            hline(x, W, ye, (z.id === highlight ? 2 : 1.5) * lw, []);
           }
           pills.push({ z, y: ye, off: ye < 0 ? -1 : ye > H ? 1 : 0 });
           continue;
