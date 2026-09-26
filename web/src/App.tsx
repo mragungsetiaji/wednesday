@@ -4,6 +4,7 @@ import { fetchQuarters, fetchScan, type QuartersResponse, type ScanResponse } fr
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
 import { ChartFocus } from "./components/ChartFocus";
 import { EventsPanel } from "./components/EventsPanel";
+import { NewsAlert } from "./components/NewsAlert";
 import { PriceChart } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
@@ -309,6 +310,9 @@ export default function App() {
           )}
         </>
       )}
+
+      {/* Full screen renders its own copy: the browser only shows the full screen element. */}
+      {!(focus && scan && data) && <NewsAlert />}
 
       {focus && scan && data && (
         <ChartFocus

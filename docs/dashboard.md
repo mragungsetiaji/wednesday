@@ -26,6 +26,26 @@ The timeframe tabs carry each timeframe's structure direction (↑ / ↓).
 **Mid OBs**, **Higher timeframes**, **Swings** and **Quarters** can be switched off above the chart, and
 each detector can be hidden from the top bar.
 
+## Risk-time news card
+
+An hour before high-impact news (USD by default), a card appears in the bottom
+right with the release, a countdown, the time in your zone and in New York, and
+the forecast and previous figure. Releases at the same minute (CPI m/m, core,
+y/y) share one card.
+
+- **Last 30 minutes**: a light runs around the card's edge and the countdown turns
+  amber. With reduced motion on, the edge turns solid amber instead.
+- **Released**: the card stays for 10 minutes with how long ago it came out.
+- **Close (×)**: during the first half hour it only snoozes until the 30-minute
+  mark; after that it hides for that release. It also shows over the full
+  screen charts.
+
+![Risk-time card, 18 minutes before CPI](images/news-card.png)
+
+The calendar comes from ForexFactory's free weekly feed, fetched at most once an
+hour and kept in the database. **Settings > News calendar** picks the currencies
+and impact levels and lists what's coming this week.
+
 ## Full screen and multiple charts
 
 The button at the bottom right of the chart opens the charts full screen,

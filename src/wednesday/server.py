@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError
 from .bias import TradeBias
 from .brief import BRIEF_KEY, BriefError, BriefSettings
+from .news import CALENDAR_KEY, CalendarSettings
 from .engine import Engine, Runtime
 from .quarters import quarters_payload
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
@@ -185,6 +186,25 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         except BriefError as exc:
             raise HTTPException(422, str(exc)) from exc
         return {"editable": True, **brief.status()}
+
+    @app.get("/api/calendar")
+    def get_calendar() -> dict:
+        """Upcoming news matching the calendar settings (fetched in the background, at most hourly)."""
+        if not runtime or runtime.calendar is None:
+            return {"editable": False, "events": []}
+        return {"editable": True, **runtime.calendar.snapshot()}
+
+    @app.put("/api/calendar")
+    def put_calendar(body: dict = Body(...)) -> dict:
+        if not runtime or runtime.calendar is None:
+            raise HTTPException(409, "The calendar is only available when the server runs with --serve")
+        new = CalendarSettings.from_dict(body)
+        if errors := new.validate():
+            raise HTTPException(422, "; ".join(errors))
+        if runtime.store:
+            runtime.store.set_setting(CALENDAR_KEY, new.to_dict())
+        runtime.calendar.settings = new
+        return {"editable": True, **runtime.calendar.snapshot()}
 
     def settings_payload() -> dict:
         engine = current()

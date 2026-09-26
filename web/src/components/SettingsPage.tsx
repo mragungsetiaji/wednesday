@@ -4,6 +4,7 @@ import { fetchSettings, saveSettings, type DataSettings, type SettingsResponse }
 import { fmtFeedTime } from "../format";
 import { AlertsSettings } from "./AlertsSettings";
 import { BriefSettingsForm } from "./BriefSettingsForm";
+import { CalendarSettingsForm } from "./CalendarSettingsForm";
 
 const EMPTY: DataSettings = { source: "yfinance", symbol: null, csv_path: null, mt5_login: null, mt5_server: null, mt5_path: null, clock: null };
 
@@ -187,6 +188,7 @@ export function SettingsPage() {
           )}
         </form>
         <AlertsSettings />
+        <CalendarSettingsForm />
         <BriefSettingsForm />
       </div>
 

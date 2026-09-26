@@ -49,6 +49,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **Quarterly theory pane** under the chart: every weekday, session (Tokyo, London, NY AM, NY PM) and 90-minute quarter as a green or red block, plus how often each one closed green.
 - **Your bias steers the list**: set bullish, bearish or neutral by hand; setups get RISK ON / RISK OFF labels, sells at a lower high (or buys at a higher low) come first, and neutral marks everything no trade.
 - **News brief**: Claude or OpenAI reads the news pages you pick and suggests a bias you can apply with one click.
+- **Risk-time warning**: a card in the corner an hour before high-impact US news, glowing in the last 30 minutes.
 - **Pings you on Telegram** when price trades into an order block.
 - **Free data by default** (Yahoo Finance), MetaTrader 5 when you're ready; history stored in SQLite or PostgreSQL.
 

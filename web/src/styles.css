@@ -633,6 +633,129 @@ p {
   background: var(--bull);
 }
 
+/* ---------- Risk-time news card (bottom right) ---------- */
+/* The card is a 1.5px frame around .news-inner; in the last 30 minutes a
+   conic gradient spins behind the frame, so a light runs around the edge. */
+.news-card {
+  position: fixed;
+  right: var(--s4);
+  bottom: var(--s4);
+  z-index: 60;
+  width: min(340px, calc(100vw - 2 * var(--s4)));
+  padding: 2px;
+  overflow: hidden;
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--line-strong);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+  animation: news-in 260ms var(--ease-out);
+}
+@keyframes news-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+.news-card::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 150%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  background: conic-gradient(from 0deg, transparent 0 55%, color-mix(in srgb, var(--warn) 35%, transparent) 75%, var(--warn) 92%, #fff4d6 96%, transparent 100%);
+  opacity: 0;
+}
+.news-card.is-imminent {
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35), 0 0 24px color-mix(in srgb, var(--warn) 22%, transparent);
+}
+.news-card.is-imminent::before {
+  opacity: 1;
+  animation: news-spin 2.4s linear infinite;
+}
+.news-card.is-released {
+  background: var(--warn);
+}
+@keyframes news-spin {
+  to { transform: translate(-50%, -50%) rotate(1turn); }
+}
+.news-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--s3);
+  border-radius: calc(var(--radius) + 0.5px);
+  background: var(--surface);
+}
+.news-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+.news-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-2);
+}
+.news-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.news-card.is-imminent .news-dot {
+  animation: news-pulse 1.2s ease-in-out infinite;
+}
+@keyframes news-pulse {
+  50% { opacity: 0.35; }
+}
+.news-close {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px -4px -4px 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  transition: background-color 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
+}
+.news-close:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.news-close:active {
+  transform: scale(0.92);
+}
+.news-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text);
+}
+.news-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+.news-count {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.news-card.is-imminent .news-count,
+.news-card.is-released .news-count {
+  color: var(--warn);
+}
+.news-time,
+.news-figures {
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
 /* ---------- Price ladder ---------- */
 .rail {
   display: flex;
@@ -1160,6 +1283,13 @@ p {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* No spinning light: the frame turns solid amber in the last 30 minutes instead. */
+  .news-card.is-imminent {
+    background: var(--warn);
+  }
+  .news-card.is-imminent::before {
+    opacity: 0;
+  }
   *,
   *::before,
   *::after {

@@ -348,3 +348,32 @@ export interface BriefResponse {
 export const fetchBrief = () => getJson<BriefResponse>("/api/brief");
 export const saveBrief = (s: BriefSettings) => send<BriefResponse>("PUT", "/api/brief", s);
 export const generateBrief = () => send<BriefResponse>("POST", "/api/brief/generate");
+
+/** An economic calendar event (times in UTC). */
+export interface CalendarEvent {
+  title: string;
+  currency: string;
+  impact: "High" | "Medium" | "Low" | string;
+  time: string;
+  forecast: string | null;
+  previous: string | null;
+}
+
+export interface CalendarSettings {
+  enabled: boolean;
+  url: string;
+  currencies: string[];
+  impacts: string[];
+}
+
+export interface CalendarResponse {
+  editable: boolean;
+  settings?: CalendarSettings;
+  events: CalendarEvent[];
+  fetched_at?: string | null;
+  error?: string | null;
+  loading?: boolean;
+}
+
+export const fetchCalendar = () => getJson<CalendarResponse>("/api/calendar");
+export const saveCalendar = (s: CalendarSettings) => send<CalendarResponse>("PUT", "/api/calendar", s);

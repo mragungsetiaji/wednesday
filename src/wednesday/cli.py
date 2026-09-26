@@ -13,6 +13,7 @@ from pathlib import Path
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, parse_detectors
 from .alerts import ALERTS_KEY, AlertManager, AlertSettings, TelegramClient, TelegramError
 from .brief import BRIEF_KEY, BriefRunner, BriefSettings
+from .news import CALENDAR_KEY, Calendar, CalendarSettings
 from .engine import Runtime
 from .settings import SETTINGS_KEY, SOURCES, resolve
 from .storage import DEFAULT_DB_URL, Store
@@ -171,7 +172,8 @@ def run(args: argparse.Namespace) -> None:
         log.info("telegram alerts %s for %s, %s OBs", "on" if alert_settings.enabled else "paused",
                  ",".join(alert_settings.timeframes), "/".join(alert_settings.priorities))
     brief = BriefRunner(store, BriefSettings.from_dict(store.get_setting(BRIEF_KEY) if store else None))
-    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts, brief)
+    calendar = Calendar(store, CalendarSettings.from_dict(store.get_setting(CALENDAR_KEY) if store else None))
+    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts, brief, calendar)
     engine = runtime.engine
     feed = engine.feed
     if store:

@@ -10,6 +10,7 @@ import type { RailItem } from "../rail";
 import type { ChartPalette } from "../theme";
 import { BiasPill } from "./BiasPill";
 import { ChartPane } from "./ChartPane";
+import { NewsAlert } from "./NewsAlert";
 
 type Layout = 1 | 2 | 4;
 const LAYOUTS: { panes: Layout; title: string }[] = [
@@ -203,6 +204,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
             onDone={(y) => saveSplit({ ...split, y })} />
         )}
       </div>
+      <NewsAlert />
     </div>
   );
 }
