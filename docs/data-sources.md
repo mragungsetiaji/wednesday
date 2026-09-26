@@ -22,8 +22,8 @@ uv sync --extra ml           # scikit-learn + pyarrow for the Lab (training, mod
 
 ## Picking a source
 
-Open the dashboard and go to **Settings**. Saving restarts the feed live, no
-server restart needed.
+Open the dashboard and go to **Settings > Data source** (the menu on the left picks
+a section). Saving restarts the feed live, no server restart needed.
 
 ![Settings page](images/settings.png)
 
@@ -47,7 +47,7 @@ uv run wednesday --source synthetic --once    # demo data, one scan
 
 Bar times are kept in the feed's own clock (candles line up with your MT5
 chart). The quarterly view converts them to New York time, so it needs to know
-that clock. Set it in **Settings > Feed clock**, `XAU_CLOCK` or `--clock`:
+that clock. Set it in **Settings > Data source > Feed clock**, `XAU_CLOCK` or `--clock`:
 
 | Value | Meaning |
 | --- | --- |

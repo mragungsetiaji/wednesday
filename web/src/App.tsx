@@ -39,7 +39,7 @@ function useNow(ms: number) {
 type View = "chart" | "journal" | "lab" | "settings";
 const viewFromHash = (): View => {
   const h = window.location.hash;
-  if (h === "#settings") return "settings";
+  if (h === "#settings" || h.startsWith("#settings/")) return "settings";
   if (h === "#journal") return "journal";
   return h.startsWith("#lab") ? "lab" : "chart";
 };
@@ -110,7 +110,10 @@ export default function App() {
   const refreshScan = useCallback(() => {
     fetchScan().then(setData).catch((e) => setFetchError(e instanceof Error ? e.message : String(e)));
   }, []);
-  const openSettings = useCallback(() => setView("settings"), [setView]);
+  // The bias panel only links to Settings to set up the brief: open that section.
+  const openSettings = useCallback(() => {
+    window.location.hash = "settings/brief";
+  }, []);
   const openLab = useCallback(() => {
     window.location.hash = "lab/models";
   }, []);

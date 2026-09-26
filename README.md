@@ -58,7 +58,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 <table>
   <tr>
     <td width="50%"><img src="docs/images/ladder-highlight.png" alt="Hovering a setup in the ladder highlights it on the chart"></td>
-    <td width="50%"><img src="docs/images/settings.png" alt="Settings: data source, storage and Telegram alerts"></td>
+    <td width="50%"><img src="docs/images/settings.png" alt="Settings: a menu of sections on the left, the data source with what is running and the storage"></td>
   </tr>
   <tr>
     <td align="center"><sub>Hover a setup to find it on the chart</sub></td>

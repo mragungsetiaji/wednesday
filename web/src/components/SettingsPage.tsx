@@ -23,8 +23,64 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-/** Data source settings. Saving restarts the feed; the page keeps polling so the result shows up here. */
+type Section = "data" | "alerts" | "calendar" | "brief" | "plan" | "plugins";
+const SECTIONS: { id: Section; title: string }[] = [
+  { id: "data", title: "Data source" },
+  { id: "alerts", title: "Telegram alerts" },
+  { id: "calendar", title: "News calendar" },
+  { id: "brief", title: "News brief" },
+  { id: "plan", title: "Plan" },
+  { id: "plugins", title: "Plugins" },
+];
+const sectionFromHash = (): Section => {
+  const s = window.location.hash.split("/")[1];
+  return SECTIONS.find((x) => x.id === s)?.id ?? "data";
+};
+const sectionHash = (s: Section) => (s === "data" ? "#settings" : `#settings/${s}`);
+
+/**
+ * Settings, one section at a time with a menu on the left. Every section stays mounted
+ * (only hidden), so unsaved edits survive switching between them.
+ */
 export function SettingsPage() {
+  const [section, setSection] = useState<Section>(sectionFromHash);
+
+  useEffect(() => {
+    const onHash = () => setSection(sectionFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const go = (s: Section) => {
+    window.location.hash = sectionHash(s);
+    setSection(s);
+    window.scrollTo(0, 0);
+  };
+
+  return (
+    <main className="settings-page">
+      <nav className="settings-nav" aria-label="Settings">
+        {SECTIONS.map((s) => (
+          <a key={s.id} href={sectionHash(s.id)} className="settings-nav-item" aria-current={section === s.id ? "page" : undefined}
+            onClick={(e) => { e.preventDefault(); go(s.id); }}>
+            {s.title}
+          </a>
+        ))}
+      </nav>
+      <div className="settings-content">
+        <div hidden={section !== "data"}><DataSourceSettings /></div>
+        <div hidden={section !== "alerts"}><AlertsSettings /></div>
+        <div hidden={section !== "calendar"}><CalendarSettingsForm /></div>
+        <div hidden={section !== "brief"}><BriefSettingsForm /></div>
+        <div hidden={section !== "plan"}><AccountSettings /></div>
+        <div hidden={section !== "plugins"}><PluginsSection /></div>
+      </div>
+    </main>
+  );
+}
+
+/** Data source settings. Saving restarts the feed; the page keeps polling so the result shows up here. */
+function DataSourceSettings() {
   const [data, setData] = useState<SettingsResponse | null>(null);
   const [form, setForm] = useState<DataSettings>(EMPTY);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -55,9 +111,7 @@ export function SettingsPage() {
 
   if (!data) {
     return (
-      <main className="settings-page">
-        <p className="empty">{loadError ? `Can't load settings: ${loadError}` : "Loading settings…"}</p>
-      </main>
+      <p className="empty">{loadError ? `Can't load settings: ${loadError}` : "Loading settings…"}</p>
     );
   }
 
@@ -91,7 +145,7 @@ export function SettingsPage() {
   const short = running.bars_loaded < running.bars_needed;
 
   return (
-    <main className="settings-page">
+    <div className="settings-data">
       <div className="settings-main">
         <form className="settings-form" onSubmit={submit} aria-labelledby="settings-h">
           <div className="settings-intro">
@@ -189,10 +243,6 @@ export function SettingsPage() {
             </div>
           )}
         </form>
-        <AlertsSettings />
-        <CalendarSettingsForm />
-        <BriefSettingsForm />
-        <AccountSettings />
       </div>
 
       <aside className="settings-side">
@@ -270,10 +320,8 @@ export function SettingsPage() {
             <p className="empty">Storage is off (started with <code>--db none</code>).</p>
           )}
         </section>
-
-        <PluginsSection />
       </aside>
-    </main>
+    </div>
   );
 }
 
@@ -282,10 +330,13 @@ function PluginsSection() {
   const { data } = usePlugins();
   if (!data) return null;
   return (
-    <section aria-labelledby="plugins-h">
-      <h3 id="plugins-h">Plugins</h3>
+    <section className="settings-form" aria-labelledby="plugins-h">
+      <div className="settings-intro">
+        <h2 id="plugins-h">Plugins</h2>
+        <p>Python packages that add features. What loaded, what didn't and why.</p>
+      </div>
       {data.plugins.length === 0 ? (
-        <p className="empty">None installed. Plugins are Python packages that add features; see docs/plugins.md.</p>
+        <p className="empty">None installed. See docs/plugins.md to write one.</p>
       ) : (
         <table className="data compact">
           <thead>

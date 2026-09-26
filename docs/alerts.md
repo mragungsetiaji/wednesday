@@ -17,7 +17,7 @@ Zone 2,470.16 – 2,471.97 · price 2,471.50
 2. Send the bot any message, then run `make telegram-chats`
    (or `uv run wednesday --telegram-chats`) and put the printed id in `.env`
    as `TELEGRAM_CHAT_ID`.
-3. Restart, then `make telegram-test` or **Settings > Send test message**.
+3. Restart, then `make telegram-test` or **Settings > Telegram alerts > Send test message**.
 
 The token and chat id stay in `.env`; they are never written to the database.
 
