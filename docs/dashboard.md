@@ -42,6 +42,14 @@ y/y) share one card.
 
 ![Risk-time card, 18 minutes before CPI](images/news-card.png)
 
+The same releases are drawn on every chart as dashed vertical lines with their
+name at the top: amber for what's ahead (and the last 10 minutes), grey for what
+already came out this week. Upcoming ones get label space first; switch them off
+with **News** above the chart. Times are converted to the feed clock, so the
+lines match the candles with MT5 broker time too.
+
+![News lines on the 1H chart](images/news-chart.png)
+
 The calendar comes from ForexFactory's free weekly feed, fetched at most once an
 hour and kept in the database. **Settings > News calendar** picks the currencies
 and impact levels and lists what's coming this week.

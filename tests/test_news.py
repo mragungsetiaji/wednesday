@@ -80,3 +80,28 @@ def test_calendar_api(tmp_path, monkeypatch):
     assert api.put("/api/calendar", json={"impacts": ["Huge"]}).status_code == 422
     saved = api.put("/api/calendar", json={"currencies": ["USD", "EUR"], "impacts": ["High"]}).json()
     assert saved["settings"]["currencies"] == ["USD", "EUR"] and store.get_setting("calendar")["currencies"] == ["USD", "EUR"]
+
+
+def test_chart_times_follow_the_feed_clock():
+    import pandas as pd
+
+    from wednesday.quarters import to_new_york, utc_to_feed
+
+    cpi = pd.Timestamp("2026-03-04T13:30:00+00:00")  # 08:30 NY (EST)
+    assert utc_to_feed(cpi, "UTC") == pd.Timestamp("2026-03-04 13:30")
+    assert utc_to_feed(cpi, "NY+7") == pd.Timestamp("2026-03-04 15:30")  # broker server time
+    assert utc_to_feed(cpi, "UTC+3") == pd.Timestamp("2026-03-04 16:30")
+    assert utc_to_feed(cpi, "Asia/Jakarta") == pd.Timestamp("2026-03-04 20:30")
+    for clock in ("UTC", "NY+7", "UTC+3", "Asia/Jakarta"):  # round trip with the quarters conversion
+        assert to_new_york(pd.DatetimeIndex([utc_to_feed(cpi, clock)]), clock)[0] == pd.Timestamp("2026-03-04 08:30")
+
+
+def test_calendar_api_gives_chart_times_and_the_week(tmp_path, monkeypatch):
+    monkeypatch.setattr(news, "fetch_events", lambda url: parse_events(FF))
+    cfg = ScanConfig(lookback=20, timeframes=(TIMEFRAMES_BY_NAME["1H"],))
+    runtime = Runtime(cfg, DataSettings(source="synthetic"), None, calendar=Calendar(None))
+    runtime.calendar.refresh()
+    body = TestClient(create_app(runtime, ui_dir=tmp_path)).get("/api/calendar").json()
+    week = {e["title"]: e for e in body["week"]}
+    assert set(week) == {"FOMC Minutes", "CPI m/m", "Core CPI m/m"}  # past ones too, for the chart
+    assert week["CPI m/m"]["chart_time_unix"] == int(datetime(2026, 3, 4, 13, 30, tzinfo=timezone.utc).timestamp())

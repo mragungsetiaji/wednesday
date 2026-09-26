@@ -357,6 +357,7 @@ export interface CalendarEvent {
   time: string;
   forecast: string | null;
   previous: string | null;
+  chart_time_unix: number; // the release time on the chart's axis (feed clock)
 }
 
 export interface CalendarSettings {
@@ -369,7 +370,8 @@ export interface CalendarSettings {
 export interface CalendarResponse {
   editable: boolean;
   settings?: CalendarSettings;
-  events: CalendarEvent[];
+  events: CalendarEvent[]; // upcoming (and just released), for the risk-time card
+  week: CalendarEvent[]; // every matching event this week, for the chart
   fetched_at?: string | null;
   error?: string | null;
   loading?: boolean;

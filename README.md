@@ -64,6 +64,17 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
   </tr>
 </table>
 
+### News risk time
+
+High-impact US releases are dashed lines on the chart (amber ahead, grey once out), and an hour before one a card appears in the corner with a countdown. In the last 30 minutes a light runs around it. Close it and it comes back once at the 30-minute mark.
+
+<table>
+  <tr>
+    <td width="58%"><img src="docs/images/news-chart.png" alt="News lines and labels on the 1H chart: NFP, ISM, FOMC, Waller and CPI"></td>
+    <td width="42%" valign="top"><img src="docs/images/news-card.png" alt="Risk-time card 18 minutes before CPI, with a light running around its edge"></td>
+  </tr>
+</table>
+
 ### Multiple timeframes at once
 
 Full screen, split into two or four charts. Hover one and the others follow to the same moment on their own timeframe; drag the lines between charts to resize.

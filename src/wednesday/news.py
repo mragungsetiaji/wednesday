@@ -154,12 +154,19 @@ class Calendar:
                 if e["currency"] in s.currencies and e["impact"] in s.impacts
                 and datetime.fromisoformat(e["time"]) >= now - past]
 
+    def matching(self) -> list[dict]:
+        """Every event in the cached week that matches the settings (for the chart)."""
+        s = self.settings
+        return [e for e in self.events if e["currency"] in s.currencies and e["impact"] in s.impacts]
+
     def snapshot(self) -> dict:
         self.maybe_refresh()
         source_matches = self.source == self.settings.url
+        show = self.settings.enabled and source_matches
         return {
             "settings": self.settings.to_dict(),
-            "events": self.upcoming() if self.settings.enabled and source_matches else [],
+            "events": self.upcoming() if show else [],
+            "week": self.matching() if show else [],
             "fetched_at": self.fetched_at if source_matches else None,
             "error": self.error,
             "loading": self._busy,

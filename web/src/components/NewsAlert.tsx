@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchCalendar, type CalendarEvent } from "../api";
+import type { CalendarEvent } from "../api";
 
 const SOON_MS = 60 * 60_000; // the card appears an hour before
 const IMMINENT_MS = 30 * 60_000; // and starts to glow in the last half hour
@@ -41,21 +41,9 @@ const nyTime = (d: Date) => d.toLocaleTimeString("en-US", { hour: "2-digit", min
  * Closing it during the first half hour brings it back once at 30 minutes;
  * closing it after that hides it for this release.
  */
-export function NewsAlert() {
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
+export function NewsAlert({ events }: { events: CalendarEvent[] }) {
   const [now, setNow] = useState(Date.now());
   const [dismissed, setDismissed] = useState<string[]>(loadDismissed);
-
-  useEffect(() => {
-    let alive = true;
-    const load = () => fetchCalendar().then((r) => alive && setEvents(r.events ?? [])).catch(() => {});
-    load();
-    const id = setInterval(load, 60_000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);

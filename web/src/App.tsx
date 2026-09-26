@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { fetchQuarters, fetchScan, type QuartersResponse, type ScanResponse } from "./api";
+import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
 import { ChartFocus } from "./components/ChartFocus";
 import { EventsPanel } from "./components/EventsPanel";
@@ -14,6 +15,7 @@ import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtAgo, fmtFeedTime, fmtPrice } from "./format";
 import { ChartIcon, Direction, ExpandIcon, SlidersIcon } from "./icons";
 import { usePref } from "./prefs";
+import { newsMarks } from "./newsPrimitive";
 import { buildRail } from "./rail";
 import { useChartPalette } from "./theme";
 
@@ -59,6 +61,10 @@ export default function App() {
   const [hidden, setHidden] = usePref<string[]>("xau.hiddenLayers", []);
   const [showQuarters, setShowQuarters] = usePref("xau.quarters", true);
   const [showSwings, setShowSwings] = usePref("wed.swings", true);
+  const [showNews, setShowNews] = usePref("wed.newsLines", true);
+  const calendar = useCalendar();
+  const upcomingNews = useMemo(() => calendar?.events ?? [], [calendar]);
+  const news = useMemo(() => (showNews ? newsMarks(calendar?.week ?? []) : []), [calendar, showNews]);
   const [focus, setFocus] = useState(false);
   const [quarters, setQuarters] = useState<QuartersResponse | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
@@ -240,6 +246,10 @@ export default function App() {
                     <input type="checkbox" checked={showQuarters} onChange={(e) => setShowQuarters(e.target.checked)} />
                     Quarters
                   </label>
+                  <label className="toggle">
+                    <input type="checkbox" checked={showNews} onChange={(e) => setShowNews(e.target.checked)} />
+                    News
+                  </label>
                 </div>
               </div>
               <PriceChart
@@ -253,6 +263,7 @@ export default function App() {
                 quarters={quarters}
                 quarterRows={quarterRows}
                 swings={showSwings ? chart?.swings : undefined}
+                news={news}
               />
               <div className="chart-foot">
                 <ul className="legend" aria-label="Chart legend">
@@ -263,6 +274,7 @@ export default function App() {
                   <li><span className="key key-idm" /> IDM</li>
                   <li><span className="key key-bos" /> Last break</li>
                   {showSwings && <li><span className="key key-swing" /> HH / HL / LH / LL swings</li>}
+                  {showNews && <li><span className="key key-news" /> High-impact news</li>}
                   {quarterRows.length > 0 && <li><span className="key key-quarter" /> Quarters: green closed up</li>}
                   <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
                 </ul>
@@ -312,7 +324,7 @@ export default function App() {
       )}
 
       {/* Full screen renders its own copy: the browser only shows the full screen element. */}
-      {!(focus && scan && data) && <NewsAlert />}
+      {!(focus && scan && data) && <NewsAlert events={upcomingNews} />}
 
       {focus && scan && data && (
         <ChartFocus
@@ -331,11 +343,14 @@ export default function App() {
             { label: "Higher timeframes", checked: showHigherTf, onChange: setShowHigherTf },
             { label: "Swings", checked: showSwings, onChange: setShowSwings },
             { label: "Quarters", checked: showQuarters, onChange: setShowQuarters },
+            { label: "News", checked: showNews, onChange: setShowNews },
           ]}
           tf={tf}
           onTf={setTf}
           status={status}
           bias={tradeBias}
+          news={news}
+          upcomingNews={upcomingNews}
           onClose={closeFocus}
         />
       )}

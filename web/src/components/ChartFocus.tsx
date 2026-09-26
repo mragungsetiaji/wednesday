@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import type { QuartersResponse, Scan, TradeBias } from "../api";
+import type { CalendarEvent, QuartersResponse, Scan, TradeBias } from "../api";
+import type { NewsMark } from "../newsPrimitive";
 import type { LayerOptions } from "../chartData";
 import { CrosshairBus } from "../crosshairSync";
 import { fmtPrice } from "../format";
@@ -107,6 +108,8 @@ interface Props {
   onTf: (tf: string) => void;
   status: { cls: string; text: string };
   bias: TradeBias | null;
+  news: NewsMark[];
+  upcomingNews: CalendarEvent[];
   onClose: () => void;
 }
 
@@ -115,7 +118,7 @@ interface Props {
  * grid, each with its own timeframe. Uses the browser's full screen when it is
  * allowed; leaving it (Esc) closes the view.
  */
-export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, toggles, tf, onTf, status, bias, onClose }: Props) {
+export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, toggles, tf, onTf, status, bias, news, upcomingNews, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = usePref<Layout>("wed.focusLayout", 2);
   const [tfs, setTfs] = usePref<string[]>("wed.focusTfs", DEFAULT_TFS);
@@ -193,7 +196,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
         {Array.from({ length: layout }, (_, i) => (
           <ChartPane key={i} label={`Chart ${i + 1}`} tf={paneTf(i)} onTf={(v) => setPaneTf(i, v)} timeframes={known}
             scan={scan} version={version} lookback={lookback} rail={rail} layers={layers} palette={palette}
-            quarters={quarters} showQuarters={showQuarters} sync={{ bus, id: i }} />
+            quarters={quarters} showQuarters={showQuarters} sync={{ bus, id: i }} news={news} />
         ))}
         {layout > 1 && (
           <Splitter axis="x" value={split.x} onChange={(x) => setSplit((s) => ({ ...s, x }))}
@@ -204,7 +207,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
             onDone={(y) => saveSplit({ ...split, y })} />
         )}
       </div>
-      <NewsAlert />
+      <NewsAlert events={upcomingNews} />
     </div>
   );
 }

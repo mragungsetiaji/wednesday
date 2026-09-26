@@ -63,6 +63,17 @@ def to_new_york(index: pd.DatetimeIndex, clock: str) -> pd.DatetimeIndex:
     return utc.tz_convert(NEW_YORK).tz_localize(None)
 
 
+def utc_to_feed(ts: pd.Timestamp, clock: str) -> pd.Timestamp:
+    """An aware time -> the naive feed-clock time the chart uses (inverse of :func:`to_new_york`)."""
+    utc = pd.Timestamp(ts).tz_convert("UTC")
+    m = _OFFSET.match(clock)
+    if m:
+        base, off = m.group(1), pd.Timedelta(hours=float(m.group(2) or 0))
+        wall = utc.tz_convert(NEW_YORK) if base == "NY" else utc
+        return wall.tz_localize(None) + off
+    return utc.tz_convert(clock).tz_localize(None)
+
+
 @dataclass
 class Block:
     row: str

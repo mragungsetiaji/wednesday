@@ -5,6 +5,7 @@ import type { CrosshairBus } from "../crosshairSync";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "../chartData";
 import { fmtPrice } from "../format";
 import { Direction } from "../icons";
+import type { NewsMark } from "../newsPrimitive";
 import type { RailItem } from "../rail";
 import type { ChartPalette } from "../theme";
 import { PriceChart } from "./PriceChart";
@@ -23,10 +24,11 @@ interface Props {
   showQuarters: boolean;
   label: string; // accessible name, e.g. "Chart 2"
   sync?: { bus: CrosshairBus; id: number };
+  news?: NewsMark[];
 }
 
 /** One chart of the full-screen layout, with its own timeframe. */
-export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers, palette, quarters, showQuarters, label, sync }: Props) {
+export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers, palette, quarters, showQuarters, label, sync, news }: Props) {
   const chart = useCandles(tf, version, lookback);
   const zones = useMemo(() => (chart ? buildZones(scan, chart, tf, rail, layers) : []), [scan, chart, tf, rail, layers]);
   const events = useMemo(() => buildEvents(scan, tf, layers.detectors), [scan, tf, layers.detectors]);
@@ -64,6 +66,7 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
         quarterRows={rows}
         sync={sync}
         swings={layers.showSwings ? chart?.swings : undefined}
+        news={news}
       />
     </section>
   );

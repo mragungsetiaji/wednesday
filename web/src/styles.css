@@ -587,6 +587,7 @@ p {
 .key-liq { height: 0; border-top: 2px solid var(--liquidity); }
 .key-idm { height: 0; border-top: 2px dotted var(--idm); }
 .key-bos { height: 0; border-top: 1px dashed var(--text-2); }
+.key-news { width: 0; height: 12px; border-left: 1.5px dashed var(--accent); }
 .key-swing { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
 .key-quarter {
   width: 18px;

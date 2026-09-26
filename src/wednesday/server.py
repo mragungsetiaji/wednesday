@@ -20,7 +20,7 @@ from .bias import TradeBias
 from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .news import CALENDAR_KEY, CalendarSettings
 from .engine import Engine, Runtime
-from .quarters import quarters_payload
+from .quarters import quarters_payload, utc_to_feed
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
 
@@ -187,12 +187,19 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             raise HTTPException(422, str(exc)) from exc
         return {"editable": True, **brief.status()}
 
+    def with_chart_times(snap: dict) -> dict:
+        """Add each event's time on the chart's (feed clock) axis, so news lines up with the candles."""
+        clock = current_clock()
+        for key in ("events", "week"):
+            snap[key] = [{**e, "chart_time_unix": _unix(utc_to_feed(pd.Timestamp(e["time"]), clock))} for e in snap[key]]
+        return snap
+
     @app.get("/api/calendar")
     def get_calendar() -> dict:
         """Upcoming news matching the calendar settings (fetched in the background, at most hourly)."""
         if not runtime or runtime.calendar is None:
-            return {"editable": False, "events": []}
-        return {"editable": True, **runtime.calendar.snapshot()}
+            return {"editable": False, "events": [], "week": []}
+        return {"editable": True, **with_chart_times(runtime.calendar.snapshot())}
 
     @app.put("/api/calendar")
     def put_calendar(body: dict = Body(...)) -> dict:
@@ -204,7 +211,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         if runtime.store:
             runtime.store.set_setting(CALENDAR_KEY, new.to_dict())
         runtime.calendar.settings = new
-        return {"editable": True, **runtime.calendar.snapshot()}
+        return {"editable": True, **with_chart_times(runtime.calendar.snapshot())}
 
     def settings_payload() -> dict:
         engine = current()
