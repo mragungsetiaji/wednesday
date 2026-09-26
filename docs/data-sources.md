@@ -16,6 +16,7 @@ them. Where those bars come from is a setting you can change live.
 uv sync                      # default setup (Yahoo Finance + SQLite)
 uv sync --extra mt5          # MetaTrader 5 feed (Windows only)
 uv sync --extra postgres     # PostgreSQL storage
+uv sync --extra llm          # Claude / OpenAI SDKs for the news brief
 ```
 
 ## Picking a source

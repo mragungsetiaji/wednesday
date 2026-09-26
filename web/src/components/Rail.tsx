@@ -1,6 +1,10 @@
+import type { Risk, Setup, TradeBias } from "../api";
 import { detail, fmtPrice, fmtSigned } from "../format";
 import type { RailItem } from "../rail";
+import { BiasPanel } from "./BiasPanel";
 import { LevelTag } from "./LevelTag";
+
+const RISK_LABEL: Record<Exclude<Risk, null>, string> = { on: "Risk on", off: "Risk off", no_trade: "No trade" };
 
 interface Props {
   items: RailItem[];
@@ -10,11 +14,15 @@ interface Props {
   highlight: string | null;
   onHighlight: (id: string | null) => void;
   onOpen: (tf: string) => void;
+  bias: TradeBias | null;
+  onBiasChanged: () => void;
+  onOpenSettings: () => void;
 }
 
 function Row({ item, highlight, onHighlight, onOpen }: { item: RailItem } & Pick<Props, "highlight" | "onHighlight" | "onOpen">) {
   const lv = item.level;
   const s = item.setup;
+  const risk = s ? (lv as Setup).risk : null;
   return (
     <li>
       <button
@@ -30,10 +38,12 @@ function Row({ item, highlight, onHighlight, onOpen }: { item: RailItem } & Pick
         {s ? <span className={`pill ${s.side}`}>{item.tag}</span> : <LevelTag level={lv} />}
         <span className="ladder-price num">{fmtPrice(item.price)}</span>
         <span className="ladder-dist num">{fmtSigned(item.distance)}</span>
+        {risk && <span className={`risk risk-${risk}`}>{RISK_LABEL[risk]}</span>}
         <span className="ladder-meta">
           {s ? (
             <>
-              {s.side === "sell" ? "Sell" : "Buy"} limit · {item.tf} · {lv.meta.priority === "extreme" ? "extreme" : "mid"} · SL{" "}
+              {s.side === "sell" ? "Sell" : "Buy"} limit · {item.tf} · {lv.meta.priority === "extreme" ? "extreme" : "mid"}
+              {lv.meta.swing && <> at <strong className="swing">{lv.meta.swing}</strong></>} · SL{" "}
               <span className="num">{fmtPrice(lv.meta.sl!)}</span> · risk <span className="num">{fmtPrice(lv.meta.risk!)}</span>
               {lv.meta.sl_capped && " (capped)"}
               {lv.touches > 0 && ` · tested ${lv.touches}×`}
@@ -50,12 +60,13 @@ function Row({ item, highlight, onHighlight, onOpen }: { item: RailItem } & Pick
 }
 
 /** Price ladder: everything above price on top, the live price in the middle, everything below under it. */
-export function Rail({ items, price, status, hasOb, highlight, onHighlight, onOpen }: Props) {
+export function Rail({ items, price, status, hasOb, highlight, onHighlight, onOpen, bias, onBiasChanged, onOpenSettings }: Props) {
   const above = items.filter((i) => i.side === "above");
   const below = items.filter((i) => i.side === "below");
   const rowProps = { highlight, onHighlight, onOpen };
   return (
-    <aside className="rail" aria-label="Levels around price">
+    <aside className="rail" aria-label="Bias and levels around price">
+      <BiasPanel bias={bias} onChanged={onBiasChanged} onOpenSettings={onOpenSettings} />
       <div className="rail-head">
         <h2>Levels</h2>
         <p>Hover to find it on the chart. Click to open its timeframe.</p>

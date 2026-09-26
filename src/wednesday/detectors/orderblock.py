@@ -14,6 +14,10 @@ breakout candle; bearish breaks are the mirror (supply).
 * **Limit plan**: buy limit at the top of the red body, stop at the bottom of the
   body; sell limit at the bottom of the green body, stop at the top. The stop is
   capped at ``max_sl`` price units from the entry.
+* **Swing tag** (extreme OBs): whether the leg's extreme made a lower high
+  (``LH``) or higher high (``HH``) against the previous swing high, for sells;
+  a higher low (``HL``) or lower low (``LL``) for buys. With a bearish bias the
+  sells at a lower high are the ones to focus on (bullish: buys at a higher low).
 * **Taken / invalid**: once a later wick trades through the whole body
   (``mitigation="wick"``, the default) or a candle closes beyond it
   (``mitigation="close"``). Touching only the entry keeps the OB valid; those
@@ -44,15 +48,16 @@ class OrderBlockDetector(Detector):
         red = c < o
         green = c > o
 
-        # candle index -> (priority, direction, break index); extreme wins over middle.
-        found: dict[int, tuple[str, str, int]] = {}
+        # candle index -> (priority, direction, break index, swing tag); extreme wins over middle.
+        found: dict[int, tuple[str, str, int, str | None]] = {}
 
-        def add(idx: int, priority: str, direction: str, brk_idx: int) -> None:
+        def add(idx: int, priority: str, direction: str, brk_idx: int, swing: str | None = None) -> None:
             prev = found.get(idx)
             if prev is None or PRIORITY_RANK[priority] < PRIORITY_RANK[prev[0]]:
-                found[idx] = (priority, direction, brk_idx)
+                found[idx] = (priority, direction, brk_idx, swing)
 
-        for brk in ctx.structure(p.swing_length).breaks:
+        structure = ctx.structure(p.swing_length)
+        for brk in structure.breaks:
             start, end = brk.swing.index, brk.index
             if brk.direction == "bullish":
                 ext = min(range(start, end), key=lambda k: (l[k], -k))  # lowest low of the leg
@@ -63,7 +68,7 @@ class OrderBlockDetector(Detector):
 
             ob = next((k for k in range(ext, start - 1, -1) if opposite[k]), None)
             if ob is not None:
-                add(ob, "extreme", brk.direction, brk.index)
+                add(ob, "extreme", brk.direction, brk.index, self._swing_tag(structure, brk.direction, ext, l, h))
             for k in range(ext + 1, end):
                 if opposite[k] and impulsive(k):
                     add(k, "middle", brk.direction, brk.index)
@@ -71,7 +76,19 @@ class OrderBlockDetector(Detector):
         levels = [self._level(ctx, idx, *info) for idx, info in sorted(found.items())]
         return levels
 
-    def _level(self, ctx: Context, idx: int, priority: str, direction: str, brk_idx: int) -> Level:
+    @staticmethod
+    def _swing_tag(structure, direction: str, ext: int, low, high) -> str | None:
+        """LH/HH for the high a sell leg started from, HL/LL for the low of a buy leg."""
+        kind = "low" if direction == "bullish" else "high"
+        prev = [s for s in structure.swings if s.kind == kind and s.index < ext]
+        if not prev:
+            return None
+        ref = max(prev, key=lambda s: s.index).price
+        if direction == "bullish":
+            return "HL" if low[ext] > ref else "LL"
+        return "LH" if high[ext] < ref else "HH"
+
+    def _level(self, ctx: Context, idx: int, priority: str, direction: str, brk_idx: int, swing: str | None) -> Level:
         p = self.params
         o, h, l, c, times = ctx.open, ctx.high, ctx.low, ctx.close, ctx.times
         body_top, body_bottom = max(o[idx], c[idx]), min(o[idx], c[idx])
@@ -91,6 +108,7 @@ class OrderBlockDetector(Detector):
                 "risk": round(abs(entry - stop), 10),
                 "body": round(body_top - body_bottom, 10),
                 "sl_capped": bool(body_top - body_bottom > p.max_sl),
+                "swing": swing,
             },
         )
 

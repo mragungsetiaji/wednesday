@@ -27,6 +27,14 @@ In **Settings** you pick which timeframes and which order blocks (extreme, mid)
 alert, pause alerts, and see the recent alert log. By default every timeframe
 and both priorities alert; if 5M mid OBs are too chatty, turn them off there.
 
+## Bias labels
+
+Each alert ends with **RISK ON** (with the bias you set on the chart page) or
+**RISK OFF** (against it), and extreme order blocks say whether they sit at a
+lower high or higher low. With a **neutral** bias you're not trading, so alerts
+pause; tick *Alert with a neutral bias too* in Settings to keep them. See
+[bias.md](bias.md).
+
 ## How entry is detected
 
 - The check uses the **high/low of each new M1 bar**, so a wick into the zone

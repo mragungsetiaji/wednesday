@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .bias import RISK_TEXT, TradeBias, setup_risk
 from .levels import Level
 from .scanner import ScanResult
 
@@ -30,7 +31,7 @@ def _event(lv: Level, digits: int) -> str:
     return f"{lv.label} {_price(lv, digits)} {verb} @ {lv.ended_time:%H:%M}"
 
 
-def format_scan(result: ScanResult, symbol: str = "XAUUSD", digits: int = 2) -> str:
+def format_scan(result: ScanResult, symbol: str = "XAUUSD", digits: int = 2, bias: TradeBias | None = None) -> str:
     price = result.price
     lines = [
         f"[{result.time:%Y-%m-%d %H:%M}] {symbol} price {price:.{digits}f}",
@@ -50,14 +51,18 @@ def format_scan(result: ScanResult, symbol: str = "XAUUSD", digits: int = 2) -> 
                 f"{tf:<5} {SHORT.get(det, det[:4]):<4} {len(s.active):>3}  "
                 f"{_fmt(s.above, price, digits):<34} {_fmt(s.below, price, digits):<34} {'; '.join(notes) or '-'}"
             )
+    if bias:
+        lines.append(f"bias: {bias.direction.upper()}" + (f" ({bias.note})" if bias.note else ""))
     for side in ("sell", "buy"):
-        for rank, (tf, lv, dist) in enumerate(result.setups(side, limit=3), 1):
+        label = RISK_TEXT.get(setup_risk(side, bias), "")
+        for rank, (tf, lv, dist) in enumerate(result.setups(side, limit=3, bias=bias), 1):
             m = lv.meta
             cap = " capped" if m["sl_capped"] else ""
+            swing = f" {m['swing']}" if m.get("swing") else ""
             lines.append(
-                f"{side.upper()} LIMIT #{rank} {tf.name:<3} {m['priority']:<7} entry {m['entry']:.{digits}f} "
+                f"{side.upper()} LIMIT #{rank} {tf.name:<3} {m['priority']:<7}{swing} entry {m['entry']:.{digits}f} "
                 f"SL {m['sl']:.{digits}f} (risk {m['risk']:.{digits}f}{cap}) "
-                f"dist {dist:.{digits}f} t{lv.touches}"
+                f"dist {dist:.{digits}f} t{lv.touches}" + (f"  {label}" if label else "")
             )
     for det in result.detectors:
         up, down = result.nearest(det, "above"), result.nearest(det, "below")

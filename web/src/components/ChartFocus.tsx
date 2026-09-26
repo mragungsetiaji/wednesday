@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import type { QuartersResponse, Scan } from "../api";
+import type { QuartersResponse, Scan, TradeBias } from "../api";
 import type { LayerOptions } from "../chartData";
 import { CrosshairBus } from "../crosshairSync";
 import { fmtPrice } from "../format";
@@ -8,6 +8,7 @@ import { CollapseIcon, LayoutIcon } from "../icons";
 import { usePref } from "../prefs";
 import type { RailItem } from "../rail";
 import type { ChartPalette } from "../theme";
+import { BiasPill } from "./BiasPill";
 import { ChartPane } from "./ChartPane";
 
 type Layout = 1 | 2 | 4;
@@ -104,6 +105,7 @@ interface Props {
   tf: string; // the first chart follows the dashboard's timeframe
   onTf: (tf: string) => void;
   status: { cls: string; text: string };
+  bias: TradeBias | null;
   onClose: () => void;
 }
 
@@ -112,7 +114,7 @@ interface Props {
  * grid, each with its own timeframe. Uses the browser's full screen when it is
  * allowed; leaving it (Esc) closes the view.
  */
-export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, toggles, tf, onTf, status, onClose }: Props) {
+export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, toggles, tf, onTf, status, bias, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = usePref<Layout>("wed.focusLayout", 2);
   const [tfs, setTfs] = usePref<string[]>("wed.focusTfs", DEFAULT_TFS);
@@ -157,6 +159,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
           <span className="brand">Wednesday</span>
           <span className="focus-symbol">{symbol}</span>
           <span className="ticker-price num">{fmtPrice(scan.price)}</span>
+          {bias && <BiasPill bias={bias} />}
           <span className={`live ${status.cls}`}>
             <span className="dot" aria-hidden="true" />
             {status.text}

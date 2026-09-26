@@ -132,6 +132,15 @@ export function AlertsSettings() {
         </div>
       </fieldset>
 
+      <fieldset className="fields" disabled={locked || !form.enabled}>
+        <legend>Bias</legend>
+        <label className="check">
+          <input type="checkbox" checked={form.neutral_alerts} onChange={(e) => set({ neutral_alerts: e.target.checked })} />
+          Alert with a neutral bias too <span className="muted">· off: no alerts while you're not trading</span>
+        </label>
+        <p className="field-hint">Every alert says RISK ON or RISK OFF against the bias you set on the chart page.</p>
+      </fieldset>
+
       {data.editable && (
         <div className="form-actions">
           <button type="submit" className="button secondary" disabled={!dirty || busy !== null}>

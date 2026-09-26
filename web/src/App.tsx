@@ -69,7 +69,9 @@ export default function App() {
       try {
         const res = await fetchScan();
         if (!alive) return;
-        setData((prev) => (prev && prev.version === res.version && prev.error === res.error ? prev : res));
+        const biasKey = (d: ScanResponse | null) => JSON.stringify(d?.trade_bias ?? null);
+        setData((prev) =>
+          prev && prev.version === res.version && prev.error === res.error && biasKey(prev) === biasKey(res) ? prev : res);
         setFetchError(null);
       } catch (e) {
         if (alive) setFetchError(e instanceof Error ? e.message : String(e));
@@ -83,7 +85,14 @@ export default function App() {
     };
   }, []);
 
+  // After the bias changes, reload at once: the setups' risk labels come from the server.
+  const refreshScan = useCallback(() => {
+    fetchScan().then(setData).catch((e) => setFetchError(e instanceof Error ? e.message : String(e)));
+  }, []);
+  const openSettings = useCallback(() => setView("settings"), [setView]);
+
   const version = data?.version ?? 0;
+  const tradeBias = data?.trade_bias ?? null;
   const config = data?.config;
   const lookback = config?.lookback ?? 200;
   const timeframes = useMemo(() => config?.timeframes ?? [], [config]);
@@ -256,7 +265,8 @@ export default function App() {
             </section>
 
             {scan ? (
-              <Rail items={rail} price={scan.price} status={status} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf} />
+              <Rail items={rail} price={scan.price} status={status} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf}
+                bias={tradeBias} onBiasChanged={refreshScan} onOpenSettings={openSettings} />
             ) : (
               <aside className="rail" aria-busy="true">
                 <div className="rail-head">
@@ -312,6 +322,7 @@ export default function App() {
           tf={tf}
           onTf={setTf}
           status={status}
+          bias={tradeBias}
           onClose={closeFocus}
         />
       )}

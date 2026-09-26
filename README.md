@@ -47,6 +47,8 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **Maps everything to the chart**: every setup and level in the ladder is pinned on the chart under the same tag.
 - **Full screen with 1, 2 or 4 charts**, TradingView style: each on its own timeframe, crosshairs linked, panes resizable by dragging.
 - **Quarterly theory pane** under the chart: every weekday, session (Tokyo, London, NY AM, NY PM) and 90-minute quarter as a green or red block, plus how often each one closed green.
+- **Your bias steers the list**: set bullish, bearish or neutral by hand; setups get RISK ON / RISK OFF labels, sells at a lower high (or buys at a higher low) come first, and neutral marks everything no trade.
+- **News brief**: Claude or OpenAI reads the news pages you pick and suggests a bias you can apply with one click.
 - **Pings you on Telegram** when price trades into an order block.
 - **Free data by default** (Yahoo Finance), MetaTrader 5 when you're ready; history stored in SQLite or PostgreSQL.
 
@@ -99,7 +101,7 @@ Extra flags go through `ARGS`, e.g. `make serve PORT=9000 ARGS="--lookback 300"`
 **Windows / MT5**: run the `uv` commands directly, see [Windows and VPS](docs/deploy-windows.md).
 
 ```powershell
-uv sync --extra mt5
+uv sync --extra mt5 --extra llm
 uv run wednesday --source mt5 --check   # test the MT5 connection
 uv run wednesday --serve
 ```
@@ -111,6 +113,7 @@ uv run wednesday --serve
 | [Detectors and the limit strategy](docs/detectors.md) | How order blocks, liquidity and inducement are found, and how setups are ranked |
 | [Dashboard](docs/dashboard.md) | Chart, level ladder, quarterly pane, panels |
 | [Data sources and storage](docs/data-sources.md) | Yahoo Finance, MT5, CSV, SQLite / PostgreSQL |
+| [Bias and news brief](docs/bias.md) | Setting a bias, risk on / off labels, the LLM news brief |
 | [Telegram alerts](docs/alerts.md) | Bot setup and when alerts fire |
 | [Configuration](docs/configuration.md) | Make targets, CLI options, `.env` |
 | [Windows and VPS](docs/deploy-windows.md) | Running 24/7 next to an MT5 terminal |

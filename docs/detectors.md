@@ -47,6 +47,13 @@ Built for limit entries.
 The stop is capped at `--max-sl` (default **3.00**) from the entry; a capped
 stop is marked `(capped)`.
 
+### Swing tag
+
+Extreme order blocks also record where their leg started: a sell OB at a
+**lower high** (`LH`, below the previous swing high) or a higher high (`HH`), a
+buy OB at a **higher low** (`HL`) or lower low (`LL`). With a bias set, the side
+it favours lists its `LH` (bearish) or `HL` (bullish) order blocks first.
+
 ### Limit setups
 
 Across all timeframes, untaken bearish OBs whose entry is above price are

@@ -68,4 +68,5 @@ bars are fetched each minute.
 | `XAU_MAX_SL`, `XAU_DETECTORS` | Strategy settings |
 | `XAU_SERVE`, `XAU_HOST`, `XAU_PORT` | Dashboard |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Telegram alerts |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | News brief ([bias.md](bias.md)) |
 | `XAU_LOG_FILE`, `XAU_JSON_OUT` | Logs and JSON lines output |

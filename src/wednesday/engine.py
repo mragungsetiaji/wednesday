@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+from .bias import BIAS_KEY, TradeBias, active
 from .feeds import DataFeed, M1Buffer, build_feed
 from .scanner import ScanConfig, ScanResult, scan
 from .settings import DataSettings
@@ -117,13 +118,15 @@ class Runtime:
     """Owns the running engine so the dashboard can switch data sources live."""
 
     def __init__(self, cfg: ScanConfig, settings: DataSettings, store: Store | None = None,
-                 mt5_password: str | None = None, delay: float = 2.0, on_result=None, alerts=None):
+                 mt5_password: str | None = None, delay: float = 2.0, on_result=None, alerts=None, brief=None):
         self.cfg = cfg
         self.store = store
         self.mt5_password = mt5_password
         self.delay = delay
         self.on_result = on_result
         self.alerts = alerts  # AlertManager or None
+        self.brief = brief  # BriefRunner or None
+        self.bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
         self._lock = threading.Lock()
         self.settings = settings
         self.engine = self._build(settings)
@@ -132,11 +135,23 @@ class Runtime:
         feed = build_feed(settings, self.mt5_password)
         return Engine(feed, self.cfg, settings.resolved_symbol, self.store)
 
+    def active_bias(self) -> TradeBias | None:
+        """The trader's bias, unless it has expired."""
+        return active(self.bias)
+
+    def set_bias(self, bias: TradeBias | None) -> None:
+        self.bias = bias
+        if self.store:
+            if bias:
+                self.store.set_setting(BIAS_KEY, bias.to_dict())
+            else:
+                self.store.delete_setting(BIAS_KEY)
+
     def _after_scan(self, result) -> None:
         engine = self.engine
         if self.alerts is not None:
             try:
-                self.alerts.check(self.settings.source, engine.symbol, result, engine.state.m1)
+                self.alerts.check(self.settings.source, engine.symbol, result, engine.state.m1, self.active_bias())
             except Exception:  # an alert problem must never stop scanning
                 log.exception("alert check failed")
         if self.on_result:

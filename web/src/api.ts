@@ -20,6 +20,7 @@ export interface Level {
     risk?: number;
     body?: number;
     sl_capped?: boolean;
+    swing?: "LH" | "HH" | "HL" | "LL" | null; // extreme order blocks: the swing their leg started from
     [k: string]: unknown;
   };
 }
@@ -56,8 +57,11 @@ export interface TimeframeScan {
   detectors: Record<string, LevelSet>;
 }
 
+/** Label from the trader's bias: with it, against it, or no trading (neutral). null = no bias set. */
+export type Risk = "on" | "off" | "no_trade" | null;
+
 /** An order block limit setup: distance is from price to the entry. */
-export type Setup = Level & { timeframe: string; distance: number };
+export type Setup = Level & { timeframe: string; distance: number; risk: Risk };
 
 export interface Scan {
   time: string;
@@ -77,6 +81,7 @@ export interface ScanResponse {
   symbol: string;
   source: string;
   clock: string; // the feed's clock, e.g. "UTC" or "NY+7"
+  trade_bias: TradeBias | null;
   version: number;
   scanned_at: string | null;
   error: string | null;
@@ -221,6 +226,7 @@ export interface AlertSettings {
   enabled: boolean;
   timeframes: string[];
   priorities: string[];
+  neutral_alerts: boolean; // alert even when the bias is neutral (not trading)
 }
 
 export interface AlertRow {
@@ -268,3 +274,67 @@ async function send<T>(method: string, url: string, body?: unknown): Promise<T> 
 export const fetchAlerts = () => getJson<AlertsResponse>("/api/alerts");
 export const saveAlerts = (s: AlertSettings) => send<AlertsResponse>("PUT", "/api/alerts", s);
 export const testAlert = () => send<{ ok: boolean }>("POST", "/api/alerts/test");
+
+/** The trader's directional bias, set by hand. */
+export type BiasDirection = "bullish" | "bearish" | "neutral";
+export type BiasExpiry = "day" | "week" | "none";
+
+export interface TradeBias {
+  direction: BiasDirection;
+  note: string;
+  expiry: BiasExpiry;
+  set_at: string | null;
+  expires_at: string | null;
+  expired: boolean;
+}
+
+export const saveBias = (b: { direction: BiasDirection | null; note?: string; expiry?: BiasExpiry }) =>
+  send<{ bias: TradeBias | null }>("PUT", "/api/bias", b);
+
+export interface BriefSettings {
+  provider: "anthropic" | "openai";
+  model: string | null;
+  prompt: string | null;
+  urls: string[];
+  max_chars_per_source: number;
+}
+
+export interface BriefSource {
+  url: string;
+  ok: boolean;
+  error: string | null;
+  chars: number;
+  truncated: boolean;
+}
+
+export interface Brief {
+  text: string;
+  suggested_bias: BiasDirection | null;
+  created_at: string;
+  provider: string;
+  model: string;
+  sources: BriefSource[];
+}
+
+export interface BriefProvider {
+  id: "anthropic" | "openai";
+  title: string;
+  default_model: string;
+  env: string;
+  installed: boolean;
+  key_set: boolean;
+}
+
+export interface BriefResponse {
+  editable: boolean;
+  settings?: BriefSettings;
+  default_prompt?: string;
+  providers?: BriefProvider[];
+  running?: boolean;
+  error?: string | null;
+  last?: Brief | null;
+}
+
+export const fetchBrief = () => getJson<BriefResponse>("/api/brief");
+export const saveBrief = (s: BriefSettings) => send<BriefResponse>("PUT", "/api/brief", s);
+export const generateBrief = () => send<BriefResponse>("POST", "/api/brief/generate");

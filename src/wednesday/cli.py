@@ -12,6 +12,7 @@ from pathlib import Path
 
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, parse_detectors
 from .alerts import ALERTS_KEY, AlertManager, AlertSettings, TelegramClient, TelegramError
+from .brief import BRIEF_KEY, BriefRunner, BriefSettings
 from .engine import Runtime
 from .settings import SETTINGS_KEY, SOURCES, resolve
 from .storage import DEFAULT_DB_URL, Store
@@ -150,11 +151,12 @@ def run(args: argparse.Namespace) -> None:
     json_path = Path(args.json_out) if args.json_out else None
 
     def publish(result) -> None:
-        report = format_scan(result, runtime.engine.symbol, args.digits)
+        bias = runtime.active_bias()
+        report = format_scan(result, runtime.engine.symbol, args.digits, bias)
         print(report + "\n", flush=True)
         log.debug("scan\n%s", report)
         if json_path:
-            record = {"scanned_at": datetime.now(timezone.utc).isoformat(), **result.to_dict()}
+            record = {"scanned_at": datetime.now(timezone.utc).isoformat(), **result.to_dict(bias)}
             with json_path.open("a") as fh:
                 fh.write(json.dumps(record) + "\n")
 
@@ -168,7 +170,8 @@ def run(args: argparse.Namespace) -> None:
     if alerts.configured:
         log.info("telegram alerts %s for %s, %s OBs", "on" if alert_settings.enabled else "paused",
                  ",".join(alert_settings.timeframes), "/".join(alert_settings.priorities))
-    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts)
+    brief = BriefRunner(store, BriefSettings.from_dict(store.get_setting(BRIEF_KEY) if store else None))
+    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts, brief)
     engine = runtime.engine
     feed = engine.feed
     if store:

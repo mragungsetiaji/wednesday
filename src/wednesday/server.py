@@ -7,6 +7,7 @@ snapshots, so they never touch the data feed (MT5) directly.
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -15,6 +16,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError
+from .bias import TradeBias
+from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .engine import Engine, Runtime
 from .quarters import quarters_payload
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
@@ -51,6 +54,12 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
 
     quarters_cache: dict = {}
 
+    def trade_bias() -> TradeBias | None:
+        return runtime.active_bias() if runtime else None
+
+    def bias_payload() -> dict | None:
+        return runtime.bias.to_dict() if runtime and runtime.bias else None
+
     def status() -> dict:
         engine = current()
         st = engine.state
@@ -59,6 +68,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                 "symbol": engine.symbol,
                 "source": current_source(),
                 "clock": current_clock(),
+                "trade_bias": bias_payload(),
                 "version": st.version,
                 "scanned_at": _iso(st.scanned_at),
                 "error": st.error,
@@ -73,7 +83,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     @app.get("/api/scan")
     def get_scan() -> dict:
         _, result, _ = current().snapshot()
-        return {**status(), "scan": result.to_dict() if result else None}
+        return {**status(), "scan": result.to_dict(trade_bias()) if result else None}
 
     @app.get("/api/candles")
     def get_candles(tf: str = Query("1H"), limit: int = Query(200, ge=10, le=2000)) -> dict:
@@ -108,6 +118,71 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         if quarters_cache.get("key") != key:
             quarters_cache.update(key=key, value=quarters_payload(m1, current_clock()))
         return quarters_cache["value"]
+
+    @app.get("/api/bias")
+    def get_bias() -> dict:
+        return {"bias": bias_payload()}
+
+    @app.put("/api/bias")
+    def put_bias(body: dict = Body(...)) -> dict:
+        """Set the trade bias ({direction, note, expiry}); a null direction clears it."""
+        if runtime is None:
+            raise HTTPException(409, "The bias can only be set when the server runs with --serve")
+        if not body.get("direction"):
+            runtime.set_bias(None)
+            return {"bias": None}
+        new = TradeBias(str(body["direction"]), str(body.get("note") or ""), str(body.get("expiry") or "day"))
+        if errors := new.validate():
+            raise HTTPException(422, "; ".join(errors))
+        runtime.set_bias(new.stamped())
+        return {"bias": bias_payload()}
+
+    def brief_context() -> dict:
+        engine = current()
+        _, result, _ = engine.snapshot()
+        ctx = {"Symbol": engine.symbol, "Now (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")}
+        if result is not None:
+            ctx["Price"] = f"{result.price:.2f}"
+            for r in result.results:
+                if r.bias:
+                    ctx[f"{r.timeframe.name} structure"] = f"{r.bias.direction} {r.bias.event} at {r.bias.level:.2f}"
+        bias = trade_bias()
+        ctx["Trader's current bias"] = f"{bias.direction}" + (f" ({bias.note})" if bias and bias.note else "") if bias else "not set"
+        return ctx
+
+    def need_brief():
+        if not runtime or runtime.brief is None:
+            raise HTTPException(409, "The brief is only available when the server runs with --serve")
+        return runtime.brief
+
+    @app.get("/api/brief")
+    def get_brief() -> dict:
+        if not runtime or runtime.brief is None:
+            return {"editable": False}
+        return {"editable": True, **runtime.brief.status()}
+
+    @app.put("/api/brief")
+    def put_brief(body: dict = Body(...)) -> dict:
+        brief = need_brief()
+        try:
+            new = BriefSettings.from_dict(body)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(422, f"Invalid brief settings: {exc}") from exc
+        if errors := new.validate():
+            raise HTTPException(422, "; ".join(errors))
+        if runtime.store:
+            runtime.store.set_setting(BRIEF_KEY, new.to_dict())
+        brief.settings = new
+        return {"editable": True, **brief.status()}
+
+    @app.post("/api/brief/generate", status_code=202)
+    def generate_brief() -> dict:
+        brief = need_brief()
+        try:
+            brief.start(brief_context())
+        except BriefError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"editable": True, **brief.status()}
 
     def settings_payload() -> dict:
         engine = current()

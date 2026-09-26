@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { fetchSettings, saveSettings, type DataSettings, type SettingsResponse } from "../api";
 import { fmtFeedTime } from "../format";
 import { AlertsSettings } from "./AlertsSettings";
+import { BriefSettingsForm } from "./BriefSettingsForm";
 
 const EMPTY: DataSettings = { source: "yfinance", symbol: null, csv_path: null, mt5_login: null, mt5_server: null, mt5_path: null, clock: null };
 
@@ -186,6 +187,7 @@ export function SettingsPage() {
           )}
         </form>
         <AlertsSettings />
+        <BriefSettingsForm />
       </div>
 
       <aside className="settings-side">

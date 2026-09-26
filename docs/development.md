@@ -27,9 +27,11 @@ src/wednesday/
   quarters.py     quarterly theory blocks (weekday, session, 90m) in New York time + green stats
   report.py       console table
   engine.py       scan loop shared by the console and the web server
-  server.py       FastAPI: /api/scan, /api/candles, /api/quarters, /api/settings, /api/alerts, serves the dashboard
+  server.py       FastAPI: /api/scan, /api/candles, /api/quarters, /api/bias, /api/brief, /api/settings, /api/alerts, serves the dashboard
   settings.py     data source settings, source catalog, precedence rules
   alerts.py       Telegram alerts when price enters an order block
+  bias.py         the trader's bias, its expiry, and the risk on / off label per setup
+  brief.py        LLM news brief (Claude or OpenAI): fetch news pages, ask, suggest a bias
   storage.py      SQLAlchemy store: settings, M1 history, alert log (SQLite / PostgreSQL)
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)

@@ -16,7 +16,7 @@ live together: on your PC while testing, on the VPS in production.
    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
    git clone <repo-url> wednesday
    cd wednesday
-   uv sync --extra mt5
+   uv sync --extra mt5 --extra llm
    copy .env.example .env   # set XAU_SOURCE=mt5 and XAU_SYMBOL (credentials optional if MT5 is logged in)
    ```
 
@@ -43,7 +43,7 @@ live together: on your PC while testing, on the VPS in production.
 
 ## 2. Production (Windows VPS)
 
-Do the same setup as above on the VPS (MT5, uv, `uv sync --extra mt5`, `.env`,
+Do the same setup as above on the VPS (MT5, uv, `uv sync --extra mt5 --extra llm`, `.env`,
 `--check`). Then make it survive reboots and crashes:
 
 1. **Auto-login the VPS user.** The MT5 API needs an interactive desktop
@@ -110,7 +110,7 @@ Stop-ScheduledTask -TaskName "Wednesday"
 # if a python.exe from the bot is still alive, stop it (check the path before killing)
 Get-Process python -ErrorAction SilentlyContinue | Where-Object Path -like "*wednesday*" | Stop-Process
 git pull
-uv sync --extra mt5
+uv sync --extra mt5 --extra llm
 cd web; npm install; npm run build; cd ..
 uv run wednesday --check
 Start-ScheduledTask -TaskName "Wednesday"

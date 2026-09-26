@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+from .bias import RISK_TEXT, TradeBias, setup_risk
 from .levels import Level
 from .scanner import ScanResult
 from .storage import Store
@@ -41,6 +42,7 @@ class AlertSettings:
     enabled: bool = True
     timeframes: list[str] = field(default_factory=lambda: [tf.name for tf in TIMEFRAMES])
     priorities: list[str] = field(default_factory=lambda: list(PRIORITIES))
+    neutral_alerts: bool = False  # with a neutral bias (no trading) alerts are held back unless this is on
 
     def validate(self) -> list[str]:
         known = {tf.name for tf in TIMEFRAMES}
@@ -59,6 +61,7 @@ class AlertSettings:
             enabled=bool(d.get("enabled", base.enabled)),
             timeframes=list(d.get("timeframes", base.timeframes)),
             priorities=list(d.get("priorities", base.priorities)),
+            neutral_alerts=bool(d.get("neutral_alerts", base.neutral_alerts)),
         )
 
 
@@ -115,13 +118,16 @@ def ob_key(source: str, symbol: str, tf: str, ob: Level) -> str:
     return f"{source}|{symbol}|{tf}|{ob.kind}|{ob.time.isoformat()}|{ob.top:.5f}"
 
 
-def format_alert(symbol: str, tf: str, ob: Level, price: float, bias_text: str | None, digits: int = 2) -> str:
+def format_alert(symbol: str, tf: str, ob: Level, price: float, bias_text: str | None, digits: int = 2,
+                 trade_bias: TradeBias | None = None) -> str:
     m = ob.meta
     side = "Buy" if ob.kind == "bullish" else "Sell"
     prio = "extreme" if m.get("priority") == "extreme" else "mid"
+    swing = f" at {m['swing']}" if m.get("swing") else ""
     f = lambda v: f"{v:,.{digits}f}"  # noqa: E731
+    risk = setup_risk(side.lower(), trade_bias)
     lines = [
-        f"<b>{html.escape(symbol)} entered {tf} {'bullish' if ob.kind == 'bullish' else 'bearish'} OB</b> ({prio})",
+        f"<b>{html.escape(symbol)} entered {tf} {'bullish' if ob.kind == 'bullish' else 'bearish'} OB</b> ({prio}{swing})",
         f"{side} limit <b>{f(m['entry'])}</b> · SL {f(m['sl'])} · risk {f(m['risk'])}{' (capped)' if m.get('sl_capped') else ''}",
         f"Zone {f(ob.bottom)} – {f(ob.top)} · price {f(price)}",
     ]
@@ -129,6 +135,10 @@ def format_alert(symbol: str, tf: str, ob: Level, price: float, bias_text: str |
         lines.append(f"Entry tested {ob.touches}× before")
     if bias_text:
         lines.append(f"{tf} structure: {bias_text}")
+    if risk:
+        verb = {"on": "with", "off": "against"}.get(risk)
+        why = f" ({verb} {trade_bias.direction} bias)" if verb else " (neutral bias)"
+        lines.append(f"<b>{RISK_TEXT[risk]}</b>{why}")
     return "\n".join(lines)
 
 
@@ -154,8 +164,13 @@ class AlertManager:
         elif row["status"] == "sent":
             self._sent_memory.add(key)
 
-    def check(self, source: str, symbol: str, result: ScanResult, m1: pd.DataFrame) -> list[str]:
-        """Alert for order blocks entered by bars since the last check. Returns the alert keys sent."""
+    def check(self, source: str, symbol: str, result: ScanResult, m1: pd.DataFrame,
+              trade_bias: TradeBias | None = None) -> list[str]:
+        """Alert for order blocks entered by bars since the last check. Returns the alert keys sent.
+
+        ``trade_bias`` (the active one) labels each alert RISK ON / OFF; with a
+        neutral bias alerts are held back unless ``neutral_alerts`` is on.
+        """
         if m1 is None or m1.empty:
             return []
         stream = (source, symbol)
@@ -166,6 +181,8 @@ class AlertManager:
         new = m1[m1.index > last]
         if new.empty or not (self.configured and self.settings.enabled):
             return []
+        if trade_bias and trade_bias.direction == "neutral" and not self.settings.neutral_alerts:
+            return []  # neutral = not trading; the OBs can still alert once a direction is set
 
         sent = []
         for r in result.results:
@@ -190,7 +207,7 @@ class AlertManager:
                     "price": float(result.price), "sent_at": datetime.now(timezone.utc).isoformat(),
                 }
                 try:
-                    self.client.send(format_alert(symbol, tf.name, ob, result.price, bias_text))
+                    self.client.send(format_alert(symbol, tf.name, ob, result.price, bias_text, trade_bias=trade_bias))
                 except TelegramError as exc:
                     self.last_error = str(exc)
                     log.warning("alert not sent: %s", exc)
