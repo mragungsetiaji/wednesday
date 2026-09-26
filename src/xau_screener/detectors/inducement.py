@@ -36,7 +36,7 @@ class InducementDetector(Detector):
             if sw is None:
                 continue
             level = Level(self.name, brk.direction, sw.price, sw.price, times[sw.index], times[sw.confirmed],
-                          "IDM" + (" ▲" if brk.direction == "bullish" else " ▼"),
+                          "BULL IDM" if brk.direction == "bullish" else "BEAR IDM",
                           meta={"bos_time": times[brk.index].isoformat()})
             prev = latest.get(brk.direction)
             if prev is None or level.time >= prev.time:

@@ -131,7 +131,9 @@ class Bias:
             "event": self.event,
             "level": self.level,
             "swing_time": self.swing_time.isoformat(),
+            "swing_time_unix": int(self.swing_time.timestamp()),
             "break_time": self.break_time.isoformat(),
+            "break_time_unix": int(self.break_time.timestamp()),
             "bars_ago": self.bars_ago,
             "streak": self.streak,
         }

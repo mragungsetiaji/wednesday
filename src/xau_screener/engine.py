@@ -14,8 +14,10 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from .feeds import DataFeed, M1Buffer
+from .feeds import DataFeed, M1Buffer, build_feed
 from .scanner import ScanConfig, ScanResult, scan
+from .settings import DataSettings
+from .storage import Store
 
 log = logging.getLogger(__name__)
 
@@ -36,14 +38,21 @@ class EngineState:
 
 
 class Engine:
-    def __init__(self, feed: DataFeed, cfg: ScanConfig, symbol: str):
+    def __init__(self, feed: DataFeed, cfg: ScanConfig, symbol: str, store: Store | None = None):
         self.feed = feed
         self.cfg = cfg
         self.symbol = symbol
-        self.buffer = M1Buffer(feed, max_bars=cfg.required_m1_bars())
+        self.store = store
+        key = (feed.name, symbol) if feed.persist else None
+        self.buffer = M1Buffer(feed, max_bars=cfg.required_m1_bars(), store=store if key else None, key=key)
         self.state = EngineState()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+
+    def _record_error(self, exc: Exception) -> None:
+        with self.state.lock:
+            self.state.error = f"{type(exc).__name__}: {exc}"
+            self.state.error_at = datetime.now(timezone.utc)
 
     def step(self) -> ScanResult:
         """Fetch new M1 bars and rescan. Errors are recorded in the state and re-raised."""
@@ -51,9 +60,7 @@ class Engine:
             m1 = self.buffer.update()
             result = scan(m1, self.cfg, self.feed.last_price())
         except Exception as exc:
-            with self.state.lock:
-                self.state.error = f"{type(exc).__name__}: {exc}"
-                self.state.error_at = datetime.now(timezone.utc)
+            self._record_error(exc)
             raise
         with self.state.lock:
             self.state.version += 1
@@ -69,19 +76,29 @@ class Engine:
             return self.state.version, self.state.result, self.state.m1
 
     def run_forever(self, delay: float = 2.0, on_result=None) -> None:
-        """Connect, then scan now and after every minute close until :meth:`stop`."""
-        self.feed.connect()
+        """Connect, then scan now and after every minute close until :meth:`stop`.
+
+        A failed connection is recorded like any other error and retried on the
+        next minute, so a terminal that is still starting doesn't kill the loop.
+        """
+        connected = False
         try:
             while not self._stop.is_set():
                 try:
+                    if not connected:
+                        self.feed.connect()
+                        connected = True
                     result = self.step()
                     if on_result:
                         on_result(result)
-                except Exception:
+                except Exception as exc:
+                    if not connected:
+                        self._record_error(exc)
                     log.exception("scan failed; retrying next minute")
                 self._stop.wait(seconds_to_next_minute(delay))
         finally:
-            self.feed.close()
+            if connected:
+                self.feed.close()
 
     def start(self, delay: float = 2.0, on_result=None) -> threading.Thread:
         """Run :meth:`run_forever` on a daemon thread (used by the web server)."""
@@ -94,3 +111,52 @@ class Engine:
         self._stop.set()
         if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout)
+
+
+class Runtime:
+    """Owns the running engine so the dashboard can switch data sources live."""
+
+    def __init__(self, cfg: ScanConfig, settings: DataSettings, store: Store | None = None,
+                 mt5_password: str | None = None, delay: float = 2.0, on_result=None, alerts=None):
+        self.cfg = cfg
+        self.store = store
+        self.mt5_password = mt5_password
+        self.delay = delay
+        self.on_result = on_result
+        self.alerts = alerts  # AlertManager or None
+        self._lock = threading.Lock()
+        self.settings = settings
+        self.engine = self._build(settings)
+
+    def _build(self, settings: DataSettings) -> Engine:
+        feed = build_feed(settings, self.mt5_password)
+        return Engine(feed, self.cfg, settings.resolved_symbol, self.store)
+
+    def _after_scan(self, result) -> None:
+        engine = self.engine
+        if self.alerts is not None:
+            try:
+                self.alerts.check(self.settings.source, engine.symbol, result, engine.state.m1)
+            except Exception:  # an alert problem must never stop scanning
+                log.exception("alert check failed")
+        if self.on_result:
+            self.on_result(result)
+
+    def start(self) -> None:
+        self.engine.start(self.delay, self._after_scan)
+
+    def run_forever(self) -> None:
+        """Console mode: scan in the calling thread."""
+        self.engine.run_forever(self.delay, self._after_scan)
+
+    def stop(self) -> None:
+        self.engine.stop()
+
+    def apply(self, settings: DataSettings) -> None:
+        """Stop the current feed, then start one for ``settings``."""
+        with self._lock:
+            new = self._build(settings)  # fails fast on a bad config, before stopping anything
+            self.engine.stop(timeout=30)
+            self.settings = settings
+            self.engine = new
+            new.start(self.delay, self._after_scan)

@@ -26,25 +26,60 @@ nearest IDM: above 1H IDM ▼ 2485.15 (+11.35) | below 15M IDM ▲ 2439.56 (-34.
 many candles have tapped an order block since it formed, and *NOTES* lists levels
 price is inside plus recent sweeps/mitigations. See [Detectors](#detectors).
 
+## Quick start (macOS / Linux)
+
+```bash
+make setup     # checks uv + Node, creates .env, installs everything, builds the dashboard
+make serve     # dashboard on http://127.0.0.1:8000 (Yahoo Finance data by default)
+make demo      # same on random demo data, if you just want to look around
+make           # list every target: dev (hot reload), scan, check, test, telegram-chats, ...
+```
+
+Extra CLI flags go through `ARGS`, e.g. `make serve PORT=9000 ARGS="--lookback 300"`.
+On Windows, use the `uv` commands below directly (see [docs/DEPLOY_WINDOWS.md](docs/DEPLOY_WINDOWS.md)).
+
 ## Setup (uv)
 
 ```bash
-uv sync                      # core deps (pandas, numpy) + dev tools
+uv sync                      # everything for the default setup (Yahoo Finance + SQLite)
 uv sync --extra mt5          # MetaTrader 5 feed (Windows only)
-uv sync --extra yfinance     # Yahoo Finance feed (testing / non-Windows)
+uv sync --extra postgres     # PostgreSQL storage
 ```
 
 ## Run
 
 ```bash
-# MetaTrader 5 terminal must be running and logged in
-uv run xau-screener --source mt5 --symbol XAUUSD
+uv run xau-screener --serve                      # dashboard on http://127.0.0.1:8000, Yahoo Finance data
 
-# Other feeds
-uv run xau-screener --source yfinance            # GC=F futures, ~7 days of 1m only
+# Console only, or pick a source explicitly
+uv run xau-screener --source mt5 --symbol XAUUSD # MT5 terminal running and logged in
 uv run xau-screener --source csv --csv data/xauusd_m1.csv
 uv run xau-screener --source synthetic --once    # random-walk demo, no data needed
 ```
+
+## Data sources and storage
+
+| Source | Cost | Notes |
+| --- | --- | --- |
+| `yfinance` (default) | Free | COMEX gold futures `GC=F`, not spot; Yahoo only serves ~7 days of 1-minute bars |
+| `mt5` | Your broker | Spot XAUUSD from a running MT5 terminal on the same Windows machine |
+| `csv` | - | M1 bars from a file another process keeps appending to |
+| `synthetic` | - | Random-walk demo data, never stored |
+
+Pick the source in the dashboard under **Settings**: saving restarts the feed
+live, no server restart. The choice is saved and wins over `XAU_SOURCE` in
+`.env`; an explicit `--source` flag wins over both (`--reset-settings` forgets
+the saved choice). The MT5 password is only read from `MT5_PASSWORD` in `.env`
+and never stored.
+
+Every fetched M1 bar is stored per source and symbol, so a restart resumes
+from the database instead of refetching, and Yahoo's 7-day window stops being a
+limit: history keeps growing while the screener runs (4H with the default
+lookback wants ~48k M1 bars, about 5 weeks). Storage is **SQLite** at
+`data/xau.db` by default. For **PostgreSQL**, set
+`XAU_DB_URL=postgresql+psycopg://user:pass@host:5432/xau` and run
+`uv sync --extra postgres`; the tables are created on first start.
+`--db none` turns storage off.
 
 ## Web dashboard (React)
 
@@ -55,13 +90,21 @@ cd web && npm install && npm run build && cd ..   # once, and after UI changes (
 uv run xau-screener --serve                        # scan loop + dashboard on http://127.0.0.1:8000
 ```
 
-The dashboard shows the live price, the nearest level above and below per detector
-across all timeframes, the market structure bias per timeframe (direction of the
-latest break, BOS or CHoCH), recent sweeps/mitigations, a table per timeframe (4H down
-to 5M), and a candlestick chart with order blocks as boxes, BSL/SSL as blue lines
-(thick for EQH/EQL) and IDM as dotted lines, optionally with higher timeframe
-levels faded on top. Each detector can be toggled on/off. It refreshes itself
-every few seconds; the server rescans once a minute. API docs: `http://127.0.0.1:8000/api/docs`.
+The chart comes first. Beside it, a **price ladder** lists what matters around
+price in the same vertical order as the chart's price axis: sell limit setups
+(`S1`–`S3`, extreme first) and the nearest liquidity/IDM above, the live price,
+then buy setups (`B1`–`B3`) and levels below. Every ladder row is pinned on the
+chart under the same tag: setups as an entry line with a dashed stop, levels as
+lines. Hovering a row highlights it on the chart and dims the rest; a level
+outside the visible range docks to the chart edge with its price. Clicking a row
+opens its timeframe.
+
+The chart also shows the charted timeframe's order blocks (boxes, mid OBs
+lighter), liquidity and IDM, higher-timeframe levels faded, the latest break of
+structure (BOS/CHoCH) as a dashed segment, and recent sweeps as markers. The
+timeframe tabs carry each timeframe's structure direction. Structure, events and
+an all-timeframes table sit below the chart. It refreshes every few seconds; the
+server rescans once a minute. API docs: `http://127.0.0.1:8000/api/docs`.
 
 For UI development, run the server and the Vite dev server side by side:
 
@@ -97,6 +140,7 @@ Useful options:
 | `--once` | off | Scan once and exit instead of looping every minute |
 | `--serve` | off | Also run the web dashboard + API (`XAU_SERVE=1`) |
 | `--host` / `--port` | `127.0.0.1` / `8000` | Dashboard address (`XAU_HOST`, `XAU_PORT`) |
+| `--db` | `sqlite:///data/xau.db` | Storage URL (`XAU_DB_URL`); `none` disables it |
 | `--check` | off | Test the feed connection (account, symbol, bars loaded) and exit |
 | `--log-file` | - | Rotating log file, includes every scan table (`XAU_LOG_FILE`) |
 | `--json-out` | - | Append each scan as a JSON line (for bots/dashboards) |
@@ -104,6 +148,24 @@ Useful options:
 
 The 4H timeframe with `--lookback 200` needs about 48k M1 bars, which are loaded
 once at startup; after that only the last 30 bars are fetched each minute.
+
+## Telegram alerts
+
+When price trades into an active order block, the screener sends a Telegram
+message with the timeframe, extreme/mid, the limit entry, stop and risk, and
+that timeframe's structure. The check uses the high/low of the new M1 bars, so
+a wick into the zone counts even if the minute closes outside it. Each order
+block alerts once (the log is kept in the database, so restarts don't repeat
+alerts), and bars from before the order block was confirmed never trigger it.
+
+1. Create a bot with `@BotFather` and put the token in `.env` as `TELEGRAM_BOT_TOKEN`.
+2. Send the bot any message, run `make telegram-chats` (or `uv run xau-screener --telegram-chats`)
+   and put the printed id in `.env` as `TELEGRAM_CHAT_ID`.
+3. Restart, then `make telegram-test` or **Settings > Send test message**.
+
+In **Settings** you choose which timeframes and which order blocks (extreme,
+mid) alert, pause alerts, and see the recent alert log. The token and chat id
+stay in `.env`; they are never written to the database.
 
 ## Detectors
 
@@ -187,6 +249,9 @@ src/xau_screener/
   report.py       console table
   engine.py       scan loop shared by the console and the web server
   server.py       FastAPI: /api/scan, /api/candles, serves the built dashboard
+  settings.py     data source settings, source catalog, precedence rules
+  alerts.py       Telegram alerts when price enters an order block
+  storage.py      SQLAlchemy store: saved settings + M1 history (SQLite / PostgreSQL)
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)
 scripts/          Windows VPS: auto-restart wrapper + Task Scheduler installer

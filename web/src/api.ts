@@ -41,7 +41,9 @@ export interface Bias {
   event: "BOS" | "CHoCH";
   level: number;
   swing_time: string;
+  swing_time_unix: number;
   break_time: string;
+  break_time_unix: number;
   break_close_time: string; // when the break candle closed (break confirmed)
   bars_ago: number;
   streak: number;
@@ -118,3 +120,116 @@ export const fetchScan = () => getJson<ScanResponse>("/api/scan");
 
 export const fetchCandles = (tf: string, limit: number) =>
   getJson<CandlesResponse>(`/api/candles?tf=${encodeURIComponent(tf)}&limit=${limit}`);
+
+export interface SourceInfo {
+  id: string;
+  title: string;
+  description: string;
+  default_symbol: string;
+  available: boolean;
+  unavailable_reason: string | null;
+}
+
+export interface DataSettings {
+  source: string;
+  symbol: string | null;
+  csv_path: string | null;
+  mt5_login: number | null;
+  mt5_server: string | null;
+  mt5_path: string | null;
+}
+
+export interface SettingsResponse {
+  editable: boolean;
+  settings: DataSettings | null;
+  sources: SourceInfo[];
+  mt5_password_set: boolean;
+  running: {
+    source: string;
+    symbol: string;
+    version: number;
+    scanned_at: string | null;
+    error: string | null;
+    bars_loaded: number;
+    bars_needed: number;
+    first_bar: string | null;
+    last_bar: string | null;
+  };
+  storage: {
+    backend: string;
+    url: string;
+    series: { source: string; symbol: string; bars: number; first: string | null; last: string | null }[];
+  } | null;
+}
+
+export const fetchSettings = () => getJson<SettingsResponse>("/api/settings");
+
+export async function saveSettings(settings: DataSettings): Promise<SettingsResponse> {
+  const res = await fetch("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<SettingsResponse>;
+}
+
+export interface AlertSettings {
+  enabled: boolean;
+  timeframes: string[];
+  priorities: string[];
+}
+
+export interface AlertRow {
+  key: string;
+  source: string;
+  symbol: string;
+  timeframe: string;
+  kind: string;
+  priority: string;
+  entry: number;
+  price: number;
+  sent_at: string;
+  status: "sent" | "failed";
+  error: string | null;
+}
+
+export interface AlertsResponse {
+  editable: boolean;
+  token_set: boolean;
+  chat_id_set: boolean;
+  configured: boolean;
+  settings: AlertSettings | null;
+  last_error: string | null;
+  recent: AlertRow[];
+}
+
+async function send<T>(method: string, url: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(detail);
+  }
+  return res.json() as Promise<T>;
+}
+
+export const fetchAlerts = () => getJson<AlertsResponse>("/api/alerts");
+export const saveAlerts = (s: AlertSettings) => send<AlertsResponse>("PUT", "/api/alerts", s);
+export const testAlert = () => send<{ ok: boolean }>("POST", "/api/alerts/test");

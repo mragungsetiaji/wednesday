@@ -54,8 +54,8 @@ class FakeMT5(types.ModuleType):
         return types.SimpleNamespace(bid=2650.7, ask=2651.0)
 
 
-ENV_KEYS = ("XAU_SOURCE", "XAU_SYMBOL", "XAU_JSON_OUT", "XAU_LOG_FILE",
-            "MT5_LOGIN", "MT5_PASSWORD", "MT5_SERVER", "MT5_PATH")
+ENV_KEYS = ("XAU_SOURCE", "XAU_SYMBOL", "XAU_CSV", "XAU_DB_URL", "XAU_JSON_OUT", "XAU_LOG_FILE",
+            "XAU_SERVE", "MT5_LOGIN", "MT5_PASSWORD", "MT5_SERVER", "MT5_PATH")
 
 
 @pytest.fixture(autouse=True)
@@ -109,17 +109,35 @@ def test_mt5_feed_unknown_symbol(fake_mt5):
 
 
 def test_env_file_and_cli_precedence(tmp_path, monkeypatch):
+    from xau_screener.settings import SETTINGS_KEY, resolve
+    from xau_screener.storage import Store
+
     env = tmp_path / ".env"
-    env.write_text('# comment\nXAU_SYMBOL=XAUUSD.m\nMT5_LOGIN=555\nMT5_SERVER="Broker-Live"\n', encoding="utf-8")
-
+    env.write_text('# comment\nXAU_SOURCE=mt5\nXAU_SYMBOL=XAUUSD.m\nMT5_LOGIN=555\nMT5_SERVER="Broker-Live"\n', encoding="utf-8")
     args = cli.parse_args(["--env-file", str(env)])
-    assert args.symbol == "XAUUSD.m"
-    assert args.mt5_login == 555
-    assert args.mt5_server == "Broker-Live"
-    assert args.source == "mt5"
+    assert args.source is None and args.symbol is None  # only explicit flags are kept on args
 
-    args = cli.parse_args(["--env-file", str(env), "--symbol", "GOLD"])
-    assert args.symbol == "GOLD"
+    def cli_values(a):
+        return {"source": a.source, "symbol": a.symbol, "csv_path": a.csv, "mt5_login": a.mt5_login,
+                "mt5_server": a.mt5_server, "mt5_path": a.mt5_path}
+
+    # Environment only.
+    d = resolve(cli_values(args), None)
+    assert (d.source, d.resolved_symbol, d.mt5_login, d.mt5_server) == ("mt5", "XAUUSD.m", 555, "Broker-Live")
+
+    # Saved dashboard settings beat the environment; switching source resets the symbol.
+    store = Store(f"sqlite:///{tmp_path / 'x.db'}")
+    store.set_setting(SETTINGS_KEY, {"source": "yfinance", "symbol": None})
+    d = resolve(cli_values(args), store)
+    assert (d.source, d.resolved_symbol) == ("yfinance", "GC=F")
+    assert d.mt5_login == 555  # fields not saved still come from the environment
+
+    # Explicit flags beat everything.
+    args = cli.parse_args(["--env-file", str(env), "--source", "mt5", "--symbol", "GOLD"])
+    d = resolve(cli_values(args), store)
+    assert (d.source, d.resolved_symbol) == ("mt5", "GOLD")
+    args = cli.parse_args(["--env-file", str(env), "--source", "synthetic"])
+    assert resolve(cli_values(args), store).resolved_symbol == "XAUUSD"
 
 
 def test_check_mode_with_fake_mt5(fake_mt5, capsys, monkeypatch, tmp_path):
