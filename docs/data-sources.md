@@ -17,6 +17,7 @@ uv sync                      # default setup (Yahoo Finance + SQLite)
 uv sync --extra mt5          # MetaTrader 5 feed (Windows only)
 uv sync --extra postgres     # PostgreSQL storage
 uv sync --extra llm          # Claude / OpenAI SDKs for the news brief
+uv sync --extra ml           # scikit-learn + pyarrow for the Lab (training, model files, Parquet)
 ```
 
 ## Picking a source

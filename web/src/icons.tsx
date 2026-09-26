@@ -71,3 +71,23 @@ export const LayoutIcon = ({ panes, ...p }: IconProps & { panes: 1 | 2 | 4 }) =>
     {panes === 4 && <path d="M2 8h12" />}
   </Svg>
 );
+
+/** Flask: the Lab (labels, training, models). */
+export const FlaskIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 2.5h4M6.5 2.5v4L3 12.5a.8.8 0 0 0 .7 1h8.6a.8.8 0 0 0 .7-1L9.5 6.5v-4" />
+    <path d="M4.5 10h7" />
+  </Svg>
+);
+
+export const CheckIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 8.5l3.2 3L13 4.5" />
+  </Svg>
+);
+
+export const CrossIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 4l8 8M12 4l-8 8" />
+  </Svg>
+);

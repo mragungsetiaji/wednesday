@@ -1,0 +1,270 @@
+"""HTTP routes of the Lab (``/api/lab/...``)."""
+
+from __future__ import annotations
+
+import io
+from typing import Callable
+
+import pandas as pd
+from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi.responses import Response
+
+from ..detectors import build_detectors
+from ..structure import Context
+from ..timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
+from .dataset import LADDER, minute_dataset, ts, unix
+from .model import MAX_FILE_BYTES, ModelFileError
+from .service import Lab, history_bounds, ml_available
+from .tags import TAGS, tag_of
+from .train import TrainParams, predict_blocks
+
+DETECTOR_CONTEXT = 150  # candles before the window the detectors see, so levels near its left edge are found
+
+
+def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_source: Callable[[], str]) -> APIRouter:
+    r = APIRouter(prefix="/api/lab")
+    resampled: dict = {}
+
+    def lab() -> Lab:
+        found = get_lab()
+        if found is None:
+            raise HTTPException(409, "The Lab needs the server running with --serve and a database")
+        return found
+
+    def need_ml() -> None:
+        ok, reason = ml_available()
+        if not ok:
+            raise HTTPException(409, reason)
+
+    def symbol() -> str:
+        return get_engine().symbol
+
+    def live_m1() -> pd.DataFrame | None:
+        return get_engine().snapshot()[2]
+
+    def history() -> pd.DataFrame | None:
+        return lab().history(get_source(), symbol(), live_m1())
+
+    def candles_of(m1: pd.DataFrame, tf_name: str) -> pd.DataFrame:
+        key = (get_source(), symbol(), tf_name)
+        stamp = (len(m1), m1.index[-1])
+        hit = resampled.get(key)
+        if hit is None or hit[0] != stamp:
+            hit = (stamp, resample_ohlcv(m1, TIMEFRAMES_BY_NAME[tf_name]))
+            resampled[key] = hit
+        return hit[1]
+
+    def timeframe(name: str):
+        tf = TIMEFRAMES_BY_NAME.get(name.upper())
+        if tf is None:
+            raise HTTPException(404, f"unknown timeframe {name!r}")
+        return tf
+
+    @r.get("")
+    def status() -> dict:
+        found = get_lab()
+        if found is None:
+            return {"editable": False, "available": ml_available()[0], "reason": "The Lab needs the server running with --serve and a database"}
+        m1 = history()
+        return {"editable": True, "symbol": symbol(), "history": history_bounds(m1), **found.status(symbol())}
+
+    @r.get("/candles")
+    def candles(tf: str = Query("5M"), end: int | None = Query(None), limit: int = Query(300, ge=20, le=2000),
+                model: bool = Query(False)) -> dict:
+        """A window of closed candles ending at ``end`` (unix, feed clock; default: latest) with the
+        labels, reviewed ranges, detector suggestions and, with ``model``, the active model's blocks."""
+        tfo = timeframe(tf)
+        m1 = history()
+        if m1 is None:
+            raise HTTPException(503, "no data yet")
+        allc = candles_of(m1, tfo.name)
+        upto = allc if end is None else allc[allc.index <= ts(end)]
+        window = upto.tail(limit)
+        if window.empty:
+            return {"timeframe": tfo.name, "candles": [], "labels": [], "reviewed": [], "suggestions": [],
+                    "predictions": [], "has_more": False, "history": history_bounds(m1)}
+        start_u, end_u = unix(window.index[0]), unix(window.index[-1])
+
+        ctx_candles = upto.tail(limit + DETECTOR_CONTEXT)
+        suggestions = []
+        found = lab()
+        if len(ctx_candles) > 10:
+            ctx = Context(ctx_candles)
+            for det in build_detectors(("ob", "liquidity", "idm"), found.detector):
+                for lv in det.detect(ctx):
+                    tag = tag_of(lv)
+                    if tag is None or lv.time < window.index[0]:
+                        continue
+                    suggestions.append({"id": f"{tfo.name}:{tag}:{unix(lv.time)}", "tag": tag, "time_unix": unix(lv.time),
+                                        "top": lv.top, "bottom": lv.bottom, "label": lv.label,
+                                        "priority": lv.meta.get("priority")})
+
+        predictions = []
+        if model:
+            need_ml()
+            bundle = found.active()
+            if bundle is not None:
+                m1_upto = m1[m1.index < window.index[-1] + tfo.delta]
+                predictions = predict_blocks(bundle, m1_upto, tfo, limit=len(window))
+                verdicts = {(v["tag"], v["time"]): v["verdict"] for v in found.reviews(symbol(), tfo.name)
+                            if v["model_id"] == bundle.id}
+                for p in predictions:
+                    p["model_id"] = bundle.id
+                    p["verdict"] = verdicts.get((p["tag"], p["time_unix"]))
+
+        return {
+            "timeframe": tfo.name,
+            "candles": [{"time": unix(t), "open": c.open, "high": c.high, "low": c.low, "close": c.close}
+                        for t, c in zip(window.index, window.itertuples(index=False))],
+            "labels": found.labels(symbol(), tfo.name, start_u, end_u),
+            "reviewed": found.reviewed(symbol(), tfo.name, start_u, end_u),
+            "suggestions": suggestions,
+            "predictions": predictions,
+            "has_more": len(upto) > len(window),
+            "is_latest": end is None or len(upto) == len(allc),
+            "history": history_bounds(m1),
+        }
+
+    @r.post("/labels")
+    def add_label(body: dict = Body(...)) -> dict:
+        origin = body.get("origin") if body.get("origin") in ("manual", "detector") else "manual"
+        try:
+            return lab().add_label(symbol(), body, origin)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @r.delete("/labels/{label_id}")
+    def delete_label(label_id: str) -> dict:
+        return {"deleted": lab().delete("labels", label_id)}
+
+    @r.post("/reviewed")
+    def add_reviewed(body: dict = Body(...)) -> dict:
+        try:
+            return lab().add_reviewed(symbol(), body)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @r.delete("/reviewed/{row_id}")
+    def delete_reviewed(row_id: str) -> dict:
+        return {"deleted": lab().delete("reviewed", row_id)}
+
+    @r.get("/dataset")
+    def dataset(fmt: str = Query("parquet", alias="format"), days: int = Query(30, ge=1, le=400)) -> Response:
+        """Per-minute table: M1 OHLCV, the forming candle of every timeframe, one label column per timeframe and tag."""
+        m1 = history()
+        if m1 is None:
+            raise HTTPException(503, "no data yet")
+        found = lab()
+        m1 = m1[m1.index >= m1.index[-1] - pd.Timedelta(days=days)]
+        frame = minute_dataset(m1, found.by_tf(found.labels(symbol())), found.by_tf(found.reviewed(symbol())),
+                               list(TAGS), LADDER)
+        name = f"wednesday-{symbol().replace('=', '')}-{days}d"
+        if fmt == "csv":
+            return Response(frame.to_csv(), media_type="text/csv",
+                            headers={"Content-Disposition": f'attachment; filename="{name}.csv"'})
+        need_ml()
+        buf = io.BytesIO()
+        frame.to_parquet(buf)
+        return Response(buf.getvalue(), media_type="application/vnd.apache.parquet",
+                        headers={"Content-Disposition": f'attachment; filename="{name}.parquet"'})
+
+    @r.post("/train", status_code=202)
+    def train(body: dict = Body(...)) -> dict:
+        need_ml()
+        params = TrainParams.from_dict(body)
+        if errors := params.validate():
+            raise HTTPException(422, "; ".join(errors))
+        m1 = history()
+        if m1 is None:
+            raise HTTPException(503, "no data yet")
+        try:
+            lab().start_training(m1, symbol(), params)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return status()
+
+    @r.put("/active")
+    def set_active(body: dict = Body(...)) -> dict:
+        need_ml()
+        try:
+            lab().activate(body.get("id") or None)
+        except ModelFileError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return status()
+
+    @r.delete("/models/{model_id}")
+    def delete_model(model_id: str) -> dict:
+        try:
+            if not lab().delete_model(model_id):
+                raise HTTPException(404, "No such model")
+        except ModelFileError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return status()
+
+    @r.get("/models/{model_id}/file")
+    def model_file(model_id: str) -> Response:
+        try:
+            data = lab().export(model_id)
+        except ModelFileError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return Response(data, media_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="wednesday-model-{model_id}.zip"'})
+
+    @r.post("/models/import")
+    async def import_model(request: Request) -> dict:
+        """Upload a model file (raw body). Only its manifest is read; loading waits for the confirm call."""
+        data = await request.body()
+        if len(data) > MAX_FILE_BYTES:
+            raise HTTPException(413, "The file is larger than 200 MB")
+        try:
+            return lab().stage_import(data)
+        except ModelFileError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @r.post("/models/import/{token}")
+    def confirm_import(token: str) -> dict:
+        need_ml()
+        try:
+            manifest = lab().confirm_import(token)
+        except ModelFileError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"imported": manifest, **status()}
+
+    @r.get("/predictions")
+    def predictions(tf: str = Query("5M"), limit: int = Query(200, ge=10, le=2000),
+                    threshold: float = Query(0, ge=0, le=0.99)) -> dict:
+        """The active model's blocks on the live chart (the screener's ML layer). A threshold
+        of 0 uses each tag's cut from training."""
+        found = get_lab()
+        if found is None or not ml_available()[0]:
+            return {"model": None, "blocks": []}
+        bundle = found.active()
+        m1 = live_m1()
+        if bundle is None or m1 is None:
+            return {"model": bundle.manifest if bundle else None, "blocks": []}
+        tfo = timeframe(tf)
+        blocks = predict_blocks(bundle, m1, tfo, limit=limit, threshold=threshold or None)
+        verdicts = {(v["tag"], v["time"]): v for v in found.reviews(symbol(), tfo.name) if v["model_id"] == bundle.id}
+        for b in blocks:
+            v = verdicts.get((b["tag"], b["time_unix"]))
+            b.update(model_id=bundle.id, verdict=v["verdict"] if v else None, outcome=v["outcome"] if v else None)
+        return {"model": {"id": bundle.id, "name": bundle.manifest["name"]}, "blocks": blocks}
+
+    @r.post("/reviews")
+    def review(body: dict = Body(...)) -> dict:
+        try:
+            return lab().add_review(symbol(), body, history())
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @r.get("/feedback")
+    def feedback() -> Response:
+        """Reviews with the candle's features and both rewards, as CSV."""
+        m1 = history()
+        if m1 is None:
+            raise HTTPException(503, "no data yet")
+        frame = lab().feedback_frame(symbol(), m1)
+        return Response(frame.to_csv(index=False), media_type="text/csv",
+                        headers={"Content-Disposition": 'attachment; filename="wednesday-feedback.csv"'})
+
+    return r

@@ -1,0 +1,331 @@
+"""Training and prediction.
+
+Two kinds of model go into one file:
+
+* **Tag models**, one per tag: "is this candle an order block / liquidity /
+  inducement?" Trained on your labels only (1 = tagged, 0 = reviewed and
+  untagged or marked "not"), pooled over the chosen timeframes.
+* **Outcome model**: "if this order block is traded with the limit plan, does
+  it reach ``rr`` R before the stop?" The market gives this answer, so besides
+  your order block labels it also learns from every order block the detector
+  found in the history.
+
+Every split is by time: the last ``test_fraction`` of samples (by the moment
+they became known) is held out for the scores, then the model is refit on all.
+"""
+
+from __future__ import annotations
+
+import uuid
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
+
+import numpy as np
+import pandas as pd
+
+from ..detectors.base import DetectorParams
+from ..detectors.orderblock import OrderBlockDetector
+from ..structure import Context
+from ..timeframes import TIMEFRAMES_BY_NAME, Timeframe
+from .dataset import FeatureParams, _atr, feature_names, label_matrix, timeframe_features, ts, unix
+from .model import ModelBundle
+from .outcome import TradePlan, plan_levels, simulate
+from .tags import OB_TAGS, TAGS
+
+MIN_CLASS = 5  # samples of each class needed to train a tag
+ZONE_FEATURES = ["zone_dir", "zone_body", "zone_risk", "zone_capped", "zone_entry"]
+
+
+@dataclass
+class TrainParams:
+    timeframes: list[str] = field(default_factory=lambda: ["5M", "15M"])
+    tags: list[str] = field(default_factory=lambda: list(TAGS))
+    lookback: int = 10
+    confirm: int = 3
+    rr: float = 2.0
+    horizon_hours: int = 72
+    outcome_from_detector: bool = True
+    test_fraction: float = 0.2
+    name: str = ""
+    author: str = ""
+    note: str = ""
+
+    def validate(self) -> list[str]:
+        errors = []
+        bad = [t for t in self.timeframes if t not in TIMEFRAMES_BY_NAME]
+        if bad or not self.timeframes:
+            errors.append(f"Pick timeframes from {', '.join(TIMEFRAMES_BY_NAME)}")
+        if not self.tags or any(t not in TAGS for t in self.tags):
+            errors.append(f"Pick tags from {', '.join(TAGS)}")
+        if not 2 <= self.lookback <= 50:
+            errors.append("Lookback must be 2 to 50 candles")
+        if not 1 <= self.confirm <= 20:
+            errors.append("Confirmation must be 1 to 20 candles")
+        if not 0.5 <= self.rr <= 10:
+            errors.append("Target must be 0.5 to 10 R")
+        if not 1 <= self.horizon_hours <= 24 * 30:
+            errors.append("Horizon must be 1 hour to 30 days")
+        if not 0.05 <= self.test_fraction <= 0.5:
+            errors.append("Test share must be 5% to 50%")
+        return errors
+
+    @classmethod
+    def from_dict(cls, d: dict | None) -> TrainParams:
+        base = asdict(cls())
+        d = {k: v for k, v in (d or {}).items() if k in base}
+        return cls(**{**base, **d})
+
+    @property
+    def features(self) -> FeatureParams:
+        return FeatureParams(lookback=self.lookback, confirm=self.confirm)
+
+
+def _classifier():
+    from sklearn.ensemble import HistGradientBoostingClassifier
+
+    # No class weights: they make scikit-learn's binning very slow, and unweighted
+    # probabilities read as real frequencies (the chart's threshold does the rest).
+    return HistGradientBoostingClassifier(max_iter=200, learning_rate=0.07, max_leaf_nodes=15,
+                                          l2_regularization=1.0, random_state=0)
+
+
+def best_threshold(y: np.ndarray, p: np.ndarray) -> float:
+    """Probability cut with the best F1 (0.5 when there is nothing to tune on)."""
+    if len(np.unique(y)) < 2:
+        return 0.5
+    best, cut = -1.0, 0.5
+    for t in np.unique(np.round(p, 3)):
+        pred = p >= t
+        tp = float((pred & (y == 1)).sum())
+        f1 = 2 * tp / (pred.sum() + y.sum()) if pred.sum() + y.sum() else 0.0
+        if f1 > best:
+            best, cut = f1, float(t)
+    return min(max(cut, 0.05), 0.95)
+
+
+def fit_eval(X: pd.DataFrame, y: np.ndarray, when: np.ndarray, test_fraction: float,
+             r: np.ndarray | None = None) -> tuple[object | None, dict]:
+    """Split by time into train / tune / test. Fit on train, pick the probability cut on the
+    tune part (best F1), score the test part at that cut, then refit on everything."""
+    from sklearn.metrics import average_precision_score, precision_score, recall_score, roc_auc_score
+
+    n, pos = len(y), int(y.sum())
+    info = {"samples": n, "positives": pos}
+    if pos < MIN_CLASS or n - pos < MIN_CLASS:
+        return None, {**info, "skipped": f"needs at least {MIN_CLASS} of each class (has {pos} yes, {n - pos} no)"}
+    order = np.argsort(when, kind="stable")
+    cut_test = int(round(n * (1 - test_fraction)))
+    cut_tune = int(round(cut_test * (1 - test_fraction)))
+    tr, tune, te = order[:cut_tune], order[cut_tune:cut_test], order[cut_test:]
+    if len(np.unique(y[tr])) < 2:
+        return None, {**info, "skipped": "the training part has only one class; label more of the earlier history"}
+    model = _classifier().fit(X.iloc[tr], y[tr])
+    threshold = best_threshold(y[tune], model.predict_proba(X.iloc[tune])[:, 1]) if len(tune) else 0.5
+    p = model.predict_proba(X.iloc[te])[:, 1] if len(te) else np.array([])
+    pred = p >= threshold
+    test = {"threshold": threshold, "test_samples": int(len(te)), "test_positives": int(y[te].sum()),
+            "test_from": pd.Timestamp(when[te].min()).isoformat() if len(te) else None}
+    if len(te):
+        test["precision"] = float(precision_score(y[te], pred, zero_division=0))
+        test["recall"] = float(recall_score(y[te], pred, zero_division=0))
+        if len(np.unique(y[te])) == 2:
+            test["auc"] = float(roc_auc_score(y[te], p))
+            test["avg_precision"] = float(average_precision_score(y[te], p))
+        test["base_rate"] = float(y[te].mean())
+        if r is not None:
+            test["avg_r_all"] = float(r[te].mean())
+            test["picked"] = int(pred.sum())
+            test["avg_r_picked"] = float(r[te][pred].mean()) if pred.any() else None
+    final = _classifier().fit(X, y)
+    return final, {**info, **test}
+
+
+# ---- samples --------------------------------------------------------------
+
+@dataclass
+class Frames:
+    """Candles and features of one timeframe, computed once per training run."""
+
+    tf: Timeframe
+    candles: pd.DataFrame
+    feats: pd.DataFrame
+    atr: pd.Series
+
+
+def frames_for(m1: pd.DataFrame, tf: Timeframe, fp: FeatureParams) -> Frames:
+    candles, feats = timeframe_features(m1, tf, fp)
+    return Frames(tf, candles, feats, _atr(candles, fp.atr_length).reindex(feats.index))
+
+
+def tag_samples(frames: list[Frames], labels: dict[str, list[dict]], reviewed: dict[str, list[dict]],
+                tags: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(features, label matrix) of every candle with at least one known label."""
+    xs, ys = [], []
+    for fr in frames:
+        matrix = label_matrix(fr.feats.index, labels.get(fr.tf.name, []), reviewed.get(fr.tf.name, []), tags)
+        keep = matrix.notna().any(axis=1)
+        xs.append(fr.feats[keep])
+        ys.append(matrix[keep])
+    if not xs:
+        return pd.DataFrame(), pd.DataFrame(columns=tags)
+    return pd.concat(xs), pd.concat(ys)
+
+
+def zone_features(feats_row: pd.Series, atr: float, close: float, direction: str, top: float, bottom: float,
+                  max_sl: float) -> dict | None:
+    levels = plan_levels(direction, top, bottom, max_sl)
+    if levels is None or not atr or np.isnan(atr):
+        return None
+    entry, stop = levels
+    return {"zone_dir": 1.0 if direction == "bullish" else -1.0, "zone_body": (top - bottom) / atr,
+            "zone_risk": abs(entry - stop) / atr, "zone_capped": float(top - bottom > max_sl),
+            "zone_entry": (entry - close) / atr}
+
+
+def outcome_samples(m1: pd.DataFrame, frames: list[Frames], labels: dict[str, list[dict]], params: TrainParams,
+                    detector: DetectorParams) -> pd.DataFrame:
+    """One row per order block (your labels, plus the detector's when asked) with its traded outcome."""
+    plan = TradePlan(rr=params.rr, horizon_minutes=params.horizon_hours * 60, max_sl=detector.max_sl)
+    rows = []
+    for fr in frames:
+        c = fr.candles
+        blocks: dict[pd.Timestamp, tuple[str, float, float, pd.Timestamp, str]] = {}
+        if params.outcome_from_detector and len(c) > 2 * detector.swing_length + 2:
+            for lv in OrderBlockDetector(detector).detect(Context(c)):
+                known = lv.confirmed_time + fr.tf.delta  # the break candle's close
+                blocks[lv.time] = (lv.kind, lv.top, lv.bottom, known, "detector")
+        for lab in labels.get(fr.tf.name, []):
+            if lab["value"] != 1 or lab["tag"] not in OB_TAGS:
+                continue
+            span = c.loc[ts(lab["start"]):ts(lab["end"])]
+            if span.empty:
+                continue
+            top = lab["top"] if lab.get("top") is not None else float(np.maximum(span["open"], span["close"]).max())
+            bottom = lab["bottom"] if lab.get("bottom") is not None else float(np.minimum(span["open"], span["close"]).min())
+            blocks[span.index[-1]] = (TAGS[lab["tag"]]["kind"], top, bottom, pd.NaT, "label")
+        for t, (direction, top, bottom, known, origin) in blocks.items():
+            if t not in fr.feats.index:
+                continue
+            row = fr.feats.loc[t]
+            start = row["available_at"] if pd.isna(known) else max(known, row["available_at"])
+            zone = zone_features(row, float(fr.atr.loc[t]), float(c.loc[t, "close"]), direction, top, bottom, detector.max_sl)
+            if zone is None:
+                continue
+            entry, stop = plan_levels(direction, top, bottom, detector.max_sl)
+            outcome, r = simulate(m1, direction, entry, stop, start, plan)
+            if outcome not in ("win", "loss"):
+                continue
+            rows.append({**row.to_dict(), **zone, "available_at": start, "outcome": outcome, "r": r, "origin": origin})
+    return pd.DataFrame(rows)
+
+
+# ---- training ---------------------------------------------------------------
+
+def train_bundle(m1: pd.DataFrame, labels: dict[str, list[dict]], reviewed: dict[str, list[dict]],
+                 params: TrainParams, symbol: str, detector: DetectorParams, progress=lambda stage: None) -> ModelBundle:
+    fp = params.features
+    progress("Building features")
+    frames = [frames_for(m1, TIMEFRAMES_BY_NAME[name], fp) for name in params.timeframes]
+    X, Y = tag_samples(frames, labels, reviewed, params.tags)
+    names = feature_names(X) if len(X) else []
+    tag_models, tag_metrics = {}, {}
+    for tag in params.tags:
+        progress(f"Training {TAGS[tag]['title']}")
+        known = Y[tag].notna().to_numpy() if len(Y) else np.array([], dtype=bool)
+        if not known.any():
+            tag_metrics[tag] = {"samples": 0, "positives": 0, "skipped": "no labels for this tag in reviewed ranges"}
+            continue
+        model, metrics = fit_eval(X.loc[known, names], Y[tag].to_numpy()[known].astype(int),
+                                  X["available_at"].to_numpy()[known], params.test_fraction)
+        tag_metrics[tag] = metrics
+        if model is not None:
+            tag_models[tag] = model
+
+    outcome_model, outcome_metrics, outcome_names = None, None, []
+    if any(t in OB_TAGS for t in params.tags):
+        progress("Simulating order block trades")
+        samples = outcome_samples(m1, frames, labels, params, detector)
+        if len(samples):
+            outcome_names = feature_names(frames[0].feats) + ZONE_FEATURES
+            progress("Training the outcome model")
+            y = (samples["outcome"] == "win").to_numpy().astype(int)
+            outcome_model, outcome_metrics = fit_eval(samples[outcome_names], y, samples["available_at"].to_numpy(),
+                                                      params.test_fraction, r=samples["r"].to_numpy())
+            outcome_metrics["from_labels"] = int((samples["origin"] == "label").sum())
+            outcome_metrics["from_detector"] = int((samples["origin"] == "detector").sum())
+        else:
+            outcome_metrics = {"samples": 0, "positives": 0, "skipped": "no finished order block trades in the history"}
+
+    if not tag_models and outcome_model is None:
+        reasons = "; ".join(f"{TAGS[t]['title']}: {m['skipped']}" for t, m in tag_metrics.items() if "skipped" in m)
+        raise ValueError(f"Nothing to train yet. {reasons}".strip())
+
+    now = datetime.now(timezone.utc)
+    manifest = {
+        "id": f"{now:%Y%m%d-%H%M%S}-{uuid.uuid4().hex[:6]}",
+        "name": params.name.strip() or f"{'/'.join(params.timeframes)} {now:%d %b %H:%M}",
+        "author": params.author.strip(),
+        "note": params.note.strip(),
+        "created_at": now.isoformat(),
+        "symbol": symbol,
+        "timeframes": params.timeframes,
+        "tags": {t: {"title": TAGS[t]["title"], **m, "trained": t in tag_models} for t, m in tag_metrics.items()},
+        "outcome": outcome_metrics and {**outcome_metrics, "trained": outcome_model is not None},
+        "params": {"lookback": params.lookback, "confirm": params.confirm, "rr": params.rr,
+                   "horizon_hours": params.horizon_hours, "max_sl": detector.max_sl},
+        "data": {"first": m1.index[0].isoformat(), "last": m1.index[-1].isoformat(), "m1_bars": len(m1),
+                 "labels": sum(len(v) for v in labels.values())},
+        "sklearn": _sklearn_version(),
+    }
+    return ModelBundle(manifest, tag_models, outcome_model, names, outcome_names)
+
+
+def _sklearn_version() -> str:
+    import sklearn
+
+    return sklearn.__version__
+
+
+# ---- prediction -------------------------------------------------------------
+
+def predict_blocks(bundle: ModelBundle, m1: pd.DataFrame, tf: Timeframe, limit: int = 300,
+                   threshold: float | None = None) -> list[dict]:
+    """Candles of the last ``limit`` on ``tf`` that the model tags: probability at or above
+    ``threshold``, or each tag's own cut from training when it is None."""
+    p = bundle.manifest["params"]
+    fp = FeatureParams(lookback=int(p["lookback"]), confirm=int(p["confirm"]))
+    # Enough M1 for the candles, their lookback and two higher timeframes of context.
+    need = (limit + fp.lookback + fp.confirm + 20) * tf.minutes + 3 * 240
+    fr = frames_for(m1.tail(need), tf, fp)
+    feats = fr.feats.tail(limit)
+    if feats.empty:
+        return []
+    c = fr.candles.reindex(feats.index)
+    out = []
+    probs = {tag: model.predict_proba(feats[bundle.features])[:, 1] for tag, model in bundle.models.items()}
+    for tag, pr in probs.items():
+        info = TAGS.get(tag)
+        if info is None:
+            continue
+        cut = threshold if threshold is not None else float(bundle.manifest["tags"].get(tag, {}).get("threshold", 0.5))
+        for i in np.flatnonzero(pr >= cut):
+            t = feats.index[i]
+            row = c.iloc[i]
+            if info["shape"] == "body":
+                top, bottom = max(row["open"], row["close"]), min(row["open"], row["close"])
+            elif info["shape"] == "high":
+                top = bottom = row["high"]
+            else:
+                top = bottom = row["low"]
+            block = {"id": f"{tf.name}:{tag}:{unix(t)}", "tag": tag, "title": info["title"], "timeframe": tf.name,
+                     "time_unix": unix(t), "available_unix": unix(feats["available_at"].iloc[i]),
+                     "prob": float(pr[i]), "top": float(top), "bottom": float(bottom), "outcome_prob": None}
+            if tag in OB_TAGS and bundle.outcome is not None:
+                zone = zone_features(feats.iloc[i], float(fr.atr.loc[t]), float(row["close"]), info["kind"], top, bottom,
+                                     float(p.get("max_sl", 3.0)))
+                if zone is not None:
+                    x = pd.DataFrame([{**feats.iloc[i].to_dict(), **zone}])[bundle.outcome_features]
+                    block["outcome_prob"] = float(bundle.outcome.predict_proba(x)[0, 1])
+            out.append(block)
+    out.sort(key=lambda b: b["time_unix"])
+    return out

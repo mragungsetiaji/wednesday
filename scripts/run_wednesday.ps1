@@ -9,7 +9,7 @@ if (-not $uv) { $uv = Join-Path $env:USERPROFILE ".local\bin\uv.exe" }
 if (-not (Test-Path $uv)) { throw "uv not found. Install it: powershell -c `"irm https://astral.sh/uv/install.ps1 | iex`"" }
 
 while ($true) {
-    & $uv run --extra mt5 --extra llm wednesday @args
+    & $uv run --extra mt5 --extra llm --extra ml wednesday @args
     Write-Host "$(Get-Date -Format s) wednesday exited with code $LASTEXITCODE, restarting in 30s"
     Start-Sleep -Seconds 30
 }

@@ -69,4 +69,5 @@ bars are fetched each minute.
 | `XAU_SERVE`, `XAU_HOST`, `XAU_PORT` | Dashboard |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Telegram alerts |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | News brief ([bias.md](bias.md)) |
+| `XAU_MODELS_DIR` | Where the Lab keeps model files (default `data/models`, see [lab.md](lab.md)) |
 | `XAU_LOG_FILE`, `XAU_JSON_OUT` | Logs and JSON lines output |

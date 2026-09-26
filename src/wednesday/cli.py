@@ -13,6 +13,7 @@ from pathlib import Path
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, parse_detectors
 from .alerts import ALERTS_KEY, AlertManager, AlertSettings, TelegramClient, TelegramError
 from .brief import BRIEF_KEY, BriefRunner, BriefSettings
+from .lab.service import Lab
 from .news import CALENDAR_KEY, Calendar, CalendarSettings
 from .engine import Runtime
 from .settings import SETTINGS_KEY, SOURCES, resolve
@@ -173,7 +174,8 @@ def run(args: argparse.Namespace) -> None:
                  ",".join(alert_settings.timeframes), "/".join(alert_settings.priorities))
     brief = BriefRunner(store, BriefSettings.from_dict(store.get_setting(BRIEF_KEY) if store else None))
     calendar = Calendar(store, CalendarSettings.from_dict(store.get_setting(CALENDAR_KEY) if store else None))
-    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts, brief, calendar)
+    lab = Lab(store, _env("XAU_MODELS_DIR") or "data/models", cfg.params) if store else None
+    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts, brief, calendar, lab)
     engine = runtime.engine
     feed = engine.feed
     if store:

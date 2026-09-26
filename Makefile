@@ -31,7 +31,7 @@ setup: doctor .env install ui ## First run: create .env, install dependencies, b
 	@echo "Created .env from .env.example. Edit it for MT5 or Telegram; the default source is Yahoo Finance."
 
 install: $(WEB)/node_modules ## Install Python and dashboard dependencies
-	$(UV) sync --extra llm
+	$(UV) sync --extra llm --extra ml
 
 $(WEB)/node_modules: $(WEB)/package.json $(WEB)/package-lock.json
 	cd $(WEB) && $(NPM) install

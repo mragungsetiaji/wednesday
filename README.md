@@ -50,6 +50,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **Your bias steers the list**: set bullish, bearish or neutral by hand; setups get RISK ON / RISK OFF labels, sells at a lower high (or buys at a higher low) come first, and neutral marks everything no trade.
 - **News brief**: Claude or OpenAI reads the news pages you pick and suggests a bias you can apply with one click.
 - **Risk-time warning**: a card in the corner an hour before high-impact US news, glowing in the last 30 minutes.
+- **Lab for machine learning**: tag candles by hand (order block, liquidity, inducement), train a model on your tags, export or import model files, and mark each block the model finds on the chart valid or invalid.
 - **Pings you on Telegram** when price trades into an order block.
 - **Free data by default** (Yahoo Finance), MetaTrader 5 when you're ready; history stored in SQLite or PostgreSQL.
 
@@ -86,6 +87,12 @@ Full screen, split into two or four charts. Hover one and the others follow to t
 
 <img src="docs/images/fullscreen-4-light.png" alt="Four charts full screen (30M, 15M, 4H, 5M) on gold, light theme" width="100%">
 
+### Lab: label, train, review
+
+Click candles and tag them, mark the stretches you've fully reviewed, and train a model on your tags: one classifier per tag, plus an outcome model that learns whether an order block traded with the limit plan reaches 2R first. Models are zip files you can pass on. On the screener, the **ML** layer shows the active model's blocks with valid / invalid buttons, and every review becomes a label for the next run. More in [docs/lab.md](docs/lab.md).
+
+<img src="docs/images/lab-label.png" alt="The Lab: labelling 5M candles with the detector's suggestions and the model's blocks" width="100%">
+
 > **Why "Wednesday"?** Watching gold through quarterly theory, the Wednesday and New York blocks kept coming up green. The quarterly pane shows those blocks on the chart and its stats count how often that holds.
 
 ## Quick start
@@ -113,7 +120,7 @@ Extra flags go through `ARGS`, e.g. `make serve PORT=9000 ARGS="--lookback 300"`
 **Windows / MT5**: run the `uv` commands directly, see [Windows and VPS](docs/deploy-windows.md).
 
 ```powershell
-uv sync --extra mt5 --extra llm
+uv sync --extra mt5 --extra llm --extra ml
 uv run wednesday --source mt5 --check   # test the MT5 connection
 uv run wednesday --serve
 ```
@@ -126,6 +133,7 @@ uv run wednesday --serve
 | [Dashboard](docs/dashboard.md) | Chart, level ladder, quarterly pane, panels |
 | [Data sources and storage](docs/data-sources.md) | Yahoo Finance, MT5, CSV, SQLite / PostgreSQL |
 | [Bias and news brief](docs/bias.md) | Setting a bias, risk on / off labels, the LLM news brief |
+| [Lab: labels and models](docs/lab.md) | Tag candles, train models, model files, reviewing model blocks, the dataset |
 | [Telegram alerts](docs/alerts.md) | Bot setup and when alerts fire |
 | [Configuration](docs/configuration.md) | Make targets, CLI options, `.env` |
 | [Windows and VPS](docs/deploy-windows.md) | Running 24/7 next to an MT5 terminal |

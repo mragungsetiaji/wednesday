@@ -103,6 +103,13 @@ bars, so the counts get more meaningful over time.
 The blocks need to know what clock the bar times are in: see
 [Feed clock](data-sources.md#feed-clock).
 
+## Model layer (ML)
+
+**ML** above the chart shows the active model from the [Lab](lab.md): each block
+the model finds on the chart's timeframe, as a dashed outline with its
+probability, and a **Model on 5M** panel under the chart listing them with ✓ / ✕
+to mark them valid or invalid. Without an active model the panel links to the Lab.
+
 ## Level ladder
 
 Beside the chart, the **Levels** ladder lists what matters around price in the

@@ -33,7 +33,9 @@ src/wednesday/
   bias.py         the trader's bias, its expiry, and the risk on / off label per setup
   news.py         economic calendar (ForexFactory weekly feed) for the risk-time card
   brief.py        LLM news brief (Claude or OpenAI): fetch news pages, ask, suggest a bias
-  storage.py      SQLAlchemy store: settings, M1 history, alert log (SQLite / PostgreSQL)
+  storage.py      SQLAlchemy store: settings, M1 history, alert log, Lab labels (SQLite / PostgreSQL)
+  lab/            machine learning: tags, per-minute dataset + causal features, trade outcomes,
+                  training, model files (zip + safe unpickler), the /api/lab routes
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)
 scripts/          Windows VPS: auto-restart wrapper + Task Scheduler installer

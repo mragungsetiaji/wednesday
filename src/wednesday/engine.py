@@ -119,7 +119,7 @@ class Runtime:
 
     def __init__(self, cfg: ScanConfig, settings: DataSettings, store: Store | None = None,
                  mt5_password: str | None = None, delay: float = 2.0, on_result=None, alerts=None, brief=None,
-                 calendar=None):
+                 calendar=None, lab=None):
         self.cfg = cfg
         self.store = store
         self.mt5_password = mt5_password
@@ -128,6 +128,7 @@ class Runtime:
         self.alerts = alerts  # AlertManager or None
         self.brief = brief  # BriefRunner or None
         self.calendar = calendar  # news.Calendar or None
+        self.lab = lab  # lab.service.Lab or None (needs a database)
         self.bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
         self._lock = threading.Lock()
         self.settings = settings

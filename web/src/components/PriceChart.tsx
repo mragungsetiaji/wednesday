@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Candle, QuarterBlock, QuarterRow, QuartersResponse, SwingPoint } from "../api";
 import type { CrosshairBus } from "../crosshairSync";
 import { fmtPrice } from "../format";
+import { LabPrimitive, type LabMark } from "../labPrimitive";
 import { NewsPrimitive, type NewsMark } from "../newsPrimitive";
 import { QuartersPrimitive } from "../quartersPrimitive";
 import type { ChartPalette } from "../theme";
@@ -41,11 +42,14 @@ interface Props {
   sync?: { bus: CrosshairBus; id: number }; // crosshair linked with other charts
   swings?: SwingPoint[]; // HH / LH / HL / LL labels at swing points, [] hides them
   news?: NewsMark[]; // high-impact releases as vertical lines, [] hides them
+  ml?: LabMark[]; // the active model's blocks, [] hides them
+  mlHighlight?: string | null;
 }
 
 const ROW_PX = 22;
 const NO_SWINGS: SwingPoint[] = []; // stable defaults, so the effects don't rerun every render
 const NO_NEWS: NewsMark[] = [];
+const NO_ML: LabMark[] = [];
 const QUARTER_PANE = 1;
 
 const fmtChange = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmtPrice(Math.abs(v))}`;
@@ -73,7 +77,8 @@ function candleAt(times: number[], t: number): number {
 
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
-export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS }: Props) {
+export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
+  ml = NO_ML, mlHighlight = null }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -82,6 +87,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const quarterSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const quartersRef = useRef<QuartersPrimitive | null>(null);
   const newsRef = useRef<NewsPrimitive | null>(null);
+  const mlRef = useRef<LabPrimitive | null>(null);
   const quarterPaneHeight = useRef(0);
   const candlesRef = useRef<Candle[]>([]);
   const syncRef = useRef(sync);
@@ -104,6 +110,10 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     newsPrimitive.update({ font: FONT });
     series.attachPrimitive(newsPrimitive);
     newsRef.current = newsPrimitive;
+    const mlPrimitive = new LabPrimitive(palette);
+    mlPrimitive.update({ font: FONT });
+    series.attachPrimitive(mlPrimitive);
+    mlRef.current = mlPrimitive;
     markersRef.current = createSeriesMarkers(series, []);
     const quartersPrimitive = new QuartersPrimitive(palette);
     quartersPrimitive.update({ font: FONT });
@@ -157,6 +167,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     });
     quartersRef.current?.update({ palette });
     newsRef.current?.update({ palette });
+    mlRef.current?.update({ palette });
     seriesRef.current?.applyOptions({
       upColor: palette.bull,
       downColor: palette.bear,
@@ -208,6 +219,10 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   useEffect(() => {
     newsRef.current?.update({ marks: news, times: candles.map((c) => c.time) });
   }, [news, candles]);
+
+  useEffect(() => {
+    mlRef.current?.update({ marks: ml, highlight: mlHighlight, times: candles.map((c) => c.time) });
+  }, [ml, mlHighlight, candles]);
 
   // Follow the linked charts: same time (the candle containing it on this timeframe), same price.
   useEffect(() => {

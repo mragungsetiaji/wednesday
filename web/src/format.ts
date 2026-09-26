@@ -62,3 +62,6 @@ export function fmtSpan(fromIso: string, toIso: string): string {
   if (h < 24) return `${h}h ${mins % 60}m`;
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
+
+/** Unix seconds on the feed clock, shown as-is: "2026-03-02 09:35". */
+export const fmtUnix = (t: number) => new Date(t * 1000).toISOString().slice(0, 16).replace("T", " ");

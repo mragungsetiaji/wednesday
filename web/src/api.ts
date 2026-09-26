@@ -379,3 +379,169 @@ export interface CalendarResponse {
 
 export const fetchCalendar = () => getJson<CalendarResponse>("/api/calendar");
 export const saveCalendar = (s: CalendarSettings) => send<CalendarResponse>("PUT", "/api/calendar", s);
+
+// ---- Lab: labels, training, models, reviews ----
+
+export type LabShape = "body" | "high" | "low";
+export interface LabTag {
+  id: string; // ob_bull, ob_bear, bsl, ssl, idm_bull, idm_bear
+  title: string;
+  shape: LabShape;
+}
+
+export interface LabLabel {
+  id: string;
+  timeframe: string;
+  tag: string;
+  value: 0 | 1; // 1 = it is one, 0 = marked "not"
+  start: number; // open time of the first candle (unix, feed clock)
+  end: number;
+  top: number | null;
+  bottom: number | null;
+  origin: "manual" | "detector" | "review";
+  created_at: string;
+}
+
+export interface LabReviewed {
+  id: string;
+  timeframe: string;
+  start: number;
+  end: number;
+  tags: string[];
+}
+
+export interface LabSuggestion {
+  id: string;
+  tag: string;
+  time_unix: number;
+  top: number;
+  bottom: number;
+  label: string;
+  priority: "extreme" | "middle" | null;
+}
+
+export interface MlBlock {
+  id: string;
+  tag: string;
+  title: string;
+  timeframe: string;
+  time_unix: number;
+  available_unix: number; // when the model could call it (close of the confirming candles)
+  prob: number;
+  top: number;
+  bottom: number;
+  outcome_prob: number | null; // order blocks: chance the limit reaches the target before the stop
+  model_id?: string;
+  verdict?: "valid" | "invalid" | null;
+  outcome?: string | null;
+}
+
+export interface LabWindow {
+  timeframe: string;
+  candles: Candle[];
+  labels: LabLabel[];
+  reviewed: LabReviewed[];
+  suggestions: LabSuggestion[];
+  predictions: MlBlock[];
+  has_more: boolean;
+  is_latest: boolean;
+  history: { first_unix: number; last_unix: number; bars: number } | null;
+}
+
+export interface TagMetrics {
+  title?: string;
+  samples: number;
+  positives: number;
+  skipped?: string;
+  trained?: boolean;
+  threshold?: number; // probability cut tuned before the held-out part
+  test_samples?: number;
+  test_positives?: number;
+  test_from?: string | null;
+  precision?: number;
+  recall?: number;
+  auc?: number;
+  avg_precision?: number;
+  base_rate?: number;
+  avg_r_all?: number;
+  avg_r_picked?: number | null;
+  picked?: number;
+  from_labels?: number;
+  from_detector?: number;
+}
+
+export interface ModelManifest {
+  id: string;
+  name: string;
+  author: string;
+  note: string;
+  created_at: string;
+  symbol: string;
+  timeframes: string[];
+  tags: Record<string, TagMetrics>;
+  outcome: TagMetrics | null;
+  params: { lookback: number; confirm: number; rr: number; horizon_hours: number; max_sl: number };
+  data: { first: string; last: string; m1_bars: number; labels: number };
+  sklearn: string;
+  sha256: string;
+}
+
+export interface TrainParams {
+  timeframes: string[];
+  tags: string[];
+  lookback: number;
+  confirm: number;
+  rr: number;
+  horizon_hours: number;
+  outcome_from_detector: boolean;
+  test_fraction: number;
+  name: string;
+  author: string;
+  note: string;
+}
+
+export interface LabStatus {
+  editable: boolean;
+  available: boolean;
+  reason: string | null;
+  symbol?: string;
+  history?: { first_unix: number; last_unix: number; bars: number } | null;
+  tags?: LabTag[];
+  counts?: Record<string, { tags: Record<string, { yes: number; no: number }>; reviewed: number }>;
+  training?: { running: boolean; stage: string | null; error: string | null; last: ModelManifest | null; started_at: string | null };
+  models?: ModelManifest[];
+  active?: string | null;
+}
+
+export const fetchLab = () => getJson<LabStatus>("/api/lab");
+export const fetchLabWindow = (tf: string, end: number | null, limit: number, model: boolean) =>
+  getJson<LabWindow>(`/api/lab/candles?tf=${encodeURIComponent(tf)}&limit=${limit}&model=${model}${end ? `&end=${end}` : ""}`);
+export const addLabel = (l: { timeframe: string; tag: string; start: number; end: number; value: 0 | 1; top?: number | null; bottom?: number | null; origin?: string }) =>
+  send<LabLabel>("POST", "/api/lab/labels", l);
+export const deleteLabel = (id: string) => send<{ deleted: boolean }>("DELETE", `/api/lab/labels/${encodeURIComponent(id)}`);
+export const addReviewed = (r: { timeframe: string; start: number; end: number; tags: string[] }) =>
+  send<LabReviewed>("POST", "/api/lab/reviewed", r);
+export const deleteReviewed = (id: string) => send<{ deleted: boolean }>("DELETE", `/api/lab/reviewed/${encodeURIComponent(id)}`);
+export const startTraining = (p: TrainParams) => send<LabStatus>("POST", "/api/lab/train", p);
+export const setActiveModel = (id: string | null) => send<LabStatus>("PUT", "/api/lab/active", { id });
+export const deleteModel = (id: string) => send<LabStatus>("DELETE", `/api/lab/models/${encodeURIComponent(id)}`);
+export const modelFileUrl = (id: string) => `/api/lab/models/${encodeURIComponent(id)}/file`;
+export const confirmImport = (token: string) => send<LabStatus & { imported: ModelManifest }>("POST", `/api/lab/models/import/${token}`);
+export async function stageImport(file: File): Promise<{ token: string; manifest: ModelManifest; exists: boolean }> {
+  const res = await fetch("/api/lab/models/import", { method: "POST", body: file });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+export const fetchPredictions = (tf: string, limit: number, threshold: number) =>
+  getJson<{ model: { id: string; name: string } | null; blocks: MlBlock[] }>(
+    `/api/lab/predictions?tf=${encodeURIComponent(tf)}&limit=${limit}&threshold=${threshold}`);
+export const reviewBlock = (b: MlBlock, verdict: "valid" | "invalid") =>
+  send<{ verdict: string; outcome: string | null }>("POST", "/api/lab/reviews", { ...b, verdict });

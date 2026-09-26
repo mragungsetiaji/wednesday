@@ -18,6 +18,7 @@ from sqlalchemy import (
     BigInteger,
     Column,
     Float,
+    Integer,
     MetaData,
     String,
     Table,
@@ -70,6 +71,54 @@ alerts_table = Table(
     Column("sent_at", String(40), nullable=False),  # ISO UTC
     Column("status", String(16), nullable=False),  # "sent" or "failed"
     Column("error", Text, nullable=True),
+)
+
+
+# ---- Lab (machine learning): hand-made labels, reviewed ranges, reviews of model output ----
+# Times are unix seconds of the feed's clock, like the bars.
+
+lab_labels_table = Table(
+    "lab_labels",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("symbol", String(64), nullable=False),
+    Column("timeframe", String(8), nullable=False),
+    Column("tag", String(32), nullable=False),
+    Column("value", Integer, nullable=False),  # 1 = it is one, 0 = explicitly not one
+    Column("start", BigInteger, nullable=False),  # open time of the first candle
+    Column("end", BigInteger, nullable=False),  # open time of the last candle
+    Column("top", Float, nullable=True),
+    Column("bottom", Float, nullable=True),
+    Column("origin", String(16), nullable=False),  # "manual", "detector" (accepted suggestion) or "review"
+    Column("created_at", String(40), nullable=False),
+)
+
+lab_reviewed_table = Table(
+    "lab_reviewed",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("symbol", String(64), nullable=False),
+    Column("timeframe", String(8), nullable=False),
+    Column("start", BigInteger, nullable=False),
+    Column("end", BigInteger, nullable=False),
+    Column("tags", Text, nullable=False),  # JSON list: tags fully labelled in this range
+    Column("created_at", String(40), nullable=False),
+)
+
+lab_reviews_table = Table(
+    "lab_reviews",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("symbol", String(64), nullable=False),
+    Column("model_id", String(64), nullable=False),
+    Column("timeframe", String(8), nullable=False),
+    Column("tag", String(32), nullable=False),
+    Column("time", BigInteger, nullable=False),  # open time of the candle the model flagged
+    Column("prob", Float, nullable=False),
+    Column("verdict", String(8), nullable=False),  # "valid" or "invalid"
+    Column("outcome", String(16), nullable=True),  # "win", "loss", "open", "untouched" (order blocks)
+    Column("r", Float, nullable=True),  # result in R when the trade finished
+    Column("created_at", String(40), nullable=False),
 )
 
 
@@ -167,6 +216,35 @@ class Store:
         q = select(t).order_by(t.c.sent_at.desc()).limit(limit)
         with self.engine.connect() as conn:
             return [dict(r._mapping) for r in conn.execute(q)]
+
+    # ---- lab ------------------------------------------------------------
+    def lab_rows(self, table: Table, symbol: str, timeframe: str | None = None,
+                 start: int | None = None, end: int | None = None) -> list[dict]:
+        """Rows of a lab table for a symbol, optionally one timeframe and overlapping [start, end]."""
+        t = table
+        cond = [t.c.symbol == symbol]
+        if timeframe:
+            cond.append(t.c.timeframe == timeframe)
+        time_start, time_end = (t.c.time, t.c.time) if "time" in t.c else (t.c.start, t.c.end)
+        if end is not None:
+            cond.append(time_start <= end)
+        if start is not None:
+            cond.append(time_end >= start)
+        with self.engine.connect() as conn:
+            rows = [dict(r._mapping) for r in conn.execute(select(t).where(*cond).order_by(time_start))]
+        if table is lab_reviewed_table:
+            for r in rows:
+                r["tags"] = json.loads(r["tags"])
+        return rows
+
+    def lab_put(self, table: Table, row: dict) -> None:
+        if table is lab_reviewed_table:
+            row = {**row, "tags": json.dumps(row["tags"])}
+        self._upsert(table, [row], ["id"])
+
+    def lab_delete(self, table: Table, row_id: str) -> bool:
+        with self.engine.begin() as conn:
+            return conn.execute(table.delete().where(table.c.id == row_id)).rowcount > 0
 
     # ---- helpers --------------------------------------------------------
     def _upsert(self, table: Table, rows: list[dict], keys: list[str]) -> None:

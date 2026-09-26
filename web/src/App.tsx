@@ -5,6 +5,8 @@ import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
 import { ChartFocus } from "./components/ChartFocus";
 import { EventsPanel } from "./components/EventsPanel";
+import { LabPage } from "./components/LabPage";
+import { MlPanel } from "./components/MlPanel";
 import { NewsAlert } from "./components/NewsAlert";
 import { PriceChart } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
@@ -13,7 +15,9 @@ import { SettingsPage } from "./components/SettingsPage";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtAgo, fmtFeedTime, fmtPrice } from "./format";
-import { ChartIcon, Direction, ExpandIcon, SlidersIcon } from "./icons";
+import { ChartIcon, Direction, ExpandIcon, FlaskIcon, SlidersIcon } from "./icons";
+import { predictionMark } from "./labPrimitive";
+import { useMl } from "./mlData";
 import { usePref } from "./prefs";
 import { newsMarks } from "./newsPrimitive";
 import { buildRail } from "./rail";
@@ -31,8 +35,9 @@ function useNow(ms: number) {
   return now;
 }
 
-type View = "chart" | "settings";
-const viewFromHash = (): View => (window.location.hash === "#settings" ? "settings" : "chart");
+type View = "chart" | "lab" | "settings";
+const viewFromHash = (): View =>
+  window.location.hash === "#settings" ? "settings" : window.location.hash.startsWith("#lab") ? "lab" : "chart";
 
 function useView(): [View, (v: View) => void] {
   const [view, setView] = useState<View>(viewFromHash);
@@ -42,7 +47,7 @@ function useView(): [View, (v: View) => void] {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
   const go = useCallback((v: View) => {
-    window.location.hash = v === "settings" ? "settings" : "";
+    window.location.hash = v === "chart" ? "" : v;
     setView(v);
   }, []);
   return [view, go];
@@ -65,6 +70,9 @@ export default function App() {
   const calendar = useCalendar();
   const upcomingNews = useMemo(() => calendar?.events ?? [], [calendar]);
   const news = useMemo(() => (showNews ? newsMarks(calendar?.week ?? []) : []), [calendar, showNews]);
+  const [showMl, setShowMl] = usePref("wed.ml", false);
+  const [mlThreshold, setMlThreshold] = usePref("wed.mlCut", 0);
+  const [mlHot, setMlHot] = useState<string | null>(null);
   const [focus, setFocus] = useState(false);
   const [quarters, setQuarters] = useState<QuartersResponse | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
@@ -98,6 +106,9 @@ export default function App() {
     fetchScan().then(setData).catch((e) => setFetchError(e instanceof Error ? e.message : String(e)));
   }, []);
   const openSettings = useCallback(() => setView("settings"), [setView]);
+  const openLab = useCallback(() => {
+    window.location.hash = "lab/models";
+  }, []);
 
   const version = data?.version ?? 0;
   const tradeBias = data?.trade_bias ?? null;
@@ -113,6 +124,8 @@ export default function App() {
   }, [timeframes, tf, setTf]);
 
   const chart = useCandles(tf, version, lookback, setFetchError);
+  const [ml, refreshMl] = useMl(tf, version, showMl && view === "chart", mlThreshold, lookback);
+  const mlMarks = useMemo(() => (ml?.blocks ?? []).map(predictionMark), [ml]);
 
   useEffect(() => {
     if (!version) {
@@ -185,6 +198,10 @@ export default function App() {
             onClick={(e) => { e.preventDefault(); setView("chart"); }}>
             <ChartIcon /> Chart
           </a>
+          <a href="#lab" className="nav-item" aria-current={view === "lab" ? "page" : undefined}
+            onClick={(e) => { e.preventDefault(); setView("lab"); }}>
+            <FlaskIcon /> Lab
+          </a>
           <a href="#settings" className="nav-item" aria-current={view === "settings" ? "page" : undefined}
             onClick={(e) => { e.preventDefault(); setView("settings"); }}>
             <SlidersIcon /> Settings
@@ -208,6 +225,8 @@ export default function App() {
 
       {view === "settings" ? (
         <SettingsPage />
+      ) : view === "lab" ? (
+        <LabPage palette={palette} />
       ) : (
         <>
           <main className="workspace">
@@ -250,6 +269,10 @@ export default function App() {
                     <input type="checkbox" checked={showNews} onChange={(e) => setShowNews(e.target.checked)} />
                     News
                   </label>
+                  <label className="toggle" title="The active model's blocks, from the Lab">
+                    <input type="checkbox" checked={showMl} onChange={(e) => setShowMl(e.target.checked)} />
+                    ML
+                  </label>
                 </div>
               </div>
               <PriceChart
@@ -264,6 +287,8 @@ export default function App() {
                 quarterRows={quarterRows}
                 swings={showSwings ? chart?.swings : undefined}
                 news={news}
+                ml={showMl ? mlMarks : undefined}
+                mlHighlight={mlHot}
               />
               <div className="chart-foot">
                 <ul className="legend" aria-label="Chart legend">
@@ -276,6 +301,7 @@ export default function App() {
                   {showSwings && <li><span className="key key-swing" /> HH / HL / LH / LL swings</li>}
                   {showNews && <li><span className="key key-news" /> High-impact news</li>}
                   {quarterRows.length > 0 && <li><span className="key key-quarter" /> Quarters: green closed up</li>}
+                  {showMl && <li><span className="key key-ml" /> Model block (probability)</li>}
                   <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
                 </ul>
                 <button type="button" className="icon-button" onClick={() => setFocus(true)} disabled={!scan}
@@ -309,6 +335,10 @@ export default function App() {
 
           {scan && config && (
             <div className="details">
+              {showMl && ml && (
+                <MlPanel tf={tf} ml={ml} threshold={mlThreshold} onThreshold={setMlThreshold} onReviewed={refreshMl}
+                  onHighlight={setMlHot} onOpenLab={openLab} />
+              )}
               <StructurePanel scan={scan} selected={tf} onSelect={setTf} />
               <EventsPanel scan={scan} detectors={detectors} recentBars={config.recent_bars} onSelect={setTf} />
               {quarters && <QuartersPanel quarters={quarters} />}

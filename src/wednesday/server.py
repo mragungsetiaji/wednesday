@@ -20,6 +20,7 @@ from .bias import TradeBias
 from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .news import CALENDAR_KEY, CalendarSettings
 from .engine import Engine, Runtime
+from .lab.api import lab_router
 from .quarters import quarters_payload, utc_to_feed
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
@@ -300,6 +301,8 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         except TelegramError as exc:
             raise HTTPException(502, str(exc)) from exc
         return {"ok": True}
+
+    app.include_router(lab_router(lambda: runtime.lab if runtime else None, current, current_source))
 
     ui = Path(ui_dir or os.environ.get("XAU_UI_DIR") or DEFAULT_UI_DIR)
     if (ui / "index.html").is_file():
