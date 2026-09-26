@@ -15,6 +15,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import type { Candle, QuarterBlock, QuarterRow, QuartersResponse } from "../api";
+import type { CrosshairBus } from "../crosshairSync";
 import { fmtPrice } from "../format";
 import { QuartersPrimitive } from "../quartersPrimitive";
 import type { ChartPalette } from "../theme";
@@ -36,6 +37,7 @@ interface Props {
   loading: boolean;
   quarters: QuartersResponse | null;
   quarterRows: QuarterRow[]; // rows of the quarterly pane, [] hides it
+  sync?: { bus: CrosshairBus; id: number }; // crosshair linked with other charts
 }
 
 const ROW_PX = 22;
@@ -66,7 +68,7 @@ function candleAt(times: number[], t: number): number {
 
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
-export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows }: Props) {
+export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -75,6 +77,9 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const quarterSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const quartersRef = useRef<QuartersPrimitive | null>(null);
   const quarterPaneHeight = useRef(0);
+  const candlesRef = useRef<Candle[]>([]);
+  const syncRef = useRef(sync);
+  syncRef.current = sync;
   const fittedKey = useRef<string | null>(null);
   const [hover, setHover] = useState<Candle | null>(null);
 
@@ -96,6 +101,12 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       const bar = param.seriesData.get(series) as Candle | undefined;
       setHover(bar && "open" in bar ? { ...bar, time: param.time as number } : null);
       quartersPrimitive.update({ hoverTime: param.time === undefined ? null : (param.time as number) });
+      // Only moves made by the pointer on this chart are passed on (not ones set by a linked chart).
+      const link = syncRef.current;
+      if (link && param.sourceEvent && param.time !== undefined && param.point) {
+        const price = param.paneIndex === 0 ? series.coordinateToPrice(param.point.y) : null;
+        link.bus.publish(link.id, { time: param.time as number, price });
+      }
     });
     quartersRef.current = quartersPrimitive;
     // Resizing the chart rescales every pane; keep the quarterly pane at its fixed height.
@@ -147,6 +158,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     const series = seriesRef.current;
     if (!series) return;
     series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
+    candlesRef.current = candles;
     zonesRef.current?.update({ zones, times: candles.map((c) => c.time), palette });
     const times = candles.map((c) => c.time);
     const markers: SeriesMarker<Time>[] = events
@@ -170,6 +182,31 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   useEffect(() => {
     zonesRef.current?.update({ highlight });
   }, [highlight]);
+
+  // Follow the linked charts: same time (the candle containing it on this timeframe), same price.
+  useEffect(() => {
+    if (!sync) return;
+    return sync.bus.subscribe(sync.id, (p) => {
+      const chart = chartRef.current;
+      const series = seriesRef.current;
+      const bars = candlesRef.current;
+      if (!chart || !series) return;
+      if (!p || !bars.length || p.time < bars[0].time) {
+        chart.clearCrosshairPosition();
+        setHover(null);
+        quartersRef.current?.update({ hoverTime: null });
+        return;
+      }
+      const t = candleAt(bars.map((c) => c.time), p.time);
+      const bar = bars.find((c) => c.time === t) ?? bars[bars.length - 1];
+      chart.setCrosshairPosition(p.price ?? bar.close, t as UTCTimestamp, series);
+      // The readout and the quarterly pane follow too.
+      setHover(bar);
+      quartersRef.current?.update({ hoverTime: p.time });
+    });
+  }, [sync]);
+
+  const onLeave = () => sync?.bus.publish(sync.id, null);
 
   // Quarterly pane: an empty series whose only job is to host the blocks primitive; its
   // invisible points on the candle times keep it on the shared time scale. Removing the
@@ -203,7 +240,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const shown = hover ?? candles[candles.length - 1];
   const quarterNow = shown ? blocksAt(quarters, quarterRows, shown.time) : [];
   return (
-    <div className="chart-wrap" aria-busy={loading}>
+    <div className="chart-wrap" aria-busy={loading} onMouseLeave={onLeave}>
       {shown && (
         <div className="chart-legend num" aria-hidden="true">
           <span><i>O</i>{fmtPrice(shown.open)}</span>

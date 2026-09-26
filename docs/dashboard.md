@@ -34,7 +34,18 @@ browser, as is the layout. Mid OBs, higher timeframes and quarters switch for
 all charts at once. **Esc** or **Exit** goes back. On a phone the charts stack
 and scroll.
 
-![Four charts: 1H, 15M, 30M and 5M](images/fullscreen-4.png)
+- **Linked crosshairs**: hovering one chart moves the crosshair of the others to
+  the candle that contains the same moment on their timeframe (and the same
+  price), and their OHLC and quarter readouts follow. A chart whose candles
+  don't reach back that far just hides its crosshair.
+- **Resizable panes**: drag the line between charts. With four charts there is
+  one line for the columns and one for the rows. Arrow keys move a focused line
+  (Shift for bigger steps), double-click puts it back in the middle. The sizes
+  are remembered.
+
+![Four charts: 1H, 15M, 4H and 5M, crosshairs linked](images/fullscreen-4.png)
+
+![Two charts side by side, light theme](images/fullscreen-2.png)
 
 ## Quarterly theory pane
 

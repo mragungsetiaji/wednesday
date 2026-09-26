@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import type { QuartersResponse, Scan } from "../api";
+import type { CrosshairBus } from "../crosshairSync";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "../chartData";
 import { fmtPrice } from "../format";
 import { Direction } from "../icons";
@@ -21,10 +22,11 @@ interface Props {
   quarters: QuartersResponse | null;
   showQuarters: boolean;
   label: string; // accessible name, e.g. "Chart 2"
+  sync?: { bus: CrosshairBus; id: number };
 }
 
 /** One chart of the full-screen layout, with its own timeframe. */
-export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers, palette, quarters, showQuarters, label }: Props) {
+export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers, palette, quarters, showQuarters, label, sync }: Props) {
   const chart = useCandles(tf, version, lookback);
   const zones = useMemo(() => (chart ? buildZones(scan, chart, tf, rail, layers) : []), [scan, chart, tf, rail, layers]);
   const events = useMemo(() => buildEvents(scan, tf, layers.detectors), [scan, tf, layers.detectors]);
@@ -60,6 +62,7 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
         loading={!chart}
         quarters={quarters}
         quarterRows={rows}
+        sync={sync}
       />
     </section>
   );

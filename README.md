@@ -45,7 +45,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **Finds the nearest levels** above and below price: order blocks (extreme and mid), BSL / SSL with equal highs and lows, and inducement.
 - **Ranks limit setups**: entry on the order block's body, stop on the opposite edge capped at 3.00, extreme first, then nearest.
 - **Maps everything to the chart**: every setup and level in the ladder is pinned on the chart under the same tag.
-- **Full screen with 1, 2 or 4 charts**, each on its own timeframe, TradingView style.
+- **Full screen with 1, 2 or 4 charts**, TradingView style: each on its own timeframe, crosshairs linked, panes resizable by dragging.
 - **Quarterly theory pane** under the chart: every weekday, session (Tokyo, London, NY AM, NY PM) and 90-minute quarter as a green or red block, plus how often each one closed green.
 - **Pings you on Telegram** when price trades into an order block.
 - **Free data by default** (Yahoo Finance), MetaTrader 5 when you're ready; history stored in SQLite or PostgreSQL.
@@ -60,6 +60,15 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
     <td align="center"><sub>Switch data source live, set up alerts</sub></td>
   </tr>
 </table>
+
+### Multiple timeframes at once
+
+Full screen, split into two or four charts. Hover one and the others follow to the same moment on their own timeframe; drag the lines between charts to resize.
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/fullscreen-2.png">
+  <img src="docs/images/fullscreen-4.png" alt="Four charts full screen (1H, 15M, 4H, 5M) with linked crosshairs" width="100%">
+</picture>
 
 > **Why "Wednesday"?** Watching gold through quarterly theory, the Wednesday and New York blocks kept coming up green. The quarterly pane shows those blocks on the chart and its stats count how often that holds.
 

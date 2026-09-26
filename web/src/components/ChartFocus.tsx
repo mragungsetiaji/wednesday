@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { QuartersResponse, Scan } from "../api";
 import type { LayerOptions } from "../chartData";
+import { CrosshairBus } from "../crosshairSync";
 import { fmtPrice } from "../format";
 import { CollapseIcon, LayoutIcon } from "../icons";
 import { usePref } from "../prefs";
@@ -16,6 +17,71 @@ const LAYOUTS: { panes: Layout; title: string }[] = [
   { panes: 4, title: "Four charts, 2 × 2" },
 ];
 const DEFAULT_TFS = ["1H", "15M", "4H", "5M"];
+const MIN_SPLIT = 0.15;
+const clampSplit = (v: number) => Math.min(1 - MIN_SPLIT, Math.max(MIN_SPLIT, v));
+
+interface Split {
+  x: number; // share of the width taken by the left column
+  y: number; // share of the height taken by the top row (2 × 2 only)
+}
+
+/**
+ * A draggable line between panes. Arrow keys move it too; double-click
+ * puts it back in the middle.
+ */
+function Splitter({ axis, value, onChange, onDone }: {
+  axis: "x" | "y";
+  value: number;
+  onChange: (v: number) => void;
+  onDone: (v: number) => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const last = useRef(value);
+  last.current = value;
+  const at = (e: React.PointerEvent) => {
+    const grid = (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect();
+    return clampSplit(axis === "x" ? (e.clientX - grid.left) / grid.width : (e.clientY - grid.top) / grid.height);
+  };
+  const step = (d: number) => {
+    const v = clampSplit(value + d);
+    onChange(v);
+    onDone(v);
+  };
+  return (
+    <div
+      className={`splitter splitter-${axis}${dragging ? " is-dragging" : ""}`}
+      role="separator"
+      aria-orientation={axis === "x" ? "vertical" : "horizontal"}
+      aria-label={axis === "x" ? "Resize columns" : "Resize rows"}
+      aria-valuemin={MIN_SPLIT * 100}
+      aria-valuemax={(1 - MIN_SPLIT) * 100}
+      aria-valuenow={Math.round(value * 100)}
+      tabIndex={0}
+      title="Drag to resize, double-click to reset"
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDragging(true);
+      }}
+      onPointerMove={(e) => dragging && onChange(at(e))}
+      onPointerUp={(e) => {
+        if (!dragging) return;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        setDragging(false);
+        onDone(last.current);
+      }}
+      onDoubleClick={() => step(0.5 - value)}
+      onKeyDown={(e) => {
+        const back = axis === "x" ? "ArrowLeft" : "ArrowUp";
+        const fwd = axis === "x" ? "ArrowRight" : "ArrowDown";
+        if (e.key === back || e.key === fwd) {
+          e.preventDefault();
+          step((e.key === fwd ? 1 : -1) * (e.shiftKey ? 0.1 : 0.02));
+        }
+      }}
+    />
+  );
+}
 
 interface Toggle {
   label: string;
@@ -50,6 +116,9 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
   const ref = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = usePref<Layout>("wed.focusLayout", 2);
   const [tfs, setTfs] = usePref<string[]>("wed.focusTfs", DEFAULT_TFS);
+  const [savedSplit, saveSplit] = usePref<Split>("wed.focusSplit", { x: 0.5, y: 0.5 });
+  const [split, setSplit] = useState<Split>(savedSplit); // follows the drag; saved when it ends
+  const bus = useMemo(() => new CrosshairBus(), []);
 
   useEffect(() => {
     const el = ref.current;
@@ -115,12 +184,21 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
           </button>
         </div>
       </header>
-      <div className={`focus-grid layout-${layout}`}>
+      <div className={`focus-grid layout-${layout}`}
+        style={{ "--split-x": split.x, "--split-y": split.y } as CSSProperties}>
         {Array.from({ length: layout }, (_, i) => (
           <ChartPane key={i} label={`Chart ${i + 1}`} tf={paneTf(i)} onTf={(v) => setPaneTf(i, v)} timeframes={known}
             scan={scan} version={version} lookback={lookback} rail={rail} layers={layers} palette={palette}
-            quarters={quarters} showQuarters={showQuarters} />
+            quarters={quarters} showQuarters={showQuarters} sync={{ bus, id: i }} />
         ))}
+        {layout > 1 && (
+          <Splitter axis="x" value={split.x} onChange={(x) => setSplit((s) => ({ ...s, x }))}
+            onDone={(x) => saveSplit({ ...split, x })} />
+        )}
+        {layout === 4 && (
+          <Splitter axis="y" value={split.y} onChange={(y) => setSplit((s) => ({ ...s, y }))}
+            onDone={(y) => saveSplit({ ...split, y })} />
+        )}
       </div>
     </div>
   );
