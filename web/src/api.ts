@@ -628,6 +628,7 @@ export interface JournalTrade {
   commission: number;
   swap: number;
   net: number;
+  pips: number | null; // 0.1 on gold; null while open
   mae: number | null; // worst floating result, from M1 bars
   mfe: number | null;
   floating: number | null; // open trades
@@ -692,6 +693,8 @@ export interface JournalStats {
     balance_matches?: boolean;
   };
   series: { growth: Point[]; balance: Point[]; equity: Point[]; drawdown: Point[] };
+  monthly: { month: string; gain: number | null; profit: number; pips: number; trades: number }[]; // "2026-03"
+  daily: { day: string; profit: number; pips: number; trades: number; won: number }[]; // "2026-03-07", by close
   trades: JournalTrade[];
   cash: { id: string; time: number; kind: string; amount: number; comment: string | null }[];
 }

@@ -9,6 +9,7 @@ import { CheckIcon, CrossIcon } from "../icons";
 import { usePref } from "../prefs";
 import type { ChartPalette } from "../theme";
 import { JournalChart, type JournalView } from "./JournalChart";
+import { MonthlyBars, PnlCalendar } from "./JournalMonthly";
 
 const PAGE = 50;
 const VIEWS: { id: JournalView; title: string }[] = [
@@ -172,9 +173,11 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
                 ))}
               </div>
               <JournalChart stats={stats} view={view} palette={palette} currency={selected.currency ?? ""} />
+              <MonthlyBars stats={stats} currency={selected.currency ?? ""} />
               <Verification stats={stats} />
             </section>
           </div>
+          <PnlCalendar stats={stats} currency={selected.currency ?? ""} />
           <Trades journalId={selected.id} stats={stats} onSaved={() => loadStats(selected.id)} />
         </>
       )}
@@ -442,6 +445,7 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
               <th scope="col" className="end">Lots</th>
               <th scope="col" className="end">Open → close</th>
               <th scope="col" className="end">Result</th>
+              <th scope="col" className="end">Pips</th>
               <th scope="col" className="end" title="Worst floating result while open, from M1 prices">Worst</th>
               <th scope="col">Checked</th>
               <th scope="col">Note</th>
@@ -456,6 +460,7 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
                 <td className="end">{t.volume.toFixed(2)}</td>
                 <td className="end">{fmtPrice(t.open_price)} → {t.close_price === null ? "—" : fmtPrice(t.close_price)}</td>
                 <td className={`end ${tone(t.close_time ? t.net : t.floating) ?? ""}`}>{signed(t.close_time ? t.net : t.floating)}</td>
+                <td className="end">{t.pips === null ? "—" : `${t.pips >= 0 ? "+" : "−"}${Math.abs(t.pips).toFixed(1)}`}</td>
                 <td className="end">{t.mae === null ? "—" : signed(t.mae)}</td>
                 <td>
                   {t.verified ? <span className="pos" title="Prices checked and floating rebuilt"><CheckIcon /></span>
@@ -468,7 +473,7 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
               </tr>,
               open === t.id && (
                 <tr key={`${t.id}-note`} className="lab-scores-row">
-                  <td colSpan={9}>
+                  <td colSpan={10}>
                     <NoteEditor journalId={journalId} trade={t} onSaved={() => { setOpen(null); onSaved(); }} />
                   </td>
                 </tr>

@@ -262,3 +262,17 @@ def test_a_close_while_another_trade_floats_is_not_a_new_high():
     got = analyse([stuck, hedge], cash, bars, offset=0)["summary"]
     # equity never went above 10 000 before the low (about 10 000 + 3300 - 5025), so the fall is ~17%, not ~38%
     assert 15 < got["drawdown"] < 20
+
+
+def test_monthly_gain_daily_pnl_and_pips():
+    bars = {"XAUUSD": price_path([(0, 2000), (10, 2000)])}
+    cash = [{"id": "d", "time": T0 - 60, "kind": "deposit", "amount": 10_000.0, "comment": None}]
+    day = 86400
+    a = {**trade(1, 0, 5, 2000.0, 2010.0), "close_time": T0 + 5 * day}  # +1000, +100 pips, March
+    b = {**trade(2, 0, 5, 2000.0, 1995.0), "close_time": T0 + 5 * day + 60}  # -500, -50 pips, same day
+    c = {**trade(3, 0, 5, 2000.0, 2011.0, side="sell"), "close_time": T0 + 40 * day}  # -1100, April
+    got = analyse([a, b, c], cash, bars, offset=0)
+    assert [(m["month"], m["gain"], m["profit"], m["pips"]) for m in got["monthly"]] == [
+        ("2026-03", 5.0, 500.0, 50.0), ("2026-04", -10.48, -1100.0, -110.0)]
+    assert got["daily"][0] == {"day": "2026-03-07", "profit": 500.0, "pips": 50.0, "trades": 2, "won": 1}
+    assert got["daily"][1]["day"] == "2026-04-11"

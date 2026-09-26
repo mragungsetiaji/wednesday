@@ -175,12 +175,19 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="ticker">
-          <span className="brand">Wednesday</span>
-          <h1>{data?.symbol ?? "XAUUSD"}</h1>
-          <span className="ticker-price num">{scan ? fmtPrice(scan.price) : "—"}</span>
-        </div>
-        <p className="meta">
+        {view === "journal" ? (
+          <div className="ticker">
+            <span className="brand">Wednesday</span>
+            <h1 className="ticker-title">Journal</h1>
+          </div>
+        ) : (
+          <div className="ticker">
+            <span className="brand">Wednesday</span>
+            <h1>{data?.symbol ?? "XAUUSD"}</h1>
+            <span className="ticker-price num">{scan ? fmtPrice(scan.price) : "—"}</span>
+          </div>
+        )}
+        {view !== "journal" && <p className="meta">
           <span className={`live ${status.cls}`}>
             <span className="dot" aria-hidden="true" />
             {status.text}
@@ -188,7 +195,7 @@ export default function App() {
           {data?.source && <span>{data.source}</span>}
           <span>scanned {fmtAgo(data?.scanned_at ?? null, now)}</span>
           {scan && <span>bar {fmtFeedTime(scan.time)}</span>}
-        </p>
+        </p>}
         {view === "chart" && (
           <div className="layers" role="group" aria-label="Detectors">
             {allDetectors.map((d) => (
@@ -218,7 +225,7 @@ export default function App() {
         </nav>
       </header>
 
-      {(fetchError || data?.error) && (
+      {view !== "journal" && (fetchError || data?.error) && (
         <div className="banner" role="alert">
           {fetchError ? (
             `Can't reach the screener API (${fetchError}). Start it with: uv run wednesday --serve`

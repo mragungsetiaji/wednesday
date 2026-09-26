@@ -2445,3 +2445,169 @@ fieldset:disabled .switch {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Journal: header, monthly bars, calendar */
+.ticker .ticker-title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.ticker + .nav {
+  margin-inline-start: auto;
+}
+.journal-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s1) var(--s4);
+}
+.journal-section-head h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.journal-monthly,
+.journal-calendar {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-width: 0;
+}
+.journal-monthly-plot {
+  min-height: 190px;
+}
+.journal-monthly-plot svg {
+  display: block;
+  overflow: visible;
+}
+.journal-monthly .axis-grid {
+  stroke: var(--line);
+}
+.journal-monthly .axis-zero {
+  stroke: var(--line-strong);
+}
+.journal-monthly .axis-label {
+  font-size: var(--text-xs);
+  fill: var(--text-3);
+}
+.journal-monthly .bar-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  fill: var(--text-2);
+}
+.journal-monthly .bar.up { fill: var(--bull); }
+.journal-monthly .bar.down { fill: var(--bear); }
+.journal-monthly .bar {
+  transition: opacity 120ms ease;
+}
+.journal-monthly svg:hover .bar:not(.is-hot) {
+  opacity: 0.55;
+}
+.journal-monthly .hit {
+  fill: transparent;
+}
+.journal-monthly g:focus-visible {
+  outline: none;
+}
+.journal-monthly g:focus-visible .hit {
+  stroke: var(--accent);
+}
+
+.cal-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+}
+.cal-nav .button {
+  height: 26px;
+  padding-inline: var(--s2);
+  font-size: var(--text-lg);
+}
+.cal-nav b {
+  min-width: 76px;
+  text-align: center;
+}
+.cal-grid {
+  display: grid;
+  gap: 4px;
+}
+.cal-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) minmax(0, 1.1fr);
+  gap: 4px;
+}
+.cal-names span {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-3);
+  padding-inline: var(--s2);
+}
+.cal-cell {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+  min-height: 78px;
+  padding: 6px var(--s2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  min-width: 0;
+  overflow: hidden;
+}
+.cal-cell.is-out {
+  background: transparent;
+}
+.cal-day {
+  color: var(--text-3);
+}
+.cal-money {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+.cal-pips,
+.cal-trades {
+  white-space: nowrap;
+}
+.cal-trades {
+  color: var(--text-3);
+}
+.cal-cell.has-trades .cal-trades,
+.cal-cell.has-trades .cal-day {
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+}
+.cal-week {
+  background: transparent;
+  border: 1px solid var(--line);
+  align-content: center;
+}
+.cal-week .cal-money.pos { color: var(--bull); }
+.cal-week .cal-money.neg { color: var(--bear); }
+.cal-short {
+  display: none;
+}
+@media (max-width: 1080px) {
+  .cal-trades { display: none; }
+}
+@media (max-width: 700px) {
+  .cal-long,
+  .cal-pips { display: none; }
+  .cal-short { display: inline; }
+  .cal-cell {
+    min-height: 52px;
+    padding: 4px 3px;
+  }
+  .cal-money { font-size: var(--text-xs); }
+  .cal-names span { padding-inline: 2px; }
+  .cal-row { gap: 3px; }
+  .cal-grid { gap: 3px; }
+  .journal-monthly,
+  .journal-calendar {
+    padding-inline: var(--s2);
+  }
+}

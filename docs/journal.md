@@ -22,6 +22,11 @@ journals** feature in your plan (Settings, Plan).
   *Deals* table the deposits and withdrawals. This works on any machine, so the
   dashboard doesn't have to run next to the terminal.
 
+Both are local. Sync talks to the MT5 terminal running on the same Windows
+machine as Wednesday (through the `MetaTrader5` package), and the report is a
+file you upload. Wednesday never logs in to the broker itself and never sees an
+investor password.
+
 Either replaces the journal's trades, so sync or import the full history. A
 journal belongs to one account: syncing another account's history into it is
 refused.
@@ -45,6 +50,26 @@ show with their floating result.
 Below: trades, win rate, profit factor, average win and loss, best and worst,
 lots, commission, swap and the average hold. **Export CSV** gives every trade with
 its worst and best floating result, whether it was checked, and your note.
+
+## Monthly gain and the calendar
+
+**Monthly gain** draws each month's gain as a bar from zero, green up and red
+down, time-weighted like the total (so a deposit mid-month doesn't inflate it).
+Hover a month for the money, pips and number of trades.
+
+<img src="images/journal-monthly.png" alt="Monthly gain as green and red bars, July highlighted with its money and pips" width="100%">
+
+The **calendar** shows a month of closed trades per day, by the day they closed
+on the broker's clock: the result in money and pips, and how many trades. The
+tint is green or red by the sign and stronger for bigger days (scaled to the
+month's biggest). The last column adds up the week. On a phone it shows the money
+only, rounded.
+
+<img src="images/journal-calendar.png" alt="A month of daily results, green and red cells with money, pips and trades, and weekly totals" width="100%">
+
+**Pips** follow the usual journal convention: 0.1 on gold (a 1.00 move is 10
+pips), 0.01 on yen pairs and silver, 0.0001 on other currency pairs. A trade's
+pips don't depend on its size.
 
 <img src="images/journal-balance.png" alt="Balance as a step line and the equity, lowest each hour, falling away from it while a trade sits in loss" width="100%">
 

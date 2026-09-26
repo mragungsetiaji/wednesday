@@ -139,6 +139,55 @@ def _floating(tr: dict, b: Bars, offset: int, mult: float, last: int | None):
     return (b.t[i0 : i1 + 1] + offset, (worst - entry) * k, (mark - entry) * k, (best - entry) * k)
 
 
+def pip_size(symbol: str, price: float) -> float:
+    """What a pip is, the way trading journals count them: 0.1 on gold, 0.01 on yen pairs and silver."""
+    s = symbol.upper()
+    if "XAU" in s or "GOLD" in s:
+        return 0.1
+    if "JPY" in s or "XAG" in s or "SILVER" in s:
+        return 0.01
+    return 0.0001 if price < 20 else 0.01 if price < 1000 else 0.1
+
+
+def pips(tr: dict) -> float | None:
+    if tr["close_price"] is None:
+        return None
+    move = (tr["close_price"] - tr["open_price"]) * (1 if tr["side"] == "buy" else -1)
+    return round(move / pip_size(tr["symbol"], tr["open_price"]), 1)
+
+
+def daily(rows: list[dict]) -> list[dict]:
+    """Closed trades per day (deal clock, by the close): result in money and pips."""
+    days: dict[str, dict] = {}
+    for r in rows:
+        if r["close_time"] is None:
+            continue
+        key = pd.Timestamp(r["close_time"], unit="s").strftime("%Y-%m-%d")
+        d = days.setdefault(key, {"day": key, "profit": 0.0, "pips": 0.0, "trades": 0, "won": 0})
+        d["profit"] += r["net"]
+        d["pips"] += r["pips"] or 0.0
+        d["trades"] += 1
+        d["won"] += r["net"] > 0
+    return [{**d, "profit": round(d["profit"], 2), "pips": round(d["pips"], 1)} for _, d in sorted(days.items())]
+
+
+def monthly(ev_t: np.ndarray, fac_after: np.ndarray, rows: list[dict]) -> list[dict]:
+    """Gain per calendar month (time-weighted, like the total) with the money and pips made in it."""
+    if len(ev_t) == 0:
+        return []
+    months = pd.to_datetime(ev_t, unit="s").strftime("%Y-%m")
+    out, prev = [], 1.0
+    for m in sorted(set(months)):
+        idx = np.nonzero(months == m)[0]
+        end = fac_after[idx[-1]]
+        mine = [r for r in rows if r["close_time"] is not None and pd.Timestamp(r["close_time"], unit="s").strftime("%Y-%m") == m]
+        out.append({"month": m, "gain": round((end / prev - 1) * 100, 2) if prev > 0 else None,
+                    "profit": round(sum(r["net"] for r in mine), 2), "pips": round(sum(r["pips"] or 0 for r in mine), 1),
+                    "trades": len(mine)})
+        prev = end
+    return out
+
+
 def _hourly(t: np.ndarray, v: np.ndarray, how: str) -> list[list[float]]:
     if len(t) == 0:
         return []
@@ -172,7 +221,7 @@ def analyse(trades: list[dict], cash: list[dict], bars: dict[str, pd.DataFrame],
         end = tr["close_time"] if tr["close_time"] is not None else (int(b.t[-1]) + offset if b is not None and offset is not None else tr["open_time"])
         span = max(end - tr["open_time"], 60)
         total_time += span
-        row = {**tr, "net": net, "price_ok": ok, "verified": fl is not None, "mae": None, "mfe": None, "floating": None}
+        row = {**tr, "net": net, "pips": pips(tr), "price_ok": ok, "verified": fl is not None, "mae": None, "mfe": None, "floating": None}
         if fl is not None:
             verified_time += span
             t, worst, mark, best = fl
@@ -294,5 +343,7 @@ def analyse(trades: list[dict], cash: list[dict], bars: dict[str, pd.DataFrame],
             "equity": _hourly(pt, peq, "min"),
             "drawdown": _hourly(pt, -dd * 100, "min"),
         },
+        "monthly": monthly(ev_t, fac_after, closed),
+        "daily": daily(closed),
         "trades": rows,
     }
