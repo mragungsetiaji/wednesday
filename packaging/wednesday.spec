@@ -13,7 +13,11 @@ ROOT = Path(SPECPATH).parent
 if not (ROOT / "web" / "dist" / "index.html").is_file():
     raise SystemExit("Build the dashboard first: cd web && npm ci && npm run build")
 
-datas = [(str(ROOT / "web" / "dist"), "web/dist")]
+datas = [
+    (str(ROOT / "web" / "dist"), "web/dist"),
+    (str(ROOT / "DISCLAIMER.md"), "."),  # shown in the app until accepted (terms.py)
+    (str(ROOT / "LICENSE"), "."),
+]
 # Time zone database for zoneinfo: Windows has none of its own.
 datas += collect_data_files("tzdata")
 

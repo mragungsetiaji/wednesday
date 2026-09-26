@@ -2785,3 +2785,54 @@ fieldset:disabled .switch {
 .journal-table td.journal-note-cell {
   min-width: 240px;
 }
+
+/* ---------- Disclaimer and risk agreement ---------- */
+.terms-page {
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--s8) 16px;
+  background: var(--bg);
+}
+.terms-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  width: 100%;
+  max-width: 720px;
+}
+.terms-card h2 {
+  margin: 0;
+}
+.terms-lead {
+  margin: 0;
+  color: var(--text-2);
+}
+.terms-text {
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+.terms-text h3 {
+  margin: var(--s4) 0 var(--s2);
+  font-size: var(--text-md);
+}
+.terms-text h3:first-child {
+  margin-top: 0;
+}
+.terms-text p,
+.terms-text ul {
+  margin: 0 0 var(--s3);
+}
+.terms-text ul {
+  padding-inline-start: 1.25em;
+}
+.terms-check {
+  align-items: flex-start;
+  line-height: 1.5;
+}

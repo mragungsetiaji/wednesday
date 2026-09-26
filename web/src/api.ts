@@ -223,30 +223,12 @@ export interface SettingsResponse {
 
 export const fetchSettings = () => getJson<SettingsResponse>("/api/settings");
 
-async function settingsRequest(url: string, method: string, body?: unknown): Promise<SettingsResponse> {
-  const res = await fetch(url, {
-    method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!res.ok) {
-    let detail = `${res.status} ${res.statusText}`;
-    try {
-      detail = (await res.json()).detail ?? detail;
-    } catch {
-      /* not JSON */
-    }
-    throw new Error(detail);
-  }
-  return res.json() as Promise<SettingsResponse>;
-}
-
 /** Save and restart the feed. A password is sent only when typed; it's kept by the OS, never returned. */
 export const saveSettings = (settings: DataSettings, secret: { mt5_password?: string; forget_mt5_password?: boolean } = {}) =>
-  settingsRequest("/api/settings", "PUT", { ...settings, ...secret });
+  send<SettingsResponse>("PUT", "/api/settings", { ...settings, ...secret });
 
 /** Restart the feed with the saved settings, e.g. after it gave up connecting. */
-export const reconnectFeed = () => settingsRequest("/api/settings/reconnect", "POST");
+export const reconnectFeed = () => send<SettingsResponse>("POST", "/api/settings/reconnect");
 
 export interface Mt5Terminal {
   path: string;
@@ -261,7 +243,14 @@ export interface AlertSettings {
   timeframes: string[];
   priorities: string[];
   neutral_alerts: boolean; // alert even when the bias is neutral (not trading)
+  chat_id: string | null; // null = TELEGRAM_CHAT_ID from .env
 }
+
+/** Where a secret comes from: the credential store, memory for this run, or .env. Never the value. */
+export type SecretSource = "saved" | "session" | "env" | null;
+
+/** Write-only secret fields sent with a save: a new value, or forget the stored one. */
+export type SecretUpdate = Record<string, string | boolean | undefined>;
 
 export interface AlertRow {
   key: string;
@@ -280,6 +269,7 @@ export interface AlertRow {
 export interface AlertsResponse {
   editable: boolean;
   token_set: boolean;
+  token_source: SecretSource;
   chat_id_set: boolean;
   configured: boolean;
   settings: AlertSettings | null;
@@ -305,8 +295,28 @@ async function send<T>(method: string, url: string, body?: unknown): Promise<T> 
   return res.json() as Promise<T>;
 }
 
+export interface TermsResponse {
+  version: string;
+  accepted: boolean;
+  accepted_at: string | null;
+  text: string; // DISCLAIMER.md
+}
+
+export const fetchTerms = () => getJson<TermsResponse>("/api/terms");
+export const acceptTerms = () => send<TermsResponse>("POST", "/api/terms/accept");
+
 export const fetchAlerts = () => getJson<AlertsResponse>("/api/alerts");
-export const saveAlerts = (s: AlertSettings) => send<AlertsResponse>("PUT", "/api/alerts", s);
+export const saveAlerts = (s: AlertSettings, secrets: SecretUpdate = {}) =>
+  send<AlertsResponse>("PUT", "/api/alerts", { ...s, ...secrets });
+
+export interface TelegramChat {
+  id: number;
+  type: string;
+  name: string;
+}
+
+/** Chats that recently messaged the bot, to pick the chat id. */
+export const fetchTelegramChats = () => getJson<{ chats: TelegramChat[] }>("/api/alerts/chats");
 export const testAlert = () => send<{ ok: boolean }>("POST", "/api/alerts/test");
 
 /** The trader's directional bias, set by hand. */
@@ -355,8 +365,10 @@ export interface BriefProvider {
   title: string;
   default_model: string;
   env: string;
+  secret: "anthropic_api_key" | "openai_api_key";
   installed: boolean;
   key_set: boolean;
+  key_source: SecretSource;
 }
 
 export interface BriefResponse {
@@ -370,7 +382,8 @@ export interface BriefResponse {
 }
 
 export const fetchBrief = () => getJson<BriefResponse>("/api/brief");
-export const saveBrief = (s: BriefSettings) => send<BriefResponse>("PUT", "/api/brief", s);
+export const saveBrief = (s: BriefSettings, secrets: SecretUpdate = {}) =>
+  send<BriefResponse>("PUT", "/api/brief", { ...s, ...secrets });
 export const generateBrief = () => send<BriefResponse>("POST", "/api/brief/generate");
 
 /** An economic calendar event (times in UTC). */

@@ -40,11 +40,19 @@ package is `src/wednesday/`.
 - **The bias is the trader's call.** `bias.py` is set by hand; the LLM brief
   (`brief.py`) only offers a suggestion the trader applies with a click. Don't make
   anything set the bias, or trade, on its own.
-- **Secrets never go into the database.** The MT5 password is entered in Settings
-  and kept in the OS credential store (`keyring`, see `settings.py`); the Telegram
-  token and LLM API keys are read from `.env`. None may be written to the database,
-  logs, API responses or the dashboard. `.env` is gitignored; add new variables to
-  `.env.example` with an empty value and a comment.
+- **Secrets never go into the database.** The MT5 password, Telegram bot token and
+  LLM API keys are entered in Settings and kept in the OS credential store
+  (`secret_store.py`, through `keyring`), with `.env` as a fallback. None may be
+  written to the database, logs, API responses or the dashboard: APIs take them
+  write-only and report only where one comes from. `.env` is gitignored; add new
+  variables to `.env.example` with an empty value and a comment.
+- **Not financial advice.** Wednesday suggests; the trader decides and carries every
+  risk (`DISCLAIMER.md`, accepted in the app, see `terms.py`). Don't word anything in
+  the dashboard, alerts or docs as advice or a promise of results. When the
+  disclaimer changes in substance, bump `TERMS_VERSION` so it is accepted again.
+- **License.** PolyForm Noncommercial 1.0.0 plus personal trading use (`LICENSE`):
+  free for personal use, never sold. Don't add dependencies whose license forbids
+  that.
 - **The dashboard has no login.** Keep the default host `127.0.0.1`, and don't add
   endpoints that expose secrets or files outside `data/`.
 - **Time zones are explicit.** Bar times come in the feed's clock (`XAU_CLOCK`, often
@@ -72,5 +80,5 @@ replace the model call through `brief_mod.ASK`; they never call a real API.
 
 Match the surrounding code: type hints, dataclasses for settings with
 `from_dict`/`to_dict`, short docstrings that say what and why. User-facing text (dashboard, docs, errors) is plain and
-direct, and error messages say what to do next ("Set ANTHROPIC_API_KEY in .env and
+direct, and error messages say what to do next ("Add the Claude API key in Settings > News brief
 restart").

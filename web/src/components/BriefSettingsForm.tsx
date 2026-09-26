@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { fetchBrief, generateBrief, saveBrief, type BriefResponse, type BriefSettings } from "../api";
+import { SecretField } from "./SecretField";
 
 /** Form state: URLs edited as one per line. */
 type Form = Omit<BriefSettings, "urls"> & { urls: string };
@@ -13,12 +14,14 @@ const fromForm = (f: Form): BriefSettings => ({
   urls: f.urls.split("\n").map((u) => u.trim()).filter(Boolean),
 });
 
-/** LLM brief settings: provider, model, prompt and the news pages it reads. Keys stay in .env. */
+/** LLM brief settings: provider, API key, model, prompt and the news pages it reads. */
 export function BriefSettingsForm() {
   const [data, setData] = useState<BriefResponse | null>(null);
   const [form, setForm] = useState<Form | null>(null);
   const [busy, setBusy] = useState<"save" | "run" | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [forgetKey, setForgetKey] = useState(false);
 
   const running = !!data?.running;
   useEffect(() => {
@@ -52,7 +55,7 @@ export function BriefSettingsForm() {
   }
 
   const saved = toForm(data.settings);
-  const dirty = JSON.stringify(form) !== JSON.stringify(saved);
+  const dirty = JSON.stringify(form) !== JSON.stringify(saved) || apiKey !== "" || forgetKey;
   const provider = data.providers?.find((p) => p.id === form.provider);
   const set = (patch: Partial<Form>) => {
     setForm({ ...form, ...patch });
@@ -63,9 +66,15 @@ export function BriefSettingsForm() {
     e.preventDefault();
     setBusy("save");
     try {
-      const res = await saveBrief(fromForm(form));
+      const secret = provider?.secret;
+      const res = await saveBrief(fromForm(form), secret ? {
+        [secret]: apiKey || undefined,
+        [`forget_${secret}`]: forgetKey || undefined,
+      } : {});
       setData(res);
       if (res.settings) setForm(toForm(res.settings));
+      setApiKey("");
+      setForgetKey(false);
       setMessage({ kind: "ok", text: "Brief settings saved." });
     } catch (err) {
       setMessage({ kind: "error", text: err instanceof Error ? err.message : String(err) });
@@ -102,12 +111,10 @@ export function BriefSettingsForm() {
         {data.providers?.map((p) => (
           <label key={p.id} className={`choice${form.provider === p.id ? " is-checked" : ""}`}>
             <input type="radio" name="brief-provider" value={p.id} checked={form.provider === p.id}
-              onChange={() => set({ provider: p.id, model: null })} />
+              onChange={() => { set({ provider: p.id, model: null }); setApiKey(""); setForgetKey(false); }} />
             <span className="choice-body">
               <span className="choice-title">{p.title}</span>
-              <span className="choice-desc">
-                API key from <code>{p.env}</code> in <code>.env</code>: {p.key_set ? "set" : "not set"}.
-              </span>
+              <span className="choice-desc">API key {p.key_set ? "set" : "not set"}.</span>
               {!p.installed && <span className="choice-warn">Install the SDK: uv sync --extra llm</span>}
             </span>
           </label>
@@ -116,6 +123,10 @@ export function BriefSettingsForm() {
 
       <fieldset className="fields" disabled={busy !== null}>
         <legend>Request</legend>
+        <SecretField label={`${provider?.title ?? "Provider"} API key`} source={provider?.key_source ?? null} value={apiKey}
+          forget={forgetKey} placeholder={form.provider === "anthropic" ? "sk-ant-…" : "sk-…"}
+          onChange={(v) => { setApiKey(v); setForgetKey(false); setMessage(null); }}
+          onForget={() => { setForgetKey(true); setApiKey(""); setMessage(null); }} />
         <label className="field">
           <span className="field-label">Model</span>
           <input type="text" value={form.model ?? ""} placeholder={provider?.default_model} spellCheck={false}

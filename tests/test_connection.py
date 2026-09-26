@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from wednesday import engine as engine_mod
 from wednesday import mt5_terminals
-from wednesday import settings as settings_mod
+from wednesday import secret_store
 from wednesday.detectors import DetectorParams
 from wednesday.engine import RECONNECT_ATTEMPTS, Engine, Runtime
 from wednesday.feeds import MT5Feed, SyntheticFeed
@@ -149,7 +149,7 @@ def _api(tmp_path):
 
 def test_mt5_password_goes_to_the_credential_store(tmp_path, monkeypatch):
     kr = FakeKeyring()
-    monkeypatch.setattr(settings_mod, "_keyring", lambda: kr)
+    monkeypatch.setattr(secret_store, "_keyring", lambda: kr)
     runtime, api = _api(tmp_path)
     try:
         body = {"source": "synthetic", "mt5_login": 123, "mt5_server": "Broker-Live"}
@@ -167,7 +167,7 @@ def test_mt5_password_goes_to_the_credential_store(tmp_path, monkeypatch):
 
 
 def test_mt5_password_without_credential_store_is_kept_for_the_session(tmp_path, monkeypatch):
-    monkeypatch.setattr(settings_mod, "_keyring", lambda: None)
+    monkeypatch.setattr(secret_store, "_keyring", lambda: None)
     runtime, api = _api(tmp_path)
     try:
         res = api.put("/api/settings", json={"source": "synthetic", "mt5_login": 5, "mt5_password": "pw"})

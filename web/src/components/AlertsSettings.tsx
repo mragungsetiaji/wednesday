@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
-import { fetchAlerts, saveAlerts, testAlert, type AlertSettings, type AlertsResponse } from "../api";
+import {
+  fetchAlerts, fetchTelegramChats, saveAlerts, testAlert, type AlertSettings, type AlertsResponse, type TelegramChat,
+} from "../api";
 import { fmtPrice } from "../format";
+import { SecretField } from "./SecretField";
 
 const TFS = ["4H", "1H", "30M", "15M", "5M"];
 const PRIORITIES = [
@@ -15,7 +18,10 @@ const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x
 export function AlertsSettings() {
   const [data, setData] = useState<AlertsResponse | null>(null);
   const [form, setForm] = useState<AlertSettings | null>(null);
-  const [busy, setBusy] = useState<"save" | "test" | null>(null);
+  const [busy, setBusy] = useState<"save" | "test" | "chats" | null>(null);
+  const [token, setToken] = useState("");
+  const [forgetToken, setForgetToken] = useState(false);
+  const [chats, setChats] = useState<TelegramChat[] | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
@@ -41,7 +47,7 @@ export function AlertsSettings() {
   }, []);
 
   if (!data || !form) return null;
-  const dirty = JSON.stringify(form) !== JSON.stringify(data.settings);
+  const dirty = JSON.stringify(form) !== JSON.stringify(data.settings) || token !== "" || forgetToken;
   const set = (patch: Partial<AlertSettings>) => {
     setForm({ ...form, ...patch });
     setMessage(null);
@@ -51,9 +57,14 @@ export function AlertsSettings() {
     e.preventDefault();
     setBusy("save");
     try {
-      const res = await saveAlerts(form);
+      const res = await saveAlerts(form, {
+        telegram_bot_token: token || undefined,
+        forget_telegram_bot_token: forgetToken || undefined,
+      });
       setData(res);
       if (res.settings) setForm(res.settings);
+      setToken("");
+      setForgetToken(false);
       setMessage({ kind: "ok", text: "Alert settings saved." });
     } catch (err) {
       setMessage({ kind: "error", text: err instanceof Error ? err.message : String(err) });
@@ -74,6 +85,20 @@ export function AlertsSettings() {
     }
   };
 
+  const findChats = async () => {
+    setBusy("chats");
+    setMessage(null);
+    try {
+      const res = await fetchTelegramChats();
+      setChats(res.chats);
+      if (res.chats.length === 0) setMessage({ kind: "error", text: "No chats yet. Send your bot any message in Telegram, then try again." });
+    } catch (err) {
+      setMessage({ kind: "error", text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const locked = !data.editable || busy !== null;
 
   return (
@@ -83,22 +108,41 @@ export function AlertsSettings() {
         <p>A message when price trades into an active order block, with the limit entry and stop. Each order block alerts once.</p>
       </div>
 
-      {!data.configured && (
-        <div className="notice">
-          <p><strong>Connect a bot first.</strong> The token and chat id stay in <code>.env</code>, never in the database.</p>
+      <fieldset className="fields" disabled={locked}>
+        <legend>Bot</legend>
+        {!data.configured && (
           <ol className="steps">
             <li className={data.token_set ? "done" : undefined}>
-              Create a bot with <code>@BotFather</code> in Telegram and put its token in <code>.env</code> as{" "}
-              <code>TELEGRAM_BOT_TOKEN</code>{data.token_set && " (set)"}.
+              Create a bot with <code>@BotFather</code> in Telegram and paste its token below.
             </li>
             <li className={data.chat_id_set ? "done" : undefined}>
-              Send your bot any message, run <code>make telegram-chats</code> and copy the line it prints into{" "}
-              <code>.env</code> as <code>TELEGRAM_CHAT_ID</code>{data.chat_id_set && " (set)"}.
+              Send your bot any message, save, then press <strong>Find my chat</strong> and pick it.
             </li>
-            <li>Restart the screener.</li>
           </ol>
+        )}
+        <SecretField label="Bot token" source={forgetToken ? null : data.token_source} value={token} forget={forgetToken}
+          placeholder="123456789:AA…"
+          onChange={(v) => { setToken(v); setForgetToken(false); setMessage(null); }}
+          onForget={() => { setForgetToken(true); setToken(""); setMessage(null); }} />
+        <div className="field">
+          <label className="field-label" htmlFor="telegram-chat">Chat id</label>
+          <div className="input-with-button">
+            <input id="telegram-chat" type="text" value={form.chat_id ?? ""} placeholder="123456789" spellCheck={false}
+              onChange={(e) => set({ chat_id: e.target.value.trim() || null })} />
+            <button type="button" className="button secondary" disabled={!data.token_set || dirty || busy !== null}
+              title={!data.token_set ? "Save the bot token first" : dirty ? "Save first" : undefined} onClick={findChats}>
+              {busy === "chats" ? "Looking…" : "Find my chat"}
+            </button>
+          </div>
+          {chats && chats.length > 0 && (
+            <select aria-label="Chats that messaged the bot" value="" onChange={(e) => e.target.value && set({ chat_id: e.target.value })}>
+              <option value="">Pick a chat that messaged the bot…</option>
+              {chats.map((c) => <option key={c.id} value={String(c.id)}>{c.name} ({c.type}, {c.id})</option>)}
+            </select>
+          )}
+          <span className="field-hint">Where alerts go: your own chat with the bot, a group or a channel.</span>
         </div>
-      )}
+      </fieldset>
 
       <fieldset className="fields" disabled={locked}>
         <legend className="sr-only">Alert switch</legend>

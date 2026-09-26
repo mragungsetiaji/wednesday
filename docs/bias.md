@@ -47,10 +47,11 @@ applies it, nothing changes on its own.
 ### Setup
 
 1. `make install` (or `uv sync --extra llm`) installs both SDKs.
-2. Put the key of the provider you want in `.env`: `ANTHROPIC_API_KEY` or
-   `OPENAI_API_KEY`. Keys are only read from the environment, never stored in the
-   database. Restart.
-3. In **Settings > News brief** pick the provider, optionally a model (default
+2. In **Settings > News brief** pick the provider and paste its API key. The key
+   is kept in the system credential store (Windows Credential Manager), never in
+   the database; `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` in `.env` still work as a
+   fallback.
+3. Pick optionally a model (default
    `claude-opus-5` for Claude, `gpt-5` for OpenAI), and add up to 12 news URLs,
    one per line: an economic calendar, a gold or FX news page, a Fed page.
 4. Optionally write your own prompt. Keep the last line `BIAS: ...` in the

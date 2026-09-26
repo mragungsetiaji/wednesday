@@ -146,7 +146,7 @@ def test_brief_generate_with_fakes(monkeypatch, tmp_path):
 
 def test_brief_needs_key_and_urls(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    with pytest.raises(BriefError, match="ANTHROPIC_API_KEY"):
+    with pytest.raises(BriefError, match="API key in Settings"):
         BriefRunner(None, BriefSettings(urls=["https://a"])).check_ready()
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
     with pytest.raises(BriefError, match="news URL"):
@@ -180,7 +180,7 @@ def test_bias_and_brief_api(tmp_path, monkeypatch):
     assert saved["settings"]["model"] == "gpt-x" and store.get_setting("brief")["provider"] == "openai"
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     res = api.post("/api/brief/generate")
-    assert res.status_code == 422 and "OPENAI_API_KEY" in res.json()["detail"]
+    assert res.status_code == 422 and "OpenAI API key" in res.json()["detail"]
 
 
 def test_swings_are_labelled_against_the_previous_swing():

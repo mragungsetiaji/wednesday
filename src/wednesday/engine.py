@@ -19,7 +19,8 @@ from .bias import BIAS_KEY, TradeBias, active
 from .feeds import DataFeed, M1Buffer, build_feed
 from .plugins import Hooks
 from .scanner import ScanConfig, ScanResult, scan
-from .settings import DataSettings, forget_mt5_password, load_mt5_password, mt5_account, save_mt5_password
+from . import secret_store
+from .settings import MT5_SERVICE, DataSettings, mt5_account
 from .storage import Store
 
 log = logging.getLogger(__name__)
@@ -189,7 +190,6 @@ class Runtime:
         self.cfg = cfg
         self.store = store
         self.mt5_password = mt5_password  # MT5_PASSWORD from the environment, for setups that still use it
-        self._session_passwords: dict[str, str] = {}  # when there is no credential store: this run only
         self.delay = delay
         self.on_result = on_result
         self.alerts = alerts  # AlertManager or None
@@ -209,25 +209,19 @@ class Runtime:
 
     def mt5_password_for(self, settings: DataSettings) -> tuple[str | None, str | None]:
         """The MT5 password for the settings' account and where it came from: saved, session or env."""
-        account = mt5_account(settings.mt5_login, settings.mt5_server)
-        if pw := self._session_passwords.get(account):
-            return pw, "session"
-        if pw := load_mt5_password(settings.mt5_login, settings.mt5_server):
-            return pw, "saved"
+        if settings.mt5_login is not None:
+            pw, source = secret_store.recall(MT5_SERVICE, mt5_account(settings.mt5_login, settings.mt5_server))
+            if pw:
+                return pw, source
         if self.mt5_password:
             return self.mt5_password, "env"
         return None, None
 
     def set_mt5_password(self, login: int, server: str | None, password: str) -> None:
-        account = mt5_account(login, server)
-        if save_mt5_password(login, server, password):
-            self._session_passwords.pop(account, None)
-        else:
-            self._session_passwords[account] = password
+        secret_store.remember(MT5_SERVICE, mt5_account(login, server), password)
 
     def forget_mt5_password(self, login: int | None, server: str | None) -> None:
-        self._session_passwords.pop(mt5_account(login, server), None)
-        forget_mt5_password(login, server)
+        secret_store.forget(MT5_SERVICE, mt5_account(login, server))
 
     def active_bias(self) -> TradeBias | None:
         """The trader's bias, unless it has expired."""

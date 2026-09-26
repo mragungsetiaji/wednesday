@@ -7,9 +7,10 @@ the last price). Each order block alerts once; the log lives in the store so a
 restart doesn't repeat alerts. Bars that printed before the order block was
 confirmed (its break candle closed) never trigger it.
 
-The bot token and chat id come from the environment (``TELEGRAM_BOT_TOKEN``,
-``TELEGRAM_CHAT_ID``); which timeframes and priorities alert is a setting the
-dashboard saves.
+The bot token is entered in Settings and kept in the OS credential store
+(``secret_store``; ``TELEGRAM_BOT_TOKEN`` still works as a fallback). The chat
+id, and which timeframes and priorities alert, are settings the dashboard saves
+(``TELEGRAM_CHAT_ID`` is the fallback for the chat id).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from __future__ import annotations
 import html
 import json
 import logging
+import os
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -27,6 +29,7 @@ import pandas as pd
 
 from .bias import RISK_TEXT, TradeBias, setup_risk
 from .levels import Level
+from .secret_store import get_secret
 from .scanner import ScanResult
 from .storage import Store
 from .timeframes import TIMEFRAMES, Timeframe
@@ -43,10 +46,17 @@ class AlertSettings:
     timeframes: list[str] = field(default_factory=lambda: [tf.name for tf in TIMEFRAMES])
     priorities: list[str] = field(default_factory=lambda: list(PRIORITIES))
     neutral_alerts: bool = False  # with a neutral bias (no trading) alerts are held back unless this is on
+    chat_id: str | None = None  # None = TELEGRAM_CHAT_ID from the environment
+
+    @property
+    def resolved_chat_id(self) -> str | None:
+        return self.chat_id or os.environ.get("TELEGRAM_CHAT_ID") or None
 
     def validate(self) -> list[str]:
         known = {tf.name for tf in TIMEFRAMES}
         errors = [f"Unknown timeframe {t!r}" for t in self.timeframes if t not in known]
+        if self.chat_id and not self.chat_id.lstrip("-").isdigit() and not self.chat_id.startswith("@"):
+            errors.append("The chat id is a number like 123456789 (or -100… for a group), or @channelname")
         errors += [f"Unknown priority {p!r}" for p in self.priorities if p not in PRIORITIES]
         return errors
 
@@ -62,6 +72,7 @@ class AlertSettings:
             timeframes=list(d.get("timeframes", base.timeframes)),
             priorities=list(d.get("priorities", base.priorities)),
             neutral_alerts=bool(d.get("neutral_alerts", base.neutral_alerts)),
+            chat_id=str(d.get("chat_id") or "").strip() or None,
         )
 
 
@@ -142,6 +153,12 @@ def format_alert(symbol: str, tf: str, ob: Level, price: float, bias_text: str |
     return "\n".join(lines)
 
 
+def telegram_client(settings: AlertSettings) -> TelegramClient | None:
+    """A client from the saved token and the settings' chat id; None without a token."""
+    token, _ = get_secret("telegram_bot_token")
+    return TelegramClient(token, settings.resolved_chat_id) if token else None
+
+
 class AlertManager:
     def __init__(self, store: Store | None, client: TelegramClient | None, settings: AlertSettings | None = None):
         self.store = store
@@ -220,5 +237,5 @@ class AlertManager:
 
     def send_test(self, symbol: str) -> None:
         if not self.configured:
-            raise TelegramError("Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env first")
+            raise TelegramError("Add the bot token and chat id in Settings > Telegram alerts first")
         self.client.send(f"<b>{html.escape(symbol)} screener</b>\nTest message: alerts are connected.")

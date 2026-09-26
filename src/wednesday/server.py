@@ -16,7 +16,7 @@ from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from .alerts import ALERTS_KEY, AlertSettings, TelegramError
+from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
 from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .news import CALENDAR_KEY, CalendarSettings
@@ -27,7 +27,9 @@ from .features import catalog as feature_catalog
 from .plugins import PLUGIN_API, features, load_plugins
 from .quarters import quarters_payload, utc_to_feed
 from .mt5_terminals import find_terminals
+from .secret_store import get_secret, update_secrets
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
+from .terms import Terms
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
 
 # The Windows desktop build (PyInstaller) unpacks the dashboard next to the code, under sys._MEIPASS.
@@ -85,6 +87,18 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                 "conn": st.conn,
                 "config": cfg.to_dict(),
             }
+
+    terms = Terms(runtime.store if runtime else target.store)
+
+    @app.get("/api/terms")
+    def get_terms() -> dict:
+        """The disclaimer and risk agreement, and whether it was accepted."""
+        return terms.status()
+
+    @app.post("/api/terms/accept")
+    def accept_terms() -> dict:
+        terms.accept()
+        return terms.status()
 
     @app.get("/api/status")
     def get_status() -> dict:
@@ -182,6 +196,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             raise HTTPException(422, f"Invalid brief settings: {exc}") from exc
         if errors := new.validate():
             raise HTTPException(422, "; ".join(errors))
+        update_secrets(body, ["anthropic_api_key", "openai_api_key"])
         if runtime.store:
             runtime.store.set_setting(BRIEF_KEY, new.to_dict())
         brief.settings = new
@@ -304,6 +319,8 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return {
             "editable": alerts is not None,
             "token_set": bool(client and client.token),
+            # Where the token comes from ("saved", "session" or "env"); never the token itself.
+            "token_source": get_secret("telegram_bot_token")[1],
             "chat_id_set": bool(client and client.chat_id),
             "configured": bool(alerts and alerts.configured),
             "settings": alerts.settings.to_dict() if alerts else None,
@@ -322,10 +339,27 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         new = AlertSettings.from_dict(body)
         if errors := new.validate():
             raise HTTPException(422, "; ".join(errors))
+        token_changed = update_secrets(body, ["telegram_bot_token"])
+        chat_changed = new.resolved_chat_id != runtime.alerts.settings.resolved_chat_id
         if runtime.store:
             runtime.store.set_setting(ALERTS_KEY, new.to_dict())
         runtime.alerts.settings = new
+        if token_changed or chat_changed:
+            runtime.alerts.client = telegram_client(new)
         return alerts_payload()
+
+    @app.get("/api/alerts/chats")
+    def alert_chats() -> dict:
+        """Chats that messaged the bot recently, to pick the chat id without a terminal."""
+        if not runtime or runtime.alerts is None:
+            raise HTTPException(409, "Alerts are only available when the server runs with --serve")
+        client = runtime.alerts.client
+        if client is None:
+            raise HTTPException(409, "Save the bot token first")
+        try:
+            return {"chats": client.chats()}
+        except TelegramError as exc:
+            raise HTTPException(502, str(exc)) from exc
 
     @app.post("/api/alerts/test")
     def test_alert() -> dict:

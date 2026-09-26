@@ -11,7 +11,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, parse_detectors
-from .alerts import ALERTS_KEY, AlertManager, AlertSettings, TelegramClient, TelegramError
+from .alerts import ALERTS_KEY, AlertManager, AlertSettings, TelegramClient, TelegramError, telegram_client
 from .brief import BRIEF_KEY, BriefRunner, BriefSettings
 from .journal.service import Journals
 from .lab.service import Lab
@@ -111,7 +111,8 @@ def check(feed, buffer, cfg: ScanConfig) -> None:
 
 def telegram_command(args: argparse.Namespace, client: TelegramClient | None, symbol: str) -> None:
     if client is None:
-        raise SystemExit("Set TELEGRAM_BOT_TOKEN in .env first (create a bot with @BotFather).")
+        raise SystemExit("Add the bot token in Settings > Telegram alerts, or TELEGRAM_BOT_TOKEN in .env "
+                         "(create a bot with @BotFather).")
     try:
         if args.telegram_chats:
             chats = client.chats()
@@ -171,12 +172,11 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
             with json_path.open("a") as fh:
                 fh.write(json.dumps(record) + "\n")
 
-    token, chat_id = _env("TELEGRAM_BOT_TOKEN"), _env("TELEGRAM_CHAT_ID")
-    client = TelegramClient(token, chat_id) if token else None
+    alert_settings = AlertSettings.from_dict(store.get_setting(ALERTS_KEY) if store else None)
+    client = telegram_client(alert_settings)
     if args.telegram_chats or args.telegram_test:
         telegram_command(args, client, data.resolved_symbol)
         return
-    alert_settings = AlertSettings.from_dict(store.get_setting(ALERTS_KEY) if store else None)
     alerts = AlertManager(store, client, alert_settings)
     if alerts.configured:
         log.info("telegram alerts %s for %s, %s OBs", "on" if alert_settings.enabled else "paused",

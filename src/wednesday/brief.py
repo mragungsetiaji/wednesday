@@ -7,8 +7,9 @@ force) and asks the model for a few points plus a closing line
 ``BIAS: BULLISH|BEARISH|NEUTRAL``. That line is only a suggestion: the trader
 applies it (or not) from the dashboard; nothing is set automatically.
 
-API keys come from the environment only (``ANTHROPIC_API_KEY``,
-``OPENAI_API_KEY``), never from the database. Both SDKs are optional
+API keys are entered in Settings and kept in the OS credential store
+(``secret_store``), never in the database; ``ANTHROPIC_API_KEY`` and
+``OPENAI_API_KEY`` in the environment still work. Both SDKs are optional
 (``uv sync --extra llm``).
 """
 
@@ -16,7 +17,6 @@ from __future__ import annotations
 
 import importlib.util
 import logging
-import os
 import re
 import threading
 import urllib.error
@@ -25,6 +25,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 
+from .secret_store import get_secret
 from .storage import Store
 
 log = logging.getLogger(__name__)
@@ -33,9 +34,11 @@ BRIEF_KEY = "brief"
 BRIEF_LAST_KEY = "brief_last"
 
 PROVIDERS = {
-    "anthropic": {"title": "Claude (Anthropic)", "env": "ANTHROPIC_API_KEY", "package": "anthropic",
+    "anthropic": {"title": "Claude (Anthropic)", "env": "ANTHROPIC_API_KEY", "secret": "anthropic_api_key",
+                  "package": "anthropic",
                   "default_model": "claude-opus-5"},
-    "openai": {"title": "OpenAI", "env": "OPENAI_API_KEY", "package": "openai", "default_model": "gpt-5"},
+    "openai": {"title": "OpenAI", "env": "OPENAI_API_KEY", "secret": "openai_api_key", "package": "openai",
+               "default_model": "gpt-5"},
 }
 # Claude models that take server-side refusal fallbacks ("default" routing).
 FALLBACK_MODELS = ("claude-opus-5", "claude-fable-5-1")
@@ -102,13 +105,14 @@ class BriefSettings:
 
 
 def provider_status() -> list[dict]:
-    """Per provider: is its SDK installed and its API key set."""
-    return [
-        {"id": pid, "title": info["title"], "default_model": info["default_model"], "env": info["env"],
-         "installed": importlib.util.find_spec(info["package"]) is not None,
-         "key_set": bool(os.environ.get(info["env"]))}
-        for pid, info in PROVIDERS.items()
-    ]
+    """Per provider: is its SDK installed, is its API key set and where it comes from (never the key)."""
+    out = []
+    for pid, info in PROVIDERS.items():
+        source = get_secret(info["secret"])[1]
+        out.append({"id": pid, "title": info["title"], "default_model": info["default_model"], "env": info["env"],
+                    "secret": info["secret"], "installed": importlib.util.find_spec(info["package"]) is not None,
+                    "key_set": source is not None, "key_source": source})
+    return out
 
 
 # ---- news sources ---------------------------------------------------------
@@ -183,7 +187,8 @@ def suggested_bias(text: str) -> str | None:
 def ask_claude(model: str, system: str, user: str) -> str:
     import anthropic
 
-    client = anthropic.Anthropic()  # ANTHROPIC_API_KEY (or another configured Anthropic credential)
+    # The key from Settings; without one the SDK falls back to ANTHROPIC_API_KEY.
+    client = anthropic.Anthropic(api_key=get_secret("anthropic_api_key")[0])
     try:
         if model in FALLBACK_MODELS:
             # If the model declines, the API re-runs the request on a fallback model in the same call.
@@ -196,7 +201,7 @@ def ask_claude(model: str, system: str, user: str) -> str:
                 model=model, max_tokens=16000, system=system, messages=[{"role": "user", "content": user}],
             )
     except anthropic.AuthenticationError as exc:
-        raise BriefError("Claude rejected the API key (ANTHROPIC_API_KEY)") from exc
+        raise BriefError("Claude rejected the API key. Check it in Settings > News brief") from exc
     except anthropic.NotFoundError as exc:
         raise BriefError(f"Unknown Claude model {model!r}") from exc
     except anthropic.RateLimitError as exc:
@@ -216,11 +221,11 @@ def ask_claude(model: str, system: str, user: str) -> str:
 def ask_openai(model: str, system: str, user: str) -> str:
     import openai
 
-    client = openai.OpenAI()  # OPENAI_API_KEY
+    client = openai.OpenAI(api_key=get_secret("openai_api_key")[0])
     try:
         response = client.responses.create(model=model, instructions=system, input=user)
     except openai.AuthenticationError as exc:
-        raise BriefError("OpenAI rejected the API key (OPENAI_API_KEY)") from exc
+        raise BriefError("OpenAI rejected the API key. Check it in Settings > News brief") from exc
     except openai.NotFoundError as exc:
         raise BriefError(f"Unknown OpenAI model {model!r}") from exc
     except openai.RateLimitError as exc:
@@ -257,7 +262,7 @@ class BriefRunner:
         if not info["installed"]:
             raise BriefError(f"Install the {info['title']} SDK: uv sync --extra llm")
         if not info["key_set"]:
-            raise BriefError(f"Set {info['env']} in .env and restart")
+            raise BriefError(f"Add the {info['title']} API key in Settings > News brief")
         if not s.urls:
             raise BriefError("Add at least one news URL")
 

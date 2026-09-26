@@ -34,9 +34,13 @@ upgrading or uninstalling keeps it:
 | `webview\` | The window's storage: dashboard layout and preferences |
 
 Everything is set in the dashboard under **Settings**; the app needs no `.env`.
-The MT5 password is kept in Windows Credential Manager (see below). The Telegram
-token and the LLM keys are still read from a `.env` in this folder if you create
-one (same variables as [`.env.example`](../.env.example)), then restart the app.
+The MT5 password, the Telegram bot token and the LLM API keys are kept in Windows
+Credential Manager (entries named `Wednesday` and `Wednesday MT5`), never in the
+database or a file. A `.env` in this folder is still read if you create one.
+
+On first start the app shows the [disclaimer and risk agreement](../DISCLAIMER.md);
+it can't be used until you accept it. The installer asks the same before
+installing.
 The installer includes the MT5, news brief and Lab extras, so every source and
 feature works without installing Python.
 

@@ -28,6 +28,9 @@ OutputDir=..\dist
 OutputBaseFilename=WednesdaySetup-{#AppVersion}
 SetupIconFile=wednesday.ico
 UninstallDisplayIcon={app}\Wednesday.exe
+; The risk agreement must be accepted to install; the license is shown after it.
+LicenseFile=..\DISCLAIMER.md
+InfoBeforeFile=..\LICENSE
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -38,6 +41,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\dist\Wednesday\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "..\DISCLAIMER.md"; DestDir: "{app}"; DestName: "DISCLAIMER.txt"; Flags: ignoreversion
 
 [Dirs]
 Name: "{localappdata}\Wednesday"; Flags: uninsneveruninstall

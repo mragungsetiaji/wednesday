@@ -3,8 +3,8 @@
 Resolution order for each field: explicit command-line flag > settings saved
 from the dashboard > environment / .env > built-in default. The MT5 password
 never goes into the database: it is kept in the operating system's credential
-store (Windows Credential Manager, through ``keyring``), or read from
-``MT5_PASSWORD`` for setups that still use it.
+store (see ``secret_store``), or read from ``MT5_PASSWORD`` for setups that
+still use it.
 """
 
 from __future__ import annotations
@@ -159,49 +159,9 @@ def resolve(cli: dict, store: Store | None) -> DataSettings:
     return DataSettings.from_dict({**base.to_dict(), **explicit})
 
 
-# MT5 password: one per account, in the OS credential store; never in the database or logs.
-KEYRING_SERVICE = "Wednesday MT5"
+# MT5 password: one per account, in the OS credential store (see secret_store.py).
+MT5_SERVICE = "Wednesday MT5"
 
 
 def mt5_account(login: int | None, server: str | None) -> str:
     return f"{login}@{server or ''}"
-
-
-def _keyring():
-    try:
-        import keyring
-    except ImportError:
-        return None
-    return keyring
-
-
-def load_mt5_password(login: int | None, server: str | None) -> str | None:
-    kr = _keyring()
-    if kr is None or login is None:
-        return None
-    try:
-        return kr.get_password(KEYRING_SERVICE, mt5_account(login, server))
-    except Exception:  # a broken backend is the same as no saved password
-        return None
-
-
-def save_mt5_password(login: int, server: str | None, password: str) -> bool:
-    """Save it in the credential store; False when there is none (the caller keeps it for this run only)."""
-    kr = _keyring()
-    if kr is None:
-        return False
-    try:
-        kr.set_password(KEYRING_SERVICE, mt5_account(login, server), password)
-    except Exception:
-        return False
-    return True
-
-
-def forget_mt5_password(login: int | None, server: str | None) -> None:
-    kr = _keyring()
-    if kr is None or login is None:
-        return
-    try:
-        kr.delete_password(KEYRING_SERVICE, mt5_account(login, server))
-    except Exception:  # not saved: nothing to forget
-        pass

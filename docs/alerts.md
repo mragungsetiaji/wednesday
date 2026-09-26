@@ -12,14 +12,16 @@ Zone 2,470.16 – 2,471.97 · price 2,471.50
 
 ## Setup
 
-1. Create a bot with [@BotFather](https://t.me/BotFather) and put the token in
-   `.env` as `TELEGRAM_BOT_TOKEN`.
-2. Send the bot any message, then run `make telegram-chats`
-   (or `uv run wednesday --telegram-chats`) and put the printed id in `.env`
-   as `TELEGRAM_CHAT_ID`.
-3. Restart, then `make telegram-test` or **Settings > Telegram alerts > Send test message**.
+1. Create a bot with [@BotFather](https://t.me/BotFather) and paste its token in
+   **Settings > Telegram alerts > Bot token**. Save.
+2. Send the bot any message, press **Find my chat** and pick your chat (or paste a
+   chat id). Save.
+3. **Send test message**.
 
-The token and chat id stay in `.env`; they are never written to the database.
+The token is kept in the system credential store (Windows Credential Manager),
+never in the database; the chat id is saved with the alert settings.
+`TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env` still work as a fallback,
+and `make telegram-chats` / `make telegram-test` do the same from a terminal.
 
 ## Choosing what alerts
 

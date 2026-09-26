@@ -39,6 +39,13 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 
 </div>
 
+> [!WARNING]
+> **Not financial advice. Every risk is yours.** Wednesday is an analysis tool: it never places
+> orders, and its levels, setups, alerts and briefs are software output, not advice. Trading
+> leveraged products can lose more than you deposit, and every decision and loss is your own
+> responsibility. By using Wednesday you accept the [disclaimer and risk agreement](DISCLAIMER.md);
+> the app asks you to accept it on first start.
+
 ## What it does
 
 - **Scans every minute**: 1-minute bars become 4H, 1H, 30M, 15M and 5M candles, scanned from the highest timeframe down.
@@ -134,5 +141,10 @@ developing: [Windows and VPS](docs/deploy-windows.md) and [Development](docs/dev
 Everything above is free. Paid extras (more than one journal, signed models, the second brain, session recaps, scheduled briefs) come as a
 plugin with a licence; see [Plugins](docs/plugins.md#licences-and-paid-features).
 
-> [!NOTE]
-> Wednesday is an analysis tool. It doesn't place orders, and nothing it shows is financial advice.
+## License
+
+Free for personal use, including trading your own accounts. Not for sale: you may not sell
+Wednesday or a modified copy, charge for access to it, or offer it or its signals as a paid
+service. Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE) with an added
+permission for personal trading; see [LICENSE](LICENSE) for the exact terms and
+[DISCLAIMER.md](DISCLAIMER.md) for the risk agreement.
