@@ -80,6 +80,14 @@ export const FlaskIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Book: the journal. */
+export const BookIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 3.5A1.5 1.5 0 0 1 4.5 2H13v10.5H4.5A1.5 1.5 0 0 0 3 14V3.5z" />
+    <path d="M3 14a1.5 1.5 0 0 0 1.5 1H13v-2.5M6 5h4" />
+  </Svg>
+);
+
 export const CheckIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3 8.5l3.2 3L13 4.5" />

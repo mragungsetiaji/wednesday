@@ -591,3 +591,132 @@ export const activateLicence = (key: string) => send<LicenceStatus>("PUT", "/api
 export const removeLicence = () => send<LicenceStatus>("DELETE", "/api/licence");
 
 export const fetchPlugins = () => getJson<PluginsResponse>("/api/plugins");
+
+// ---- Journal (trading accounts imported from MT5) ----
+
+export interface Journal {
+  id: string;
+  name: string;
+  login: string | null; // MT5 account number
+  server: string | null;
+  company: string | null;
+  currency: string | null;
+  source: "mt5" | "report" | null; // how it was last filled
+  account: { balance: number | null; equity: number | null; at: string } | null; // what the terminal said at the last sync
+  time_offset: number | null; // hours from the deal clock to the price clock; null = detected
+  created_at: string;
+  synced_at: string | null;
+}
+
+export interface JournalsResponse {
+  available: boolean;
+  journals: Journal[];
+  multi: boolean; // more than one journal allowed (paid)
+}
+
+export interface JournalTrade {
+  id: string;
+  position: string;
+  symbol: string;
+  side: "buy" | "sell";
+  volume: number;
+  open_time: number; // unix, broker server clock
+  open_price: number;
+  close_time: number | null; // null while open
+  close_price: number | null;
+  profit: number;
+  commission: number;
+  swap: number;
+  net: number;
+  mae: number | null; // worst floating result, from M1 bars
+  mfe: number | null;
+  floating: number | null; // open trades
+  verified: boolean; // bars for its whole life and its prices match them
+  price_ok: boolean | null; // null: no bar to check against
+  note: string;
+  tags: string[];
+}
+
+export type Point = [number, number];
+
+export interface JournalStats {
+  journal: Journal;
+  summary: {
+    gain: number; // percent, time-weighted
+    abs_gain: number | null;
+    daily: number | null;
+    monthly: number | null;
+    drawdown: number; // percent, from the rebuilt equity
+    drawdown_at: number | null;
+    balance: number;
+    equity: number;
+    floating: number;
+    profit: number;
+    deposits: number;
+    withdrawals: number;
+    credit: number;
+    other: number;
+    max_floating_loss: number | null;
+    start: number | null;
+    last: number | null;
+  };
+  trading: {
+    trades: number;
+    open: number;
+    won: number;
+    lost: number;
+    win_rate: number | null;
+    profit_factor: number | null;
+    avg_win: number | null;
+    avg_loss: number | null;
+    best: number | null;
+    worst: number | null;
+    lots: number;
+    commission: number;
+    swap: number;
+    avg_hold: number | null; // seconds
+  };
+  verification: {
+    basis: "ohlc" | "closed";
+    trades: number;
+    verified: number;
+    coverage: number | null; // percent of trade time rebuilt from bars
+    prices_checked: number;
+    prices_ok: number;
+    offset_hours: number | null;
+    offset_detected: boolean;
+    no_prices: string[];
+    mismatched: string[];
+    prices_from: Record<string, string>;
+    balance_reported?: number;
+    balance_matches?: boolean;
+  };
+  series: { growth: Point[]; balance: Point[]; equity: Point[]; drawdown: Point[] };
+  trades: JournalTrade[];
+  cash: { id: string; time: number; kind: string; amount: number; comment: string | null }[];
+}
+
+export const fetchJournals = () => getJson<JournalsResponse>("/api/journals");
+export const fetchJournal = (id: string) => getJson<JournalStats>(`/api/journals/${encodeURIComponent(id)}`);
+export const createJournal = (name: string) => send<Journal>("POST", "/api/journals", { name });
+export const updateJournal = (id: string, patch: { name?: string; time_offset?: number | null }) =>
+  send<Journal>("PATCH", `/api/journals/${encodeURIComponent(id)}`, patch);
+export const deleteJournal = (id: string) => send<{ deleted: boolean }>("DELETE", `/api/journals/${encodeURIComponent(id)}`);
+export const syncJournal = (id: string) =>
+  send<{ trades: number; cash: number; journal: Journal }>("POST", `/api/journals/${encodeURIComponent(id)}/sync`);
+export const saveTradeNote = (id: string, tradeId: string, note: string, tags: string[]) =>
+  send<{ note: string; tags: string[] }>("PUT", `/api/journals/${encodeURIComponent(id)}/trades/${encodeURIComponent(tradeId)}/note`, { note, tags });
+export const journalCsvUrl = (id: string) => `/api/journals/${encodeURIComponent(id)}/trades.csv`;
+export async function importReport(id: string, file: File): Promise<{ trades: number; cash: number; journal: Journal }> {
+  const res = await fetch(`/api/journals/${encodeURIComponent(id)}/import`, { method: "POST", body: file });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}

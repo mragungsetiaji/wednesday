@@ -72,7 +72,8 @@ what each does, so the Plan screen can show them, locked, even when no plugin is
 installed. A plugin can provide ids that aren't in the list; they show too.
 
 Free, with or without a licence: the screener, alerts, the bias, the news card,
-the news brief with your own API key, and labelling and training your own models.
+the news brief with your own API key, labelling and training your own models, and one
+journal.
 
 ## Versioning
 

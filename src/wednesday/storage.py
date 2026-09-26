@@ -122,6 +122,68 @@ lab_reviews_table = Table(
 )
 
 
+# ---- Journal: trading accounts imported from MT5 --------------------------------------------
+# Deal times are unix seconds of the broker's server clock, as MT5 reports them.
+
+journals_table = Table(
+    "journals",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("name", String(120), nullable=False),
+    Column("login", String(32), nullable=True),  # the MT5 account number (never a password)
+    Column("server", String(120), nullable=True),
+    Column("company", String(120), nullable=True),
+    Column("currency", String(8), nullable=True),
+    Column("source", String(16), nullable=True),  # how it was last filled: "mt5" or "report"
+    Column("account", Text, nullable=True),  # JSON: balance/equity the terminal reported at the last sync
+    Column("time_offset", Integer, nullable=True),  # seconds from deal clock to price clock; null = detect
+    Column("created_at", String(40), nullable=False),
+    Column("synced_at", String(40), nullable=True),
+)
+
+journal_trades_table = Table(
+    "journal_trades",
+    metadata,
+    Column("journal_id", String(36), primary_key=True),
+    Column("id", String(64), primary_key=True),  # "p<position>" or "p<position>:<closing deal>"
+    Column("position", String(32), nullable=False),
+    Column("symbol", String(64), nullable=False),
+    Column("side", String(4), nullable=False),  # "buy" or "sell"
+    Column("volume", Float, nullable=False),  # lots
+    Column("open_time", BigInteger, nullable=False),
+    Column("open_price", Float, nullable=False),
+    Column("close_time", BigInteger, nullable=True),  # null while open
+    Column("close_price", Float, nullable=True),  # the current price while open
+    Column("profit", Float, nullable=False),  # price P/L only, in the account currency
+    Column("commission", Float, nullable=False),  # commission and fees
+    Column("swap", Float, nullable=False),
+    Column("sl", Float, nullable=True),
+    Column("tp", Float, nullable=True),
+    Column("comment", Text, nullable=True),
+)
+
+journal_cash_table = Table(
+    "journal_cash",
+    metadata,
+    Column("journal_id", String(36), primary_key=True),
+    Column("id", String(64), primary_key=True),  # the MT5 deal ticket
+    Column("time", BigInteger, nullable=False),
+    Column("kind", String(16), nullable=False),  # "deposit", "withdrawal", "credit" or "other"
+    Column("amount", Float, nullable=False),
+    Column("comment", Text, nullable=True),
+)
+
+journal_notes_table = Table(
+    "journal_notes",
+    metadata,
+    Column("journal_id", String(36), primary_key=True),
+    Column("trade_id", String(64), primary_key=True),
+    Column("note", Text, nullable=False),
+    Column("tags", Text, nullable=False),  # JSON list
+    Column("updated_at", String(40), nullable=False),
+)
+
+
 class Store:
     def __init__(self, url: str = DEFAULT_DB_URL):
         self.url = make_url(url)
@@ -190,6 +252,21 @@ class Store:
         df.index.name = None
         return df.sort_index().astype(float)
 
+    def load_bar_range(self, source: str, symbol: str, start: int, end: int) -> pd.DataFrame:
+        """Stored M1 bars with open times in [start, end] (unix seconds of the feed clock)."""
+        t = bars_table
+        q = (
+            select(t.c.time, t.c.open, t.c.high, t.c.low, t.c.close, t.c.volume)
+            .where(t.c.source == source, t.c.symbol == symbol, t.c.time >= start, t.c.time <= end)
+            .order_by(t.c.time)
+        )
+        with self.engine.connect() as conn:
+            rows = conn.execute(q).all()
+        df = pd.DataFrame(rows, columns=["time", *OHLCV_COLUMNS])
+        df.index = pd.to_datetime(df.pop("time"), unit="s")
+        df.index.name = None
+        return df.astype(float)
+
     def bar_stats(self) -> list[dict]:
         t = bars_table
         q = select(t.c.source, t.c.symbol, func.count(), func.min(t.c.time), func.max(t.c.time)).group_by(t.c.source, t.c.symbol)
@@ -245,6 +322,59 @@ class Store:
     def lab_delete(self, table: Table, row_id: str) -> bool:
         with self.engine.begin() as conn:
             return conn.execute(table.delete().where(table.c.id == row_id)).rowcount > 0
+
+    # ---- journal --------------------------------------------------------
+    def journals(self) -> list[dict]:
+        t = journals_table
+        with self.engine.connect() as conn:
+            rows = [dict(r._mapping) for r in conn.execute(select(t).order_by(t.c.created_at))]
+        for r in rows:
+            r["account"] = json.loads(r["account"]) if r["account"] else None
+        return rows
+
+    def journal_put(self, row: dict) -> None:
+        row = {**row, "account": json.dumps(row["account"]) if row.get("account") is not None else None}
+        self._upsert(journals_table, [row], ["id"])
+
+    def journal_delete(self, journal_id: str) -> bool:
+        with self.engine.begin() as conn:
+            for t in (journal_trades_table, journal_cash_table, journal_notes_table):
+                conn.execute(t.delete().where(t.c.journal_id == journal_id))
+            return conn.execute(journals_table.delete().where(journals_table.c.id == journal_id)).rowcount > 0
+
+    def journal_rows(self, table: Table, journal_id: str) -> list[dict]:
+        """Trades, cash or notes of a journal, oldest first."""
+        t = table
+        q = select(t).where(t.c.journal_id == journal_id)
+        if "open_time" in t.c or "time" in t.c:
+            q = q.order_by(t.c.open_time if "open_time" in t.c else t.c.time)
+        with self.engine.connect() as conn:
+            rows = [dict(r._mapping) for r in conn.execute(q)]
+        if table is journal_notes_table:
+            for r in rows:
+                r["tags"] = json.loads(r["tags"])
+        return rows
+
+    def journal_fill(self, journal_id: str, trades: list[dict], cash: list[dict], replace: bool) -> None:
+        """Save imported trades and cash. ``replace`` drops what was there first (a full sync)."""
+        if replace:
+            with self.engine.begin() as conn:
+                for t in (journal_trades_table, journal_cash_table):
+                    conn.execute(t.delete().where(t.c.journal_id == journal_id))
+        for table, rows in ((journal_trades_table, trades), (journal_cash_table, cash)):
+            rows = [{**r, "journal_id": journal_id} for r in rows]
+            for i in range(0, len(rows), 2000):
+                self._upsert(table, rows[i : i + 2000], ["journal_id", "id"])
+
+    def journal_note(self, journal_id: str, trade_id: str, note: str, tags: list[str], updated_at: str) -> None:
+        if not note and not tags:
+            with self.engine.begin() as conn:
+                t = journal_notes_table
+                conn.execute(t.delete().where(t.c.journal_id == journal_id, t.c.trade_id == trade_id))
+            return
+        self._upsert(journal_notes_table, [{"journal_id": journal_id, "trade_id": trade_id, "note": note,
+                                            "tags": json.dumps(tags), "updated_at": updated_at}],
+                     ["journal_id", "trade_id"])
 
     # ---- helpers --------------------------------------------------------
     def _upsert(self, table: Table, rows: list[dict], keys: list[str]) -> None:

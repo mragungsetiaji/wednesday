@@ -7,6 +7,7 @@
 | [Data sources and storage](data-sources.md) | Yahoo Finance, MT5, CSV, SQLite / PostgreSQL |
 | [Bias and news brief](bias.md) | Setting a bias, risk on / off labels, the LLM news brief |
 | [Lab: labels and models](lab.md) | Tag candles, train models, model files, reviewing model blocks, the dataset |
+| [Journal](journal.md) | MT5 sync and report import, gain and drawdown rebuilt from prices, what is checked |
 | [Telegram alerts](alerts.md) | Setup and how entries into an order block are detected |
 | [Configuration](configuration.md) | Make targets, CLI options, `.env` |
 | [Windows and VPS](deploy-windows.md) | MT5 on Windows, running 24/7 on a VPS |

@@ -21,6 +21,7 @@ from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .news import CALENDAR_KEY, CalendarSettings
 from .engine import Engine, Runtime
 from .lab.api import lab_router
+from .journal.api import journal_router
 from .features import catalog as feature_catalog
 from .plugins import PLUGIN_API, features, load_plugins
 from .quarters import quarters_payload, utc_to_feed
@@ -305,6 +306,8 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return {"ok": True}
 
     app.include_router(lab_router(lambda: runtime.lab if runtime else None, current, current_source))
+    app.include_router(journal_router(lambda: runtime.journals if runtime else None, current,
+                                      lambda: features(app.state.plugins)))
 
     # Plugins mount their routes before the dashboard's catch-all static mount below.
     plugins = load_plugins(app, runtime) if runtime else []

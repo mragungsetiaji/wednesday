@@ -51,6 +51,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **News brief**: Claude or OpenAI reads the news pages you pick and suggests a bias you can apply with one click.
 - **Risk-time warning**: a card in the corner an hour before high-impact US news, glowing in the last 30 minutes.
 - **Lab for machine learning**: tag candles by hand (order block, liquidity, inducement), train a model on your tags, export or import model files, and mark each block the model finds on the chart valid or invalid.
+- **Trading journal**: import an MT5 account (synced from the terminal or from its report) and see gain, drawdown, deposits and the growth curve, with the drawdown rebuilt from M1 prices so a statement can't hide it.
 - **Pings you on Telegram** when price trades into an order block.
 - **Free data by default** (Yahoo Finance), MetaTrader 5 when you're ready; history stored in SQLite or PostgreSQL.
 
@@ -93,6 +94,12 @@ Click candles and tag them, mark the stretches you've fully reviewed, and train 
 
 <img src="docs/images/lab-label.png" alt="The Lab: labelling 5M candles with the detector's suggestions and the model's blocks" width="100%">
 
+### Journal
+
+Sync an MT5 account, or import the terminal's history report, and get the numbers of a public track record: gain (time-weighted), absolute gain, drawdown, balance, equity, deposits, withdrawals and the growth curve. The drawdown is rebuilt from M1 prices minute by minute, and every deal price is checked against its bar, so a trade that sat deep in loss before closing green still counts. More in [docs/journal.md](docs/journal.md).
+
+<img src="docs/images/journal.png" alt="The journal: account numbers on the left, the growth curve on the right" width="100%">
+
 > **Why "Wednesday"?** Watching gold through quarterly theory, the Wednesday and New York blocks kept coming up green. The quarterly pane shows those blocks on the chart and its stats count how often that holds.
 
 ## Quick start
@@ -134,13 +141,14 @@ uv run wednesday --serve
 | [Data sources and storage](docs/data-sources.md) | Yahoo Finance, MT5, CSV, SQLite / PostgreSQL |
 | [Bias and news brief](docs/bias.md) | Setting a bias, risk on / off labels, the LLM news brief |
 | [Lab: labels and models](docs/lab.md) | Tag candles, train models, model files, reviewing model blocks, the dataset |
+| [Journal](docs/journal.md) | MT5 sync and report import, gain and drawdown, how the numbers are checked |
 | [Telegram alerts](docs/alerts.md) | Bot setup and when alerts fire |
 | [Configuration](docs/configuration.md) | Make targets, CLI options, `.env` |
 | [Windows and VPS](docs/deploy-windows.md) | Running 24/7 next to an MT5 terminal |
 | [Plugins](docs/plugins.md) | Add features from a separate Python package |
 | [Development](docs/development.md) | Project layout and how a scan flows |
 
-Everything above is free. Paid extras (signed models, the second brain, session recaps, scheduled briefs) come as a
+Everything above is free. Paid extras (more than one journal, signed models, the second brain, session recaps, scheduled briefs) come as a
 plugin with a licence; see [Plugins](docs/plugins.md#licences-and-paid-features).
 
 > [!NOTE]

@@ -5,6 +5,7 @@ import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
 import { ChartFocus } from "./components/ChartFocus";
 import { EventsPanel } from "./components/EventsPanel";
+import { JournalPage } from "./components/JournalPage";
 import { LabPage } from "./components/LabPage";
 import { MlPanel } from "./components/MlPanel";
 import { NewsAlert } from "./components/NewsAlert";
@@ -15,7 +16,7 @@ import { SettingsPage } from "./components/SettingsPage";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtAgo, fmtFeedTime, fmtPrice } from "./format";
-import { ChartIcon, Direction, ExpandIcon, FlaskIcon, SlidersIcon } from "./icons";
+import { BookIcon, ChartIcon, Direction, ExpandIcon, FlaskIcon, SlidersIcon } from "./icons";
 import { predictionMark } from "./labPrimitive";
 import { useMl } from "./mlData";
 import { usePref } from "./prefs";
@@ -35,9 +36,13 @@ function useNow(ms: number) {
   return now;
 }
 
-type View = "chart" | "lab" | "settings";
-const viewFromHash = (): View =>
-  window.location.hash === "#settings" ? "settings" : window.location.hash.startsWith("#lab") ? "lab" : "chart";
+type View = "chart" | "journal" | "lab" | "settings";
+const viewFromHash = (): View => {
+  const h = window.location.hash;
+  if (h === "#settings") return "settings";
+  if (h === "#journal") return "journal";
+  return h.startsWith("#lab") ? "lab" : "chart";
+};
 
 function useView(): [View, (v: View) => void] {
   const [view, setView] = useState<View>(viewFromHash);
@@ -198,6 +203,10 @@ export default function App() {
             onClick={(e) => { e.preventDefault(); setView("chart"); }}>
             <ChartIcon /> Chart
           </a>
+          <a href="#journal" className="nav-item" aria-current={view === "journal" ? "page" : undefined}
+            onClick={(e) => { e.preventDefault(); setView("journal"); }}>
+            <BookIcon /> Journal
+          </a>
           <a href="#lab" className="nav-item" aria-current={view === "lab" ? "page" : undefined}
             onClick={(e) => { e.preventDefault(); setView("lab"); }}>
             <FlaskIcon /> Lab
@@ -227,6 +236,8 @@ export default function App() {
         <SettingsPage />
       ) : view === "lab" ? (
         <LabPage palette={palette} />
+      ) : view === "journal" ? (
+        <JournalPage palette={palette} />
       ) : (
         <>
           <main className="workspace">

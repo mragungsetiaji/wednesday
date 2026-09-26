@@ -7,6 +7,7 @@ thread that calls :meth:`Engine.step`; readers only get snapshots.
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 import time
 from dataclasses import dataclass, field
@@ -50,6 +51,7 @@ class Engine:
         self.state = EngineState()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._tasks: queue.Queue = queue.Queue()  # work that must run on the feed's thread (see call)
 
     def _record_error(self, exc: Exception) -> None:
         with self.state.lock:
@@ -77,6 +79,44 @@ class Engine:
         with self.state.lock:
             return self.state.version, self.state.result, self.state.m1
 
+    def call(self, fn, timeout: float = 60):
+        """Run ``fn(feed)`` on the scan thread between scans and return its result.
+
+        MT5 must only be used from the thread that connected it, so anything else
+        that needs the terminal (the journal's sync) goes through here.
+        """
+        if self._thread is None or not self._thread.is_alive():
+            raise RuntimeError("The scanner isn't running")
+        done, box = threading.Event(), {}
+
+        def task():
+            try:
+                box["value"] = fn(self.feed)
+            except Exception as exc:  # noqa: BLE001 - handed back to the caller
+                box["error"] = exc
+            finally:
+                done.set()
+
+        self._tasks.put(task)
+        if not done.wait(timeout):
+            raise TimeoutError("the scan thread didn't run the task in time")
+        if "error" in box:
+            raise box["error"]
+        return box["value"]
+
+    def _idle(self, seconds: float) -> None:
+        """Wait until the next scan, running queued tasks meanwhile."""
+        deadline = time.monotonic() + seconds
+        while not self._stop.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            try:
+                task = self._tasks.get(timeout=min(remaining, 0.25))
+            except queue.Empty:
+                continue
+            task()
+
     def run_forever(self, delay: float = 2.0, on_result=None) -> None:
         """Connect, then scan now and after every minute close until :meth:`stop`.
 
@@ -97,7 +137,7 @@ class Engine:
                     if not connected:
                         self._record_error(exc)
                     log.exception("scan failed; retrying next minute")
-                self._stop.wait(seconds_to_next_minute(delay))
+                self._idle(seconds_to_next_minute(delay))
         finally:
             if connected:
                 self.feed.close()
@@ -120,7 +160,7 @@ class Runtime:
 
     def __init__(self, cfg: ScanConfig, settings: DataSettings, store: Store | None = None,
                  mt5_password: str | None = None, delay: float = 2.0, on_result=None, alerts=None, brief=None,
-                 calendar=None, lab=None):
+                 calendar=None, lab=None, journals=None):
         self.cfg = cfg
         self.store = store
         self.mt5_password = mt5_password
@@ -130,6 +170,7 @@ class Runtime:
         self.brief = brief  # BriefRunner or None
         self.calendar = calendar  # news.Calendar or None
         self.lab = lab  # lab.service.Lab or None (needs a database)
+        self.journals = journals  # journal.service.Journals or None (needs a database)
         self.hooks = Hooks()  # filled by plugins (see plugins.py)
         self.bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
         self._lock = threading.Lock()

@@ -3,7 +3,7 @@ even when it isn't installed or licensed.
 
 Everything else in Wednesday is free and needs no licence: the screener,
 alerts, the bias, the news card, the manual news brief with your own API key,
-and labelling and training your own models in the Lab.
+labelling and training your own models in the Lab, and one trading journal.
 """
 
 from __future__ import annotations
@@ -24,6 +24,11 @@ CATALOG: dict[str, dict] = {
         "title": "Take / skip policy",
         "description": "A policy trained on your reviews and trade outcomes that says which order blocks to take.",
         "issue": 11,
+    },
+    "journal.multi": {
+        "title": "Multiple journals",
+        "description": "More than one trading journal, e.g. one per MT5 account. One journal is free.",
+        "issue": 14,
     },
     "llm.second_brain": {
         "title": "Second brain",

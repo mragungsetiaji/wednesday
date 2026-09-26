@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -119,6 +120,28 @@ class MT5Feed(DataFeed):
     def last_price(self) -> float | None:
         tick = self._mt5.symbol_info_tick(self.symbol) if self._mt5 else None
         return float(tick.bid) if tick else None
+
+    def account_history(self) -> dict:
+        """The logged-in account, every deal in its history and the open positions (for the journal).
+
+        Runs on the scan thread (see ``Engine.call``). Only the account number and
+        server are read about the account, never its password or the holder's name.
+        """
+        mt5 = self._mt5
+        if mt5 is None:
+            raise RuntimeError("The MT5 terminal isn't connected yet")
+        acc = mt5.account_info()
+        if acc is None:
+            raise RuntimeError(f"MT5 has no account logged in: {mt5.last_error()}")
+        deals = mt5.history_deals_get(datetime(2000, 1, 1), datetime.now() + timedelta(days=3))
+        if deals is None:
+            raise RuntimeError(f"MT5 returned no deal history: {mt5.last_error()}")
+        return {
+            "account": {"login": str(acc.login), "server": acc.server, "company": acc.company,
+                        "currency": acc.currency, "balance": acc.balance, "equity": acc.equity},
+            "deals": [d._asdict() for d in deals],
+            "positions": [p._asdict() for p in (mt5.positions_get() or ())],
+        }
 
     def describe(self) -> dict:
         """Connection details for ``--check``."""
