@@ -36,6 +36,10 @@ def test_scan_and_candles(engine, tmp_path):
     assert body["config"]["swing_length"] == 3
     for t in scan["timeframes"]:
         assert set(t["detectors"]) == {"ob", "liquidity", "idm"}
+        if t["bias"]:
+            assert t["bias"]["direction"] in {"bullish", "bearish"}
+            assert t["bias"]["event"] in {"BOS", "CHoCH"}
+            assert t["bias"]["break_close_time"] > t["bias"]["break_time"]
         for d in t["detectors"].values():
             assert d["active_count"] == len(d["active"])
     above = scan["nearest"]["ob"]["above"]

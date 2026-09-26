@@ -25,9 +25,22 @@ export interface LevelSet {
   recent: Level[];
 }
 
+/** Latest break of structure on a timeframe. */
+export interface Bias {
+  direction: "bullish" | "bearish";
+  event: "BOS" | "CHoCH";
+  level: number;
+  swing_time: string;
+  break_time: string;
+  break_close_time: string; // when the break candle closed (break confirmed)
+  bars_ago: number;
+  streak: number;
+}
+
 export interface TimeframeScan {
   timeframe: string;
   candles: number;
+  bias: Bias | null;
   detectors: Record<string, LevelSet>;
 }
 

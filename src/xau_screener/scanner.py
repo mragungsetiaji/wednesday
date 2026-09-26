@@ -9,7 +9,7 @@ import pandas as pd
 
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, build_detectors
 from .levels import Level
-from .structure import Context
+from .structure import Bias, Context, latest_bias
 from .timeframes import TIMEFRAMES, Timeframe, resample_ohlcv
 
 
@@ -64,6 +64,7 @@ class TimeframeResult:
     timeframe: Timeframe
     candles: int
     sets: dict[str, LevelSet]  # detector name -> results
+    bias: Bias | None = None  # latest break of structure (external swings)
 
 
 @dataclass
@@ -97,6 +98,9 @@ class ScanResult:
                 {
                     "timeframe": r.timeframe.name,
                     "candles": r.candles,
+                    "bias": {**r.bias.to_dict(),
+                             "break_close_time": (r.bias.break_time + r.timeframe.delta).isoformat()}
+                    if r.bias else None,
                     "detectors": {d: s.to_dict() for d, s in r.sets.items()},
                 }
                 for r in self.results
@@ -125,7 +129,8 @@ def scan_timeframe(m1: pd.DataFrame, tf: Timeframe, price: float, cfg: ScanConfi
         above, below, inside = split_by_price(active, price)
         recent = [lv for lv in levels if not lv.active and recent_from is not None and lv.ended_time >= recent_from]
         sets[det.name] = LevelSet(active, above, below, inside, recent)
-    return TimeframeResult(tf, len(candles), sets), candles
+    bias = latest_bias(ctx, cfg.params.swing_length) if len(candles) else None
+    return TimeframeResult(tf, len(candles), sets, bias), candles
 
 
 def scan(m1: pd.DataFrame, cfg: ScanConfig, price: float | None = None) -> ScanResult:

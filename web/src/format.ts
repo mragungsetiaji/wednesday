@@ -51,3 +51,14 @@ export function fmtAgo(iso: string | null, now: number): string {
   const m = Math.floor(s / 60);
   return m < 60 ? `${m}m ${s % 60}s ago` : `${Math.floor(m / 60)}h ${m % 60}m ago`;
 }
+
+/** Time between two feed-clock ISO strings (both broker time, so the offset cancels out). */
+export function fmtSpan(fromIso: string, toIso: string): string {
+  // Parse naive times as UTC so a DST change in the viewer's timezone can't skew the gap.
+  const utc = (iso: string) => Date.parse(/Z|[+-]\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`);
+  const mins = Math.max(0, Math.round((utc(toIso) - utc(fromIso)) / 60000));
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  if (h < 24) return `${h}h ${mins % 60}m`;
+  return `${Math.floor(h / 24)}d ${h % 24}h`;
+}

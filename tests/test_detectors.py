@@ -84,3 +84,38 @@ def test_bullish_inducement_after_bos():
     (idm,) = InducementDetector(params).detect(Context(swept))
     assert idm.ended_time == swept.index[-1]
     assert idm.meta["grab"] is True
+
+
+def _ctx_with_breaks(directions):
+    """Context whose structure(2) has the given break directions (synthetic, bypasses detection)."""
+    from xau_screener.structure import Break, Structure, Swing
+
+    df = candles([bar(100) for _ in range(20)])
+    ctx = Context(df)
+    breaks = [Break(d, 5 + i * 3, Swing("high" if d == "bullish" else "low", 2 + i * 3, 100.0 + i, 4 + i * 3))
+              for i, d in enumerate(directions)]
+    ctx._structures[2] = Structure(2, [], breaks)
+    return ctx
+
+
+def test_latest_bias_bos_vs_choch():
+    from xau_screener.structure import latest_bias
+
+    assert latest_bias(_ctx_with_breaks([]), 2) is None
+    b = latest_bias(_ctx_with_breaks(["bullish"]), 2)
+    assert (b.direction, b.event, b.streak) == ("bullish", "BOS", 1)
+    b = latest_bias(_ctx_with_breaks(["bullish", "bullish", "bearish"]), 2)
+    assert (b.direction, b.event, b.streak) == ("bearish", "CHoCH", 1)
+    b = latest_bias(_ctx_with_breaks(["bullish", "bearish", "bearish", "bearish"]), 2)
+    assert (b.direction, b.event, b.streak) == ("bearish", "BOS", 3)
+    assert b.bars_ago == 19 - (5 + 3 * 3)
+    assert b.level == 103.0
+
+
+def test_bias_from_real_structure():
+    from xau_screener.structure import latest_bias
+
+    mids = [100, 102, 104, 105, 103, 101, 102, 104, 106.5, 107, 105, 106.5, 108, 107.5]
+    b = latest_bias(Context(candles([bar(m) for m in mids])), 2)
+    # Two bullish breaks: 105.5 (idx 8) then 107.5 (idx 12).
+    assert (b.direction, b.event, b.streak, b.level, b.bars_ago) == ("bullish", "BOS", 2, 107.5, 1)

@@ -111,3 +111,44 @@ class Context:
         prev_close = np.concatenate([[self.close[0]], self.close[:-1]])
         tr = np.maximum(self.high - self.low, np.maximum(abs(self.high - prev_close), abs(self.low - prev_close)))
         return pd.Series(tr).rolling(14, min_periods=1).mean().to_numpy()
+
+
+@dataclass(frozen=True)
+class Bias:
+    """Direction of the latest break of structure on a timeframe."""
+
+    direction: Literal["bullish", "bearish"]
+    event: Literal["BOS", "CHoCH"]  # CHoCH = the break flipped the previous direction
+    level: float  # price of the swing that was broken
+    swing_time: pd.Timestamp  # when that swing printed
+    break_time: pd.Timestamp  # candle that closed beyond it
+    bars_ago: int  # closed candles since the break candle
+    streak: int  # consecutive breaks in this direction, including this one
+
+    def to_dict(self) -> dict:
+        return {
+            "direction": self.direction,
+            "event": self.event,
+            "level": self.level,
+            "swing_time": self.swing_time.isoformat(),
+            "break_time": self.break_time.isoformat(),
+            "bars_ago": self.bars_ago,
+            "streak": self.streak,
+        }
+
+
+def latest_bias(ctx: Context, length: int) -> Bias | None:
+    """Bias from the most recent break; None until the first break in the window."""
+    breaks = ctx.structure(length).breaks
+    if not breaks:
+        return None
+    last = breaks[-1]
+    streak = 1
+    for prev in reversed(breaks[:-1]):
+        if prev.direction != last.direction:
+            break
+        streak += 1
+    # The first break against the previous direction is a change of character; later ones continue it.
+    event = "CHoCH" if streak == 1 and len(breaks) > 1 else "BOS"
+    return Bias(last.direction, event, last.swing.price, ctx.times[last.swing.index],
+                ctx.times[last.index], len(ctx) - 1 - last.index, streak)

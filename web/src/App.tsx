@@ -4,6 +4,7 @@ import { fetchCandles, fetchScan, type CandlesResponse, type Level, type ScanRes
 import { EventsPanel } from "./components/EventsPanel";
 import { NearestPanel } from "./components/NearestPanel";
 import { PriceChart } from "./components/PriceChart";
+import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtAgo, fmtFeedTime, fmtLevelPrice, fmtPrice, roleOf } from "./format";
 import { useChartPalette } from "./theme";
@@ -192,36 +193,41 @@ export default function App() {
           <div className="nearest-row">
             <NearestPanel side="above" scan={scan} detectors={detectors} onSelect={setTf} />
             <NearestPanel side="below" scan={scan} detectors={detectors} onSelect={setTf} />
-            <EventsPanel scan={scan} detectors={detectors} recentBars={config.recent_bars} onSelect={setTf} />
           </div>
 
           <main className="main-grid">
-            <section className="card chart-card">
-              <div className="chart-toolbar">
-                <div className="tabs" role="tablist" aria-label="Chart timeframe">
-                  {timeframes.map((name) => (
-                    <button key={name} type="button" role="tab" aria-selected={name === tf}
-                      className={name === tf ? "tab active" : "tab"} onClick={() => setTf(name)}>
-                      {name}
-                    </button>
-                  ))}
+            <div className="left-col">
+              <section className="card chart-card">
+                <div className="chart-toolbar">
+                  <div className="tabs" role="tablist" aria-label="Chart timeframe">
+                    {timeframes.map((name) => (
+                      <button key={name} type="button" role="tab" aria-selected={name === tf}
+                        className={name === tf ? "tab active" : "tab"} onClick={() => setTf(name)}>
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="toggle">
+                    <input type="checkbox" checked={showHigherTf} onChange={(e) => setShowHigherTf(e.target.checked)} />
+                    Higher TF levels
+                  </label>
                 </div>
-                <label className="toggle">
-                  <input type="checkbox" checked={showHigherTf} onChange={(e) => setShowHigherTf(e.target.checked)} />
-                  Higher TF levels
-                </label>
+                <PriceChart candles={chart?.timeframe === tf ? chart.candles : []} zones={zones}
+                  palette={palette} resetKey={tf} />
+                <div className="chart-foot muted small">
+                  <span><span className="tag role-bull" /> Bullish OB</span>
+                  <span><span className="tag role-bear" /> Bearish OB</span>
+                  <span><span className="tag role-liquidity" /> BSL / SSL (thick = EQH/EQL)</span>
+                  <span><span className="tag role-idm" /> IDM</span>
+                  {showHigherTf && <span>faded / dashed = higher TF</span>}
+                  <span>times = broker server time</span>
+                </div>
+              </section>
+              <div className="below-chart">
+                <StructurePanel scan={scan} selected={tf} onSelect={setTf} />
+                <EventsPanel scan={scan} detectors={detectors} recentBars={config.recent_bars} onSelect={setTf} />
               </div>
-              <PriceChart candles={chart?.timeframe === tf ? chart.candles : []} zones={zones}
-                palette={palette} resetKey={tf} />
-              <div className="chart-foot muted small">
-                <span><span className="tag role-bull" /> Bullish OB</span>
-                <span><span className="tag role-bear" /> Bearish OB</span>
-                <span><span className="tag role-liquidity" /> BSL / SSL (thick = EQH/EQL)</span>
-                <span><span className="tag role-idm" /> IDM</span>
-                {showHigherTf && <span>faded / dashed = higher TF</span>}
-                <span>times = broker server time</span>
-              </div>
-            </section>
+            </div>
 
             <TimeframeTable rows={scan.timeframes} detectors={detectors} price={scan.price} selected={tf} onSelect={setTf} />
           </main>

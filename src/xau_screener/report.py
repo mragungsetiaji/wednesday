@@ -34,7 +34,7 @@ def format_scan(result: ScanResult, symbol: str = "XAUUSD", digits: int = 2) -> 
     price = result.price
     lines = [
         f"[{result.time:%Y-%m-%d %H:%M}] {symbol} price {price:.{digits}f}",
-        f"{'TF':<4} {'DET':<4} {'#':>3}  {'NEAREST ABOVE':<34} {'NEAREST BELOW':<34} NOTES",
+        f"{'TF':<5} {'DET':<4} {'#':>3}  {'NEAREST ABOVE':<34} {'NEAREST BELOW':<34} NOTES",
     ]
     for r in result.results:
         for i, (det, s) in enumerate(r.sets.items()):
@@ -42,9 +42,12 @@ def format_scan(result: ScanResult, symbol: str = "XAUUSD", digits: int = 2) -> 
             if s.inside:
                 notes.append("inside " + ", ".join(f"{lv.label} {_price(lv, digits)}" for lv in s.inside))
             notes += [_event(lv, digits) for lv in s.recent]
-            tf = r.timeframe.name if i == 0 else ""
+            tf = ""
+            if i == 0:
+                arrow = {"bullish": "▲", "bearish": "▼"}[r.bias.direction] if r.bias else " "
+                tf = f"{r.timeframe.name} {arrow}"
             lines.append(
-                f"{tf:<4} {SHORT.get(det, det[:4]):<4} {len(s.active):>3}  "
+                f"{tf:<5} {SHORT.get(det, det[:4]):<4} {len(s.active):>3}  "
                 f"{_fmt(s.above, price, digits):<34} {_fmt(s.below, price, digits):<34} {'; '.join(notes) or '-'}"
             )
     for det in result.detectors:

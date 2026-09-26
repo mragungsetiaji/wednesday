@@ -56,7 +56,8 @@ uv run xau-screener --serve                        # scan loop + dashboard on ht
 ```
 
 The dashboard shows the live price, the nearest level above and below per detector
-across all timeframes, recent sweeps/mitigations, a table per timeframe (4H down
+across all timeframes, the market structure bias per timeframe (direction of the
+latest break, BOS or CHoCH), recent sweeps/mitigations, a table per timeframe (4H down
 to 5M), and a candlestick chart with order blocks as boxes, BSL/SSL as blue lines
 (thick for EQH/EQL) and IDM as dotted lines, optionally with higher timeframe
 levels faded on top. Each detector can be toggled on/off. It refreshes itself
