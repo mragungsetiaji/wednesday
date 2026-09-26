@@ -6,14 +6,14 @@ import argparse
 import json
 import logging
 import os
-import time
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from .feeds import M1Buffer, build_feed
+from .engine import Engine
+from .feeds import build_feed
 from .report import format_scan
-from .scanner import ScanConfig, scan
+from .scanner import ScanConfig
 from .timeframes import parse_timeframes
 
 log = logging.getLogger("xau_screener")
@@ -57,6 +57,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--delay", type=float, default=2.0, help="seconds after each minute close before polling")
     p.add_argument("--once", action="store_true", help="scan once and exit")
     p.add_argument("--check", action="store_true", help="test the feed connection, print details and exit")
+    p.add_argument("--serve", action="store_true", default=_env("XAU_SERVE") == "1",
+                   help="run the web dashboard + API alongside the scan loop")
+    p.add_argument("--host", default=_env("XAU_HOST") or "127.0.0.1",
+                   help="dashboard bind address (0.0.0.0 exposes it to the network - there is no login)")
+    p.add_argument("--port", type=int, default=_env("XAU_PORT", int) or 8000)
+    p.add_argument("--ui-dir", default=_env("XAU_UI_DIR"), help="built dashboard folder (default web/dist)")
     p.add_argument("--json-out", default=_env("XAU_JSON_OUT"), help="append each scan as a JSON line to this file")
     p.add_argument("--log-file", default=_env("XAU_LOG_FILE"), help="also write logs and scans to this file (rotated)")
     p.add_argument("--digits", type=int, default=2)
@@ -77,11 +83,6 @@ def check(feed, buffer, cfg: ScanConfig) -> None:
     print("OK: feed is working")
 
 
-def sleep_until_next_minute(delay: float) -> None:
-    now = time.time()
-    time.sleep(60 - (now % 60) + delay)
-
-
 def run(args: argparse.Namespace) -> None:
     cfg = ScanConfig(
         timeframes=tuple(parse_timeframes(args.timeframes)),
@@ -96,41 +97,50 @@ def run(args: argparse.Namespace) -> None:
                       "server": args.mt5_server, "path": args.mt5_path}
     feed = build_feed(args.source, args.symbol, args.csv, **mt5_kwargs)
     symbol = args.symbol or ("GC=F" if args.source == "yfinance" else "XAUUSD")
-    buffer = M1Buffer(feed, max_bars=cfg.required_m1_bars())
+    engine = Engine(feed, cfg, symbol)
     json_path = Path(args.json_out) if args.json_out else None
 
-    feed.connect()
-    if args.check:
+    def publish(result) -> None:
+        report = format_scan(result, symbol, args.digits)
+        print(report + "\n", flush=True)
+        log.debug("scan\n%s", report)
+        if json_path:
+            record = {"scanned_at": datetime.now(timezone.utc).isoformat(), **result.to_dict()}
+            with json_path.open("a") as fh:
+                fh.write(json.dumps(record) + "\n")
+
+    if args.check or args.once:
+        feed.connect()
         try:
-            check(feed, buffer, cfg)
+            if args.check:
+                check(feed, engine.buffer, cfg)
+            else:
+                publish(engine.step())
         finally:
             feed.close()
         return
+
     log.info("feed=%s symbol=%s timeframes=%s lookback=%d (needs %d M1 bars)", feed.name, symbol,
-             ",".join(tf.name for tf in cfg.timeframes), cfg.lookback, buffer.max_bars)
+             ",".join(tf.name for tf in cfg.timeframes), cfg.lookback, engine.buffer.max_bars)
+
+    if args.serve:
+        import uvicorn
+
+        from .server import create_app
+
+        app = create_app(engine, source=args.source, ui_dir=args.ui_dir)
+        engine.start(args.delay, publish)
+        log.info("dashboard on http://%s:%d", args.host, args.port)
+        try:
+            uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+        finally:
+            engine.stop()
+        return
+
     try:
-        while True:
-            try:
-                m1 = buffer.update()
-                result = scan(m1, cfg, feed.last_price())
-                report = format_scan(result, symbol, args.digits)
-                print(report + "\n", flush=True)
-                log.debug("scan\n%s", report)
-                if json_path:
-                    record = {"scanned_at": datetime.now(timezone.utc).isoformat(), **result.to_dict()}
-                    with json_path.open("a") as fh:
-                        fh.write(json.dumps(record) + "\n")
-            except Exception:
-                if args.once:
-                    raise
-                log.exception("scan failed; retrying next minute")
-            if args.once:
-                break
-            sleep_until_next_minute(args.delay)
+        engine.run_forever(args.delay, publish)
     except KeyboardInterrupt:
         log.info("stopped")
-    finally:
-        feed.close()
 
 
 def main(argv: list[str] | None = None) -> None:

@@ -39,6 +39,33 @@ uv run xau-screener --source csv --csv data/xauusd_m1.csv
 uv run xau-screener --source synthetic --once    # random-walk demo, no data needed
 ```
 
+## Web dashboard (React)
+
+![Dashboard (synthetic demo data)](docs/dashboard.png)
+
+```bash
+cd web && npm install && npm run build && cd ..   # once, and after UI changes (needs Node 20+)
+uv run xau-screener --serve                        # scan loop + dashboard on http://127.0.0.1:8000
+```
+
+The dashboard shows the live price, the nearest order block above and below
+across all timeframes, a table per timeframe (4H down to 5M), and a candlestick
+chart with the active order blocks drawn as zones (optionally with the higher
+timeframe zones dashed on top). It refreshes itself every few seconds; the
+server rescans once a minute. API docs: `http://127.0.0.1:8000/api/docs`.
+
+For UI development, run the server and the Vite dev server side by side:
+
+```bash
+uv run xau-screener --source synthetic --serve
+cd web && npm run dev        # http://localhost:5173, proxies /api to :8000
+```
+
+The dashboard has no login. It binds to `127.0.0.1` by default; see
+[docs/DEPLOY_WINDOWS.md](docs/DEPLOY_WINDOWS.md) for reaching it on a VPS.
+
+## MT5 and options
+
 For MT5, test the connection first with `uv run xau-screener --check`.
 Settings can live in a `.env` file (copy `.env.example`); command line flags
 override it. Windows local testing and VPS production setup (auto-start,
@@ -54,6 +81,8 @@ Useful options:
 | `--zone` | `wick` | OB zone = full candle range (`wick`) or open/close (`body`) |
 | `--mitigation` | `close` | OB is invalidated by a close through it (`close`) or any wick (`wick`) |
 | `--once` | off | Scan once and exit instead of looping every minute |
+| `--serve` | off | Also run the web dashboard + API (`XAU_SERVE=1`) |
+| `--host` / `--port` | `127.0.0.1` / `8000` | Dashboard address (`XAU_HOST`, `XAU_PORT`) |
 | `--check` | off | Test the feed connection (account, symbol, bars loaded) and exit |
 | `--log-file` | - | Rotating log file, includes every scan table (`XAU_LOG_FILE`) |
 | `--json-out` | - | Append each scan as a JSON line (for bots/dashboards) |
@@ -88,7 +117,10 @@ src/xau_screener/
   feeds.py        MT5, yfinance, CSV, synthetic feeds + rolling M1 buffer
   scanner.py      multi-timeframe scan, nearest OB above/below
   report.py       console table
-  cli.py          1-minute polling loop
+  engine.py       scan loop shared by the console and the web server
+  server.py       FastAPI: /api/scan, /api/candles, serves the built dashboard
+  cli.py          command line entry point
+web/              React + Vite + TypeScript dashboard (lightweight-charts)
 scripts/          Windows VPS: auto-restart wrapper + Task Scheduler installer
 docs/             deployment guide
 tests/

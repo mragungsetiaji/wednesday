@@ -64,6 +64,25 @@ Do the same setup as above on the VPS (MT5, uv, `uv sync --extra mt5`, `.env`,
    session keeps running). *Signing out* ends the session and stops both MT5
    and the bot.
 
+### Dashboard on the VPS
+
+Build the dashboard once (on the VPS with Node 20+, or build on your PC and copy
+the `web\dist` folder over):
+
+```powershell
+cd web; npm install; npm run build; cd ..
+```
+
+With `XAU_SERVE=1` in `.env`, the logon task serves it on port 8000. The
+dashboard has **no login**, so keep `XAU_HOST=127.0.0.1` and reach it by one of:
+
+- a browser inside the RDP session: `http://127.0.0.1:8000`
+- an SSH tunnel from your PC (needs OpenSSH Server on the VPS):
+  `ssh -L 8000:127.0.0.1:8000 user@vps`, then open `http://127.0.0.1:8000` locally
+
+Only set `XAU_HOST=0.0.0.0` if the Windows firewall / VPS provider restricts
+port 8000 to your own IP.
+
 Logs go to `logs/screener.log` (rotated at 5 MB, 5 files kept) when
 `XAU_LOG_FILE` is set; every scan table is written there too.
 
@@ -84,6 +103,7 @@ Stop-ScheduledTask -TaskName "XAU Screener"
 Get-Process python -ErrorAction SilentlyContinue | Where-Object Path -like "*xau-screener*" | Stop-Process
 git pull
 uv sync --extra mt5
+cd web; npm install; npm run build; cd ..
 uv run xau-screener --check
 Start-ScheduledTask -TaskName "XAU Screener"
 ```
