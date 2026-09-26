@@ -2265,7 +2265,7 @@ fieldset:disabled .switch {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: var(--s4);
-  align-items: start;
+  align-items: stretch;
 }
 .journal-stats {
   display: grid;
@@ -2325,13 +2325,15 @@ fieldset:disabled .switch {
 }
 
 .journal-curve {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--s2);
   min-width: 0;
 }
 .journal-chart {
   position: relative;
-  height: 380px;
+  flex: 1; /* as tall as the numbers beside it */
+  min-height: 340px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -2434,7 +2436,9 @@ fieldset:disabled .switch {
     grid-template-columns: minmax(0, 1fr);
   }
   .journal-chart {
+    flex: none;
     height: 300px;
+    min-height: 0;
   }
 }
 @media (max-width: 520px) {
@@ -2476,12 +2480,77 @@ fieldset:disabled .switch {
   background: var(--surface);
   min-width: 0;
 }
+.journal-periods {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: var(--s4);
+  align-items: stretch;
+}
+.journal-monthly {
+  display: flex;
+  flex-direction: column;
+}
 .journal-monthly-plot {
-  min-height: 190px;
+  position: relative;
+  flex: 1;
+  min-height: 200px;
 }
 .journal-monthly-plot svg {
+  position: absolute;
+  inset: 0;
   display: block;
   overflow: visible;
+}
+.journal-calendar {
+  align-content: start;
+}
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: auto;
+}
+.pager-range {
+  margin-inline-end: var(--s2);
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+.pager-btn {
+  min-width: 28px;
+  height: 28px;
+  padding-inline: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-2);
+}
+.pager-btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+.pager-btn[aria-current="page"] {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.pager-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.pager-gap {
+  padding-inline: 4px;
+  color: var(--text-3);
+}
+.journal-pager-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+@media (max-width: 1080px) {
+  .journal-periods {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .journal-monthly .axis-grid {
   stroke: var(--line);
@@ -2610,4 +2679,18 @@ fieldset:disabled .switch {
   .journal-calendar {
     padding-inline: var(--s2);
   }
+}
+.journal-calendar {
+  container-type: inline-size;
+}
+@container (max-width: 820px) {
+  .cal-money { font-size: var(--text-sm); }
+  .cal-cell { padding-inline: 6px; }
+}
+@container (max-width: 480px) {
+  .cal-cell { padding-inline: 3px; }
+  .cal-money { font-size: var(--text-xs); letter-spacing: -0.02em; }
+}
+.journal-table td.journal-note-cell {
+  min-width: 240px;
 }

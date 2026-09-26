@@ -18,25 +18,25 @@ const pips = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
 const monthName = (ym: string) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
 const tone = (v: number) => (v > 0 ? "pos" : v < 0 ? "neg" : "");
 
-function useWidth<T extends HTMLElement>() {
+function useSize<T extends HTMLElement>() {
   const ref = useRef<T>(null);
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width));
+    const ro = new ResizeObserver(([e]) => setSize({ width: e.contentRect.width, height: e.contentRect.height }));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  return [ref, width] as const;
+  return [ref, size.width, size.height] as const;
 }
 
 /** Gain per month as bars from zero: green up, red down. Hover a month for money and pips. */
 export function MonthlyBars({ stats, currency }: { stats: JournalStats; currency: string }) {
   const rows = useMemo(() => stats.monthly.filter((m) => m.gain !== null).slice(-MAX_BARS), [stats.monthly]);
-  const [ref, width] = useWidth<HTMLDivElement>();
+  const [ref, width, height] = useSize<HTMLDivElement>();
   const [hot, setHot] = useState<number | null>(null);
-  const H = 190;
+  const H = Math.max(height, 180); // fills the panel, as tall as the calendar beside it
   const top = 22;
   const values = rows.map((m) => m.gain as number);
   const bottom = Math.min(0, ...values) < 0 ? 40 : 24; // room for a label under a red bar, above the months
@@ -78,7 +78,7 @@ export function MonthlyBars({ stats, currency }: { stats: JournalStats; currency
             <span>{h.trades} trades</span>
           </p>
         ) : (
-          <p className="meta">Time-weighted, like the total. Hover a month for money and pips.</p>
+          <p className="meta">Time-weighted. Hover a month for money and pips.</p>
         )}
       </div>
       <div ref={ref} className="journal-monthly-plot" onMouseLeave={() => setHot(null)}>

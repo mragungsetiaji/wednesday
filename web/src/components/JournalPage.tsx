@@ -11,7 +11,7 @@ import type { ChartPalette } from "../theme";
 import { JournalChart, type JournalView } from "./JournalChart";
 import { MonthlyBars, PnlCalendar } from "./JournalMonthly";
 
-const PAGE = 50;
+const PAGE = 25;
 const VIEWS: { id: JournalView; title: string }[] = [
   { id: "growth", title: "Growth" },
   { id: "balance", title: "Balance" },
@@ -173,11 +173,13 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
                 ))}
               </div>
               <JournalChart stats={stats} view={view} palette={palette} currency={selected.currency ?? ""} />
-              <MonthlyBars stats={stats} currency={selected.currency ?? ""} />
               <Verification stats={stats} />
             </section>
           </div>
-          <PnlCalendar stats={stats} currency={selected.currency ?? ""} />
+          <div className="journal-periods">
+            <MonthlyBars stats={stats} currency={selected.currency ?? ""} />
+            <PnlCalendar stats={stats} currency={selected.currency ?? ""} />
+          </div>
           <Trades journalId={selected.id} stats={stats} onSaved={() => loadStats(selected.id)} />
         </>
       )}
@@ -427,14 +429,24 @@ function Verification({ stats }: { stats: JournalStats }) {
 // ---- trades ---------------------------------------------------------------------------------
 
 function Trades({ journalId, stats, onSaved }: { journalId: string; stats: JournalStats; onSaved: () => void }) {
-  const [shown, setShown] = useState(PAGE);
+  const [page, setPage] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
   const rows = useMemo(
     () => [...stats.trades].sort((a, b) => (b.close_time ?? Infinity) - (a.close_time ?? Infinity) || b.open_time - a.open_time),
     [stats.trades]);
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+  const current = Math.min(page, pages - 1);
+  const go = (n: number) => {
+    setPage(Math.max(0, Math.min(n, pages - 1)));
+    setOpen(null);
+  };
+  const pager = <Pager page={current} pages={pages} total={rows.length} onGo={go} />;
   return (
     <section className="journal-trades" aria-labelledby="trades-h">
-      <h3 id="trades-h">Trades</h3>
+      <div className="journal-section-head">
+        <h3 id="trades-h">Trades</h3>
+        {pager}
+      </div>
       <div className="table-scroll">
         <table className="data journal-table num">
           <thead>
@@ -452,7 +464,7 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, shown).map((t) => [
+            {rows.slice(current * PAGE, current * PAGE + PAGE).map((t) => [
               <tr key={t.id} className={open === t.id ? "is-selected" : undefined} onClick={() => setOpen(open === t.id ? null : t.id)}>
                 <td>{t.close_time ? fmtUnix(t.close_time) : <span className="badge accent">open</span>}</td>
                 <td>{t.symbol}</td>
@@ -482,12 +494,41 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
           </tbody>
         </table>
       </div>
-      {rows.length > shown && (
-        <button type="button" className="button quiet" onClick={() => setShown(shown + PAGE)}>
-          {rows.length - shown <= PAGE ? `Show the last ${rows.length - shown}` : `Show ${PAGE} more of ${rows.length - shown}`}
-        </button>
-      )}
+      {pages > 1 && <div className="journal-pager-foot">{pager}</div>}
     </section>
+  );
+}
+
+/** Page numbers around the current one, with the first and last always there. */
+function pageList(page: number, pages: number): (number | null)[] {
+  const keep = new Set([0, pages - 1, page - 1, page, page + 1]);
+  const out: (number | null)[] = [];
+  for (let i = 0; i < pages; i++) {
+    if (keep.has(i)) out.push(i);
+    else if (out[out.length - 1] !== null) out.push(null);
+  }
+  return out;
+}
+
+function Pager({ page, pages, total, onGo }: { page: number; pages: number; total: number; onGo: (n: number) => void }) {
+  const from = total ? page * PAGE + 1 : 0;
+  const to = Math.min(total, (page + 1) * PAGE);
+  return (
+    <nav className="pager num" aria-label="Trade pages">
+      <span className="pager-range">{from}–{to} of {total}</span>
+      {pages > 1 && (
+        <>
+          <button type="button" className="pager-btn" aria-label="Previous page" disabled={page === 0} onClick={() => onGo(page - 1)}>‹</button>
+          {pageList(page, pages).map((n, i) =>
+            n === null ? <span key={`gap${i}`} className="pager-gap">…</span> : (
+              <button key={n} type="button" className="pager-btn" aria-current={n === page ? "page" : undefined} onClick={() => onGo(n)}>
+                {n + 1}
+              </button>
+            ))}
+          <button type="button" className="pager-btn" aria-label="Next page" disabled={page === pages - 1} onClick={() => onGo(page + 1)}>›</button>
+        </>
+      )}
+    </nav>
   );
 }
 

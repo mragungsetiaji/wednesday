@@ -47,17 +47,15 @@ show with their floating result.
 | Balance, Equity | Deposits, withdrawals and closed results; equity adds open trades at the last price. |
 | Worst floating | The lowest the open trades were, together, in money. |
 
-Below: trades, win rate, profit factor, average win and loss, best and worst,
-lots, commission, swap and the average hold. **Export CSV** gives every trade with
+The numbers also include trades, win rate, profit factor, average win and loss, best and worst,
+lots, commission, swap and the average hold. The trade list below is paged, newest first; click a trade for its note. **Export CSV** gives every trade with
 its worst and best floating result, whether it was checked, and your note.
 
 ## Monthly gain and the calendar
 
-**Monthly gain** draws each month's gain as a bar from zero, green up and red
+Under the curve, side by side: **Monthly gain** draws each month's gain as a bar from zero, green up and red
 down, time-weighted like the total (so a deposit mid-month doesn't inflate it).
 Hover a month for the money, pips and number of trades.
-
-<img src="images/journal-monthly.png" alt="Monthly gain as green and red bars, July highlighted with its money and pips" width="100%">
 
 The **calendar** shows a month of closed trades per day, by the day they closed
 on the broker's clock: the result in money and pips, and how many trades. The
@@ -65,7 +63,7 @@ tint is green or red by the sign and stronger for bigger days (scaled to the
 month's biggest). The last column adds up the week. On a phone it shows the money
 only, rounded.
 
-<img src="images/journal-calendar.png" alt="A month of daily results, green and red cells with money, pips and trades, and weekly totals" width="100%">
+<img src="images/journal-periods.png" alt="Monthly gain as green and red bars beside a month of daily results with money, pips and weekly totals" width="100%">
 
 **Pips** follow the usual journal convention: 0.1 on gold (a 1.00 move is 10
 pips), 0.01 on yen pairs and silver, 0.0001 on other currency pairs. A trade's
