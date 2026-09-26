@@ -4,6 +4,11 @@
 
 <sub>part of momentum.id</sub>
 
+<p><i>"We're counting candles, not gambling. We follow a very specific set of rules and run a system.<br>
+I've seen how crazy people get at those tables. Sometimes you lose control.<br>
+They follow their emotions. And you will not!"</i><br>
+<sub>— Prof. Micky Rosa, MIT, <i>21</i> (2008)</sub></p>
+
 **Smart Money Concepts screener for XAUUSD.**<br>
 Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setups and Telegram alerts.
 
