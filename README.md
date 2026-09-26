@@ -55,13 +55,21 @@ cd web && npm install && npm run build && cd ..   # once, and after UI changes (
 uv run xau-screener --serve                        # scan loop + dashboard on http://127.0.0.1:8000
 ```
 
-The dashboard shows the live price, the nearest level above and below per detector
-across all timeframes, the market structure bias per timeframe (direction of the
-latest break, BOS or CHoCH), recent sweeps/mitigations, a table per timeframe (4H down
-to 5M), and a candlestick chart with order blocks as boxes, BSL/SSL as blue lines
-(thick for EQH/EQL) and IDM as dotted lines, optionally with higher timeframe
-levels faded on top. Each detector can be toggled on/off. It refreshes itself
-every few seconds; the server rescans once a minute. API docs: `http://127.0.0.1:8000/api/docs`.
+The chart comes first. Beside it, a **price ladder** lists what matters around
+price in the same vertical order as the chart's price axis: sell limit setups
+(`S1`–`S3`, extreme first) and the nearest liquidity/IDM above, the live price,
+then buy setups (`B1`–`B3`) and levels below. Every ladder row is pinned on the
+chart under the same tag: setups as an entry line with a dashed stop, levels as
+lines. Hovering a row highlights it on the chart and dims the rest; a level
+outside the visible range docks to the chart edge with its price. Clicking a row
+opens its timeframe.
+
+The chart also shows the charted timeframe's order blocks (boxes, mid OBs
+lighter), liquidity and IDM, higher-timeframe levels faded, the latest break of
+structure (BOS/CHoCH) as a dashed segment, and recent sweeps as markers. The
+timeframe tabs carry each timeframe's structure direction. Structure, events and
+an all-timeframes table sit below the chart. It refreshes every few seconds; the
+server rescans once a minute. API docs: `http://127.0.0.1:8000/api/docs`.
 
 For UI development, run the server and the Vite dev server side by side:
 

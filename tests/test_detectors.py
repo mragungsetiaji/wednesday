@@ -75,7 +75,7 @@ def test_bullish_inducement_after_bos():
     df = candles(rows)
     params = DetectorParams(swing_length=2, idm_length=1)
     (idm,) = InducementDetector(params).detect(Context(df))
-    assert idm.kind == "bullish" and idm.label == "IDM ▲"
+    assert idm.kind == "bullish" and idm.label == "BULL IDM"
     assert idm.top == idm.bottom == 104.5
     assert idm.time == df.index[10]
     assert idm.active

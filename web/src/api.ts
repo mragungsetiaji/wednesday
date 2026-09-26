@@ -41,7 +41,9 @@ export interface Bias {
   event: "BOS" | "CHoCH";
   level: number;
   swing_time: string;
+  swing_time_unix: number;
   break_time: string;
+  break_time_unix: number;
   break_close_time: string; // when the break candle closed (break confirmed)
   bars_ago: number;
   streak: number;

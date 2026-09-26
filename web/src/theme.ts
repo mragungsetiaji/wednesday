@@ -4,36 +4,42 @@ import { useEffect, useState } from "react";
 export interface ChartPalette {
   surface: string;
   text: string;
+  textStrong: string;
   muted: string;
   grid: string;
   bull: string;
   bear: string;
   liquidity: string;
   idm: string; // neutral: IDM is told apart by its dotted line + label, not a 4th hue
+  accent: string; // state only: events, selection
   mode: "light" | "dark";
 }
 
 const DARK: ChartPalette = {
   surface: "#1a1a19",
   text: "#c3c2b7",
+  textStrong: "#f4f3ee",
   muted: "#8a897f",
   grid: "#2a2a28",
   bull: "#199e70",
   bear: "#e66767",
   liquidity: "#3987e5",
   idm: "#c3c2b7",
+  accent: "#d99a1e",
   mode: "dark",
 };
 
 const LIGHT: ChartPalette = {
   surface: "#fcfcfb",
   text: "#52514e",
+  textStrong: "#141413",
   muted: "#8a897f",
   grid: "#ecebe6",
   bull: "#1baf7a",
   bear: "#e34948",
   liquidity: "#2a78d6",
   idm: "#52514e",
+  accent: "#a86b00",
   mode: "light",
 };
 
