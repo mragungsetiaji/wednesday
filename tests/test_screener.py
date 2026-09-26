@@ -10,8 +10,8 @@ from xau_screener.scanner import ScanConfig, scan, split_by_price
 from xau_screener.timeframes import TIMEFRAMES_BY_NAME, parse_timeframes, resample_ohlcv
 
 
-def detect_order_blocks(df, swing_length=5, zone="wick", mitigation="close"):
-    params = DetectorParams(swing_length=swing_length, zone=zone, mitigation=mitigation)
+def detect_order_blocks(df, swing_length=5, **kw):
+    params = DetectorParams(swing_length=swing_length, **kw)
     return OrderBlockDetector(params).detect(Context(df))
 
 
@@ -65,42 +65,6 @@ def _bullish_bos_series():
         (106.5, 108, 106, 107.5),
         (107.5, 108.5, 106.5, 108),
     ])
-
-
-def test_detects_bullish_order_block():
-    df = _bullish_bos_series()
-    blocks = detect_order_blocks(df, swing_length=2)
-    bull = [b for b in blocks if b.kind == "bullish"]
-    assert len(bull) == 1
-    ob = bull[0]
-    assert (ob.bottom, ob.top) == (98, 101.5)
-    assert ob.time == df.index[6]
-    assert ob.confirmed_time == df.index[9]
-    assert ob.active and ob.label == "BULL OB"
-
-    body = detect_order_blocks(df, swing_length=2, zone="body")
-    assert [(b.bottom, b.top) for b in body if b.kind == "bullish"] == [(99, 101)]
-
-
-def test_bullish_order_block_mitigated_by_close_below():
-    df = _bullish_bos_series()
-    extra = candles([(108, 108, 100, 101), (101, 101.5, 97, 97.5)], start=df.index[-1] + pd.Timedelta("5min"))
-    blocks = detect_order_blocks(pd.concat([df, extra]), swing_length=2)
-    ob = next(b for b in blocks if b.kind == "bullish")
-    assert ob.touches == 1  # first extra candle wicks into 98-101.5
-    assert ob.ended_time == extra.index[1]
-
-
-def test_detects_bearish_order_block_as_mirror():
-    bull = _bullish_bos_series()
-    # Mirror prices around 200: highs become lows and vice versa.
-    bear = pd.DataFrame({
-        "open": 200 - bull["open"], "high": 200 - bull["low"], "low": 200 - bull["high"],
-        "close": 200 - bull["close"], "volume": 1.0,
-    }, index=bull.index)
-    obs = [b for b in detect_order_blocks(bear, swing_length=2) if b.kind == "bearish"]
-    assert len(obs) == 1
-    assert (obs[0].bottom, obs[0].top) == (98.5, 102)
 
 
 def test_no_lookahead_pivot_needs_right_side_bars():

@@ -11,7 +11,17 @@ export interface Level {
   touches: number;
   ended_time: string | null;
   ended_time_unix: number | null;
-  meta: { grab?: boolean; equal?: number; [k: string]: unknown };
+  meta: {
+    grab?: boolean; // liquidity / IDM: swept by a wick that closed back inside
+    equal?: number; // liquidity: number of equal highs/lows in the pool
+    priority?: "extreme" | "middle"; // order blocks
+    entry?: number; // order blocks: limit price (proximal body edge)
+    sl?: number; // order blocks: stop (far body edge, capped at max_sl)
+    risk?: number;
+    body?: number;
+    sl_capped?: boolean;
+    [k: string]: unknown;
+  };
 }
 
 export type NearestLevel = Level & { timeframe: string };
@@ -44,10 +54,14 @@ export interface TimeframeScan {
   detectors: Record<string, LevelSet>;
 }
 
+/** An order block limit setup: distance is from price to the entry. */
+export type Setup = Level & { timeframe: string; distance: number };
+
 export interface Scan {
   time: string;
   price: number;
   detectors: string[];
+  setups: { sell: Setup[]; buy: Setup[] };
   nearest: Record<string, { above: NearestLevel | null; below: NearestLevel | null }>;
   timeframes: TimeframeScan[];
 }
@@ -74,6 +88,7 @@ export interface ScanResponse {
     mitigation: string;
     eq_tolerance: number;
     idm_length: number;
+    max_sl: number;
   };
   scan: Scan | null;
 }

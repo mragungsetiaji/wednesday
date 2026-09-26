@@ -31,7 +31,7 @@ export function roleOf(lv: Level): Role {
 }
 
 export function detail(lv: Level): string {
-  if (lv.detector === "ob") return lv.touches === 0 ? "untested" : `tested ${lv.touches}×`;
+  if (lv.detector === "ob") return lv.touches === 0 ? "untested" : `entry tested ${lv.touches}×`;
   if (lv.detector === "liquidity") return lv.meta.equal ? "equal pool" : lv.kind === "bsl" ? "buy stops" : "sell stops";
   return lv.kind === "bullish" ? "after bullish BOS" : "after bearish BOS";
 }

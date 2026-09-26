@@ -87,8 +87,9 @@ Useful options:
 | `--timeframes` | `4H,1H,30M,15M,5M` | Timeframes to scan (always processed high to low) |
 | `--lookback` | `200` | Closed candles per timeframe searched for order blocks |
 | `--swing-length` | `5` | Bars on each side needed to confirm a swing high/low |
-| `--zone` | `wick` | OB zone = full candle range (`wick`) or open/close (`body`) |
-| `--mitigation` | `close` | OB is invalidated by a close through it (`close`) or any wick (`wick`) |
+| `--zone` | `body` | OB level covers the body (`body`) or the full candle range (`wick`) |
+| `--mitigation` | `wick` | OB is taken by a wick through the whole body (`wick`) or a close beyond it (`close`) |
+| `--max-sl` | `3.0` | Max stop distance for OB limit setups, in price units (`XAU_MAX_SL`) |
 | `--detectors` | `ob,liquidity,idm` | Detectors to run (`XAU_DETECTORS`) |
 | `--eq-tolerance` | `0.1` | Equal highs/lows: max gap as a multiple of ATR(14) |
 | `--idm-length` | `2` | Internal swing bars each side for inducement |
@@ -118,10 +119,28 @@ or a line when top == bottom). Choose them with `--detectors ob,liquidity,idm`
 - **Break of structure (BOS)**: a candle *closes* above the latest unbroken
   swing high (bullish) or below the latest unbroken swing low (bearish).
 
-**Order blocks** (`ob`): on a bullish BOS, the candle with the lowest low
-between the broken swing high and the breakout candle (demand); bearish is the
-mirror (supply). Mitigated when price closes through it (`--mitigation wick`:
-any wick). `--zone body` uses open/close instead of the full range.
+**Order blocks** (`ob`), built for limit entries:
+
+- The OB candle is the **opposite-colour candle**: red for a buy OB, green for a
+  sell OB (the candle before the impulse, not the impulsive candle itself).
+- **Extreme OB** (high priority): the last red candle at or before the lowest low
+  of the leg that broke structure up (sell: last green candle at or before the
+  highest high). **Mid OBs** (low priority): red candles later in the move that are
+  followed by an impulsive green candle closing above their body (sell: mirror).
+- **Limit plan**: buy limit at the top of the red body, stop at its bottom; sell
+  limit at the bottom of the green body, stop at its top. The stop is capped at
+  `--max-sl` (default 3.00) from the entry.
+- **Taken**: an OB is removed once a later wick trades through its whole body
+  (`--mitigation close`: a close beyond it instead). A wick that only reaches the
+  entry keeps it valid and counts as *entry tested*.
+- `--zone body` (default) makes the level cover the body; `--zone wick` the full
+  candle range. Entry and stop always come from the body.
+
+**Limit setups**: across all timeframes, untaken bearish OBs whose entry is above
+price are sell-limit candidates and bullish OBs below price are buy-limit
+candidates, ranked **extreme first, then nearest entry**. The console prints the
+top 3 per side (`SELL LIMIT #1 5M extreme entry ... SL ... (risk ...)`), the API
+returns them under `scan.setups`, and the dashboard shows them at the top.
 
 **Liquidity** (`liquidity`): every swing high not yet traded through is
 **BSL** (buy stops above), every such swing low is **SSL**. Active swings within

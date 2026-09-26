@@ -50,6 +50,15 @@ def format_scan(result: ScanResult, symbol: str = "XAUUSD", digits: int = 2) -> 
                 f"{tf:<5} {SHORT.get(det, det[:4]):<4} {len(s.active):>3}  "
                 f"{_fmt(s.above, price, digits):<34} {_fmt(s.below, price, digits):<34} {'; '.join(notes) or '-'}"
             )
+    for side in ("sell", "buy"):
+        for rank, (tf, lv, dist) in enumerate(result.setups(side, limit=3), 1):
+            m = lv.meta
+            cap = " capped" if m["sl_capped"] else ""
+            lines.append(
+                f"{side.upper()} LIMIT #{rank} {tf.name:<3} {m['priority']:<7} entry {m['entry']:.{digits}f} "
+                f"SL {m['sl']:.{digits}f} (risk {m['risk']:.{digits}f}{cap}) "
+                f"dist {dist:.{digits}f} t{lv.touches}"
+            )
     for det in result.detectors:
         up, down = result.nearest(det, "above"), result.nearest(det, "below")
         parts = []

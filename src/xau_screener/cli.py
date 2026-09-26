@@ -53,8 +53,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--timeframes", default="4H,1H,30M,15M,5M", help="scanned from high to low")
     p.add_argument("--lookback", type=int, default=200, help="closed candles per timeframe to search")
     p.add_argument("--swing-length", type=int, default=5, help="pivot bars on each side of a swing")
-    p.add_argument("--zone", default="wick", choices=["wick", "body"])
-    p.add_argument("--mitigation", default="close", choices=["close", "wick"])
+    p.add_argument("--zone", default="body", choices=["wick", "body"],
+                   help="OB level covers the candle body (default) or the full range")
+    p.add_argument("--mitigation", default="wick", choices=["close", "wick"],
+                   help="OB is taken by a wick through the whole body (default) or a close beyond it")
+    p.add_argument("--max-sl", type=float, default=_env("XAU_MAX_SL", float) or 3.0,
+                   help="max stop distance for OB limit setups, in price units")
     p.add_argument("--detectors", default=_env("XAU_DETECTORS") or ",".join(DEFAULT_DETECTORS),
                    help=f"comma separated: {', '.join(REGISTRY)}")
     p.add_argument("--eq-tolerance", type=float, default=0.1,
@@ -101,6 +105,7 @@ def run(args: argparse.Namespace) -> None:
             mitigation=args.mitigation,
             eq_tolerance=args.eq_tolerance,
             idm_length=args.idm_length,
+            max_sl=args.max_sl,
         ),
         recent_bars=args.recent_bars,
     )

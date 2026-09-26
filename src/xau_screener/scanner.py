@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, build_detectors
+from .detectors.orderblock import PRIORITY_RANK
 from .levels import Level
 from .structure import Bias, Context, latest_bias
 from .timeframes import TIMEFRAMES, Timeframe, resample_ohlcv
@@ -84,6 +85,26 @@ class ScanResult:
             return min(cands, key=lambda x: x[1].bottom - self.price)
         return min(cands, key=lambda x: self.price - x[1].top)
 
+    def setups(self, side: str, limit: int = 5) -> list[tuple[Timeframe, Level, float]]:
+        """OB limit setups on one side ("sell": above price, "buy": below), best first.
+
+        Extreme OBs rank before middle ones, then the nearest entry wins. Returns
+        (timeframe, level, distance from price to the entry).
+        """
+        want = "bearish" if side == "sell" else "bullish"
+        out = []
+        for r in self.results:
+            obs = r.sets.get("ob")
+            for lv in obs.active if obs else []:
+                entry = lv.meta.get("entry")
+                if lv.kind != want or entry is None:
+                    continue
+                dist = entry - self.price if side == "sell" else self.price - entry
+                if dist > 0:  # the limit must still be on the far side of price
+                    out.append((r.timeframe, lv, dist))
+        out.sort(key=lambda t: (PRIORITY_RANK.get(t[1].meta.get("priority"), 9), t[2]))
+        return out[:limit]
+
     def to_dict(self) -> dict:
         def near(det, side):
             hit = self.nearest(det, side)
@@ -94,6 +115,10 @@ class ScanResult:
             "price": self.price,
             "detectors": list(self.detectors),
             "nearest": {d: {"above": near(d, "above"), "below": near(d, "below")} for d in self.detectors},
+            "setups": {
+                side: [{"timeframe": tf.name, "distance": dist, **lv.to_dict()} for tf, lv, dist in self.setups(side)]
+                for side in ("sell", "buy")
+            },
             "timeframes": [
                 {
                     "timeframe": r.timeframe.name,

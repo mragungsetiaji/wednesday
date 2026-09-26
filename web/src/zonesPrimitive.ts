@@ -29,6 +29,8 @@ export interface Zone {
   label: string;
   faded: boolean; // levels from higher timeframes are drawn lighter/dashed
   strong?: boolean; // equal-high/low pools
+  weak?: boolean; // low-priority (mid) order blocks: lighter fill
+  stop?: number; // capped stop inside an order block box, drawn as a dashed line
 }
 
 /** First candle index whose time is >= t (candle times are ascending). */
@@ -75,12 +77,20 @@ class ZonesRenderer implements IPrimitivePaneRenderer {
         const lw = Math.max(1, Math.round(hr));
 
         if (z.role === "bull" || z.role === "bear") {
-          ctx.fillStyle = withAlpha(color, z.faded ? 0.08 : 0.2);
+          ctx.fillStyle = withAlpha(color, z.faded ? 0.08 : z.weak ? 0.1 : 0.22);
           ctx.fillRect(x, y, w, Math.max(1, h));
-          ctx.strokeStyle = withAlpha(color, z.faded ? 0.45 : 0.9);
+          ctx.strokeStyle = withAlpha(color, z.faded ? 0.45 : z.weak ? 0.55 : 0.95);
           ctx.lineWidth = lw;
           ctx.setLineDash(z.faded ? [4 * hr, 3 * hr] : []);
           ctx.strokeRect(x + 0.5, y + 0.5, w - 1, Math.max(1, h) - 1);
+          const ys = z.stop !== undefined ? series.priceToCoordinate(z.stop) : null;
+          if (ys !== null) {
+            ctx.setLineDash([3 * hr, 3 * hr]);
+            ctx.beginPath();
+            ctx.moveTo(x, Math.round(ys * vr) + 0.5);
+            ctx.lineTo(bitmapSize.width, Math.round(ys * vr) + 0.5);
+            ctx.stroke();
+          }
         } else {
           if (h > 1) {
             ctx.fillStyle = withAlpha(color, z.faded ? 0.05 : 0.12);

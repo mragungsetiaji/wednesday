@@ -4,6 +4,7 @@ import { fetchCandles, fetchScan, type CandlesResponse, type Level, type ScanRes
 import { EventsPanel } from "./components/EventsPanel";
 import { NearestPanel } from "./components/NearestPanel";
 import { PriceChart } from "./components/PriceChart";
+import { SetupCard } from "./components/SetupCard";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtAgo, fmtFeedTime, fmtLevelPrice, fmtPrice, roleOf } from "./format";
@@ -43,8 +44,16 @@ function toZone(lv: Level, label: string, faded: boolean): Zone {
   return {
     role: roleOf(lv), top: lv.top, bottom: lv.bottom, startTime: lv.time_unix,
     label, faded, strong: Boolean(lv.meta.equal),
+    weak: lv.meta.priority === "middle",
+    stop: lv.meta.sl_capped ? lv.meta.sl : undefined,
   };
 }
+
+/** Chart label: OBs show their limit entry, other levels their price. */
+const chartLabel = (tf: string, lv: Level) =>
+  lv.detector === "ob" && lv.meta.entry !== undefined
+    ? `${tf} ${lv.label} @ ${fmtPrice(lv.meta.entry)}`
+    : `${tf} ${lv.label} ${fmtLevelPrice(lv)}`;
 
 export default function App() {
   const palette = useChartPalette();
@@ -53,6 +62,7 @@ export default function App() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [tf, setTfState] = useState<string>(() => loadPref("xau.tf", "1H"));
   const [showHigherTf, setShowHigherTfState] = useState<boolean>(() => loadPref("xau.otherTf", true));
+  const [showMidOb, setShowMidObState] = useState<boolean>(() => loadPref("xau.midOb", true));
   const [hidden, setHiddenState] = useState<string[]>(() => loadPref("xau.hiddenLayers", []));
   const [chart, setChart] = useState<CandlesResponse | null>(null);
 
@@ -63,6 +73,10 @@ export default function App() {
   const setShowHigherTf = (v: boolean) => {
     setShowHigherTfState(v);
     savePref("xau.otherTf", v);
+  };
+  const setShowMidOb = (v: boolean) => {
+    setShowMidObState(v);
+    savePref("xau.midOb", v);
   };
   const toggleLayer = (name: string) => {
     const next = hidden.includes(name) ? hidden.filter((n) => n !== name) : [...hidden, name];
@@ -119,17 +133,18 @@ export default function App() {
   const zones = useMemo<Zone[]>(() => {
     if (!scan || !chart || chart.timeframe !== tf) return [];
     const shown = new Set(detectors.map((d) => d.name));
+    const visible = (lv: Level) => showMidOb || lv.meta.priority !== "middle";
     const own = chart.levels
-      .filter((lv) => shown.has(lv.detector))
-      .map((lv) => toZone(lv, `${tf} ${lv.label} ${fmtLevelPrice(lv)}`, false));
+      .filter((lv) => shown.has(lv.detector) && visible(lv))
+      .map((lv) => toZone(lv, chartLabel(tf, lv), false));
     if (!showHigherTf) return own;
     // Only higher timeframes: they are the ones that matter when trading a lower one.
     const idx = scan.timeframes.findIndex((t) => t.timeframe === tf);
     const higher = scan.timeframes.slice(0, Math.max(0, idx)).flatMap((t) =>
-      detectors.flatMap((d) => (t.detectors[d.name]?.active ?? []).map((lv) => toZone(lv, `${t.timeframe} ${lv.label}`, true))),
+      detectors.flatMap((d) => (t.detectors[d.name]?.active ?? []).filter(visible).map((lv) => toZone(lv, `${t.timeframe} ${lv.label}`, true))),
     );
     return [...higher, ...own];
-  }, [scan, chart, tf, showHigherTf, detectors]);
+  }, [scan, chart, tf, showHigherTf, showMidOb, detectors]);
 
   const lastOk = data?.scanned_at ? Date.parse(data.scanned_at) : null;
   const status = fetchError
@@ -190,6 +205,13 @@ export default function App() {
 
       {scan && config ? (
         <>
+          {detectors.some((d) => d.name === "ob") && (
+            <div className="setups-row">
+              <SetupCard side="sell" setups={scan.setups.sell} maxSl={config.max_sl} onSelect={setTf} />
+              <SetupCard side="buy" setups={scan.setups.buy} maxSl={config.max_sl} onSelect={setTf} />
+            </div>
+          )}
+
           <div className="nearest-row">
             <NearestPanel side="above" scan={scan} detectors={detectors} onSelect={setTf} />
             <NearestPanel side="below" scan={scan} detectors={detectors} onSelect={setTf} />
@@ -207,16 +229,23 @@ export default function App() {
                       </button>
                     ))}
                   </div>
-                  <label className="toggle">
-                    <input type="checkbox" checked={showHigherTf} onChange={(e) => setShowHigherTf(e.target.checked)} />
-                    Higher TF levels
-                  </label>
+                  <div className="toggles">
+                    <label className="toggle">
+                      <input type="checkbox" checked={showMidOb} onChange={(e) => setShowMidOb(e.target.checked)} />
+                      Mid OBs
+                    </label>
+                    <label className="toggle">
+                      <input type="checkbox" checked={showHigherTf} onChange={(e) => setShowHigherTf(e.target.checked)} />
+                      Higher TF levels
+                    </label>
+                  </div>
                 </div>
                 <PriceChart candles={chart?.timeframe === tf ? chart.candles : []} zones={zones}
                   palette={palette} resetKey={tf} />
                 <div className="chart-foot muted small">
-                  <span><span className="tag role-bull" /> Bullish OB</span>
-                  <span><span className="tag role-bear" /> Bearish OB</span>
+                  <span><span className="tag role-bull" /> Bullish OB (buy limit at top)</span>
+                  <span><span className="tag role-bear" /> Bearish OB (sell limit at bottom)</span>
+                  <span>lighter box = mid OB · dashed line in box = capped SL</span>
                   <span><span className="tag role-liquidity" /> BSL / SSL (thick = EQH/EQL)</span>
                   <span><span className="tag role-idm" /> IDM</span>
                   {showHigherTf && <span>faded / dashed = higher TF</span>}
@@ -233,8 +262,8 @@ export default function App() {
           </main>
 
           <footer className="muted small foot">
-            lookback {config.lookback} candles · swing {config.swing_length} · OB zone {config.zone}, mitigated by{" "}
-            {config.mitigation} · equal levels ≤ {config.eq_tolerance}×ATR · IDM swing {config.idm_length}
+            lookback {config.lookback} candles · swing {config.swing_length} · OB {config.zone}, taken by{" "}
+            {config.mitigation === "wick" ? "a wick through the body" : "a close beyond the body"} · max SL {config.max_sl} · equal levels ≤ {config.eq_tolerance}×ATR · IDM swing {config.idm_length}
           </footer>
         </>
       ) : (
