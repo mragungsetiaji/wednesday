@@ -4,18 +4,19 @@ import {
   CursorIcon,
   EyeIcon,
   HLineIcon,
-  LongPositionIcon,
   PathIcon,
+  PositionIcon,
   RectIcon,
   RedoIcon,
-  ShortPositionIcon,
   TextIcon,
   TrendlineIcon,
   UndoIcon,
 } from "../icons";
 
-const ICON = 20; // px of undo, redo and hide; 18 in the full screen row
-const TOOL_SCALE = 1.3; // the tool icons' 28px grid draws a third larger to match them
+const ICON = 20; // px; 18 in the full screen row
+
+const LongIcon = (p: { size?: number }) => <PositionIcon {...p} />;
+const ShortIcon = (p: { size?: number }) => <PositionIcon {...p} short />;
 
 const TOOLS: { tool: DrawTool; label: string; Icon: (p: { size?: number }) => React.ReactNode }[] = [
   { tool: "cursor", label: "Cursor", Icon: CursorIcon },
@@ -24,8 +25,8 @@ const TOOLS: { tool: DrawTool; label: string; Icon: (p: { size?: number }) => Re
   { tool: "rect", label: "Rectangle: click two corners", Icon: RectIcon },
   { tool: "path", label: "Path: click each point, click the last one again (or Enter) to end", Icon: PathIcon },
   { tool: "text", label: "Text: click where it goes, then type", Icon: TextIcon },
-  { tool: "long", label: "Long position: click the entry", Icon: LongPositionIcon },
-  { tool: "short", label: "Short position: click the entry", Icon: ShortPositionIcon },
+  { tool: "long", label: "Long position: click the entry", Icon: LongIcon },
+  { tool: "short", label: "Short position: click the entry", Icon: ShortIcon },
 ];
 
 const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -45,7 +46,7 @@ export function DrawingToolbar({ ctl, row }: { ctl: Drawings; row?: boolean }) {
       {TOOLS.map(({ tool, label, Icon }) => (
         <button key={tool} type="button" className="draw-tool" aria-pressed={ctl.tool === tool} title={label} aria-label={label}
           onClick={() => ctl.setTool(ctl.tool === tool && tool !== "cursor" ? "cursor" : tool)}>
-          <Icon size={Math.round(size * TOOL_SCALE)} />
+          <Icon size={size} />
         </button>
       ))}
       <span className="draw-sep" aria-hidden="true" />

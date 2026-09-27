@@ -136,72 +136,53 @@ export const EyeIcon = ({ off, ...p }: IconProps & { off?: boolean }) => (
   </Svg>
 );
 
-/**
- * Drawing tools, TradingView's: filled on a 28px grid with 1px lines, unlike the stroked set
- * above. Draw them about a third larger than their stroked neighbours so they read the same size.
- */
-function ToolSvg({ size = 18, title, children }: IconProps & { children: React.ReactNode }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 28 28" fill="currentColor" aria-hidden={title ? undefined : true}
-      role={title ? "img" : undefined} className="icon">
-      {title && <title>{title}</title>}
-      {children}
-    </svg>
-  );
-}
-
+/** Drawing tools. */
 export const CursorIcon = (p: IconProps) => (
-  <ToolSvg {...p}>
-    <path d="M11.682 16.09l3.504 6.068 1.732-1-3.497-6.057 3.595-2.1L8 7.74v10.512l3.682-2.163zm-.362 1.372L7 20V6l12 7-4.216 2.462 3.5 6.062-3.464 2-3.5-6.062z" />
-  </ToolSvg>
+  <Svg {...p}>
+    <path d="M4 2.5l8.5 5.2-3.8.9 2.2 4.1-1.6.8-2.2-4.1L4.2 12z" />
+  </Svg>
 );
 
 export const TrendlineIcon = (p: IconProps) => (
-  <ToolSvg {...p}>
-    <path d="M7.354 21.354l14-14-.707-.707-14 14z" />
-    <path d="M22.5 7c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zm0 1c-1.381 0-2.5-1.119-2.5-2.5s1.119-2.5 2.5-2.5 2.5 1.119 2.5 2.5-1.119 2.5-2.5 2.5zM5.5 24c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zm0 1c-1.381 0-2.5-1.119-2.5-2.5s1.119-2.5 2.5-2.5 2.5 1.119 2.5 2.5-1.119 2.5-2.5 2.5z" />
-  </ToolSvg>
+  <Svg {...p}>
+    <path d="M4.3 11.7l7.4-7.4" />
+    <circle cx="3.2" cy="12.8" r="1.4" />
+    <circle cx="12.8" cy="3.2" r="1.4" />
+  </Svg>
 );
 
 export const HLineIcon = (p: IconProps) => (
-  <ToolSvg {...p}>
-    <path d="M8.5 15h16.5v-1h-16.5z" />
-    <path d="M6.5 16c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zm0 1c-1.381 0-2.5-1.119-2.5-2.5s1.119-2.5 2.5-2.5 2.5 1.119 2.5 2.5-1.119 2.5-2.5 2.5z" />
-  </ToolSvg>
+  <Svg {...p}>
+    <path d="M1.5 8h10.5" />
+    <circle cx="13.3" cy="8" r="1.4" />
+  </Svg>
 );
 
 export const RectIcon = (p: IconProps) => (
-  <ToolSvg {...p}>
-    <path d="M7.5 6h13v-1h-13zM7.5 23h13v-1h-13zM5 7.5v13h1v-13zM22 7.5v13h1v-13z" />
-    <path d="M5.5 7.0c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zm0 1c-1.381 0-2.5-1.119-2.5-2.5s1.119-2.5 2.5-2.5 2.5 1.119 2.5 2.5-1.119 2.5-2.5 2.5zM22.5 7.0c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zm0 1c-1.381 0-2.5-1.119-2.5-2.5s1.119-2.5 2.5-2.5 2.5 1.119 2.5 2.5-1.119 2.5-2.5 2.5zM22.5 24.0c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zm0 1c-1.381 0-2.5-1.119-2.5-2.5s1.119-2.5 2.5-2.5 2.5 1.119 2.5 2.5-1.119 2.5-2.5 2.5zM5.5 24.0c.828 0 1.5-.672 1.5-1.5s-.672-1.5-1.5-1.5-1.5.672-1.5 1.5.672 1.5 1.5 1.5zm0 1c-1.381 0-2.5-1.119-2.5-2.5s1.119-2.5 2.5-2.5 2.5 1.119 2.5 2.5-1.119 2.5-2.5 2.5z" />
-  </ToolSvg>
+  <Svg {...p}>
+    <rect x="2.5" y="4" width="11" height="8" rx="0.5" />
+  </Svg>
 );
 
 export const PathIcon = (p: IconProps) => (
-  <ToolSvg {...p}>
-    <path d="M11 10.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm4 7a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0zm11-8.8V13h1V7h-6v1h4.3l-7.42 7.41a2.49 2.49 0 0 0-2.76 0l-3.53-3.53a2.5 2.5 0 1 0-4.17 0L1 18.29l.7.71 6.42-6.41a2.49 2.49 0 0 0 2.76 0l3.53 3.53a2.5 2.5 0 1 0 4.17 0z" />
-  </ToolSvg>
+  <Svg {...p}>
+    <path d="M2.5 12.5l3.5-6 3.5 3.5 4-7" />
+  </Svg>
 );
 
 export const TextIcon = (p: IconProps) => (
-  <ToolSvg {...p}>
-    <path d="M8 6.5c0-.28.22-.5.5-.5H14v16h-2v1h5v-1h-2V6h5.5c.28 0 .5.22.5.5V9h1V6.5c0-.83-.67-1.5-1.5-1.5h-12C7.67 5 7 5.67 7 6.5V9h1V6.5Z" />
-  </ToolSvg>
+  <Svg {...p}>
+    <path d="M3 4V2.8h10V4M8 2.8v10.4M6 13.2h4" />
+  </Svg>
 );
 
-/** Long / short position: target, entry and stop lines with a dotted path from the entry toward the target. */
-export const LongPositionIcon = (p: IconProps) => (
-  <ToolSvg {...p}>
-    <path fillRule="evenodd" clipRule="evenodd" d="M4.5 5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM2 6.5A2.5 2.5 0 0 1 6.95 6H24v1H6.95A2.5 2.5 0 0 1 2 6.5zM4.5 15a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM2 16.5a2.5 2.5 0 0 1 4.95-.5h13.1a2.5 2.5 0 1 1 0 1H6.95A2.5 2.5 0 0 1 2 16.5zM22.5 15a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm-18 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM2 22.5a2.5 2.5 0 0 1 4.95-.5H24v1H6.95A2.5 2.5 0 0 1 2 22.5z" />
-    <path fillRule="evenodd" clipRule="evenodd" d="M22.4 8.94l-1.39.63-.41-.91 1.39-.63.41.91zm-4 1.8l-1.39.63-.41-.91 1.39-.63.41.91zm-4 1.8l-1.4.63-.4-.91 1.39-.63.41.91zm-4 1.8l-1.4.63-.4-.91 1.39-.63.41.91z" />
-  </ToolSvg>
-);
-
-export const ShortPositionIcon = (p: IconProps) => (
-  <ToolSvg {...p}>
-    <path fillRule="evenodd" clipRule="evenodd" d="M4.5 24a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM2 22.5a2.5 2.5 0 0 0 4.95.5H24v-1H6.95a2.5 2.5 0 0 0-4.95.5zM4.5 14a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM2 12.5a2.5 2.5 0 0 0 4.95.5h13.1a2.5 2.5 0 1 0 0-1H6.95a2.5 2.5 0 0 0-4.95.5zM22.5 14a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm-18-6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zM2 6.5a2.5 2.5 0 0 0 4.95.5H24V6H6.95A2.5 2.5 0 0 0 2 6.5z" />
-    <path fillRule="evenodd" clipRule="evenodd" d="M22.4 20.06l-1.39-.63-.41.91 1.39.63.41-.91zm-4-1.8l-1.39-.63-.41.91 1.39.63.41-.91zm-4-1.8l-1.4-.63-.4.91 1.39.63.41-.91zm-4-1.8L9 14.03l-.4.91 1.39.63.41-.91z" />
-  </ToolSvg>
+/** Long / short position: a box split at the entry, the arrow toward the target. */
+export const PositionIcon = ({ short, ...p }: IconProps & { short?: boolean }) => (
+  <Svg {...p}>
+    <rect x="2.5" y="2.5" width="11" height="11" rx="0.5" />
+    <path d="M2.5 8h11" />
+    <path d={short ? "M8 9.5v2.5M6.5 10.5L8 12l1.5-1.5" : "M8 6.5V4M6.5 5.5L8 4l1.5 1.5"} />
+  </Svg>
 );
 
 export const UndoIcon = (p: IconProps) => (
