@@ -67,7 +67,7 @@ export function AccountSettings() {
           }}>
             <label className="field">
               <span className="field-label">{licence.plan ? "Replace the licence key" : "Licence key"}</span>
-              <input type="text" value={key} spellCheck={false} autoComplete="off" placeholder="WED1.…" onChange={(e) => setKey(e.target.value)} />
+              <input type="text" value={key} spellCheck={false} autoComplete="off" placeholder="WEDK-…" onChange={(e) => setKey(e.target.value)} />
             </label>
             <div className="form-actions">
               <button type="submit" className="button primary" disabled={busy || !key.trim()}>Activate</button>
