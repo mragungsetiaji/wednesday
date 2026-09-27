@@ -27,6 +27,10 @@ datas += copy_metadata("keyring")
 # uvicorn picks its loop and protocol modules by name at runtime; so does keyring its backends.
 hiddenimports = (collect_submodules("wednesday") + collect_submodules("uvicorn")
                  + collect_submodules("keyring.backends") + collect_submodules("win32ctypes"))
+# Wednesday EE is downloaded after install (plugin_install.py) and can only import what is bundled
+# here: the standard library modules it uses that the core might not, and all of cryptography.
+hiddenimports += (["argparse", "ast", "platform", "secrets", "tempfile", "hashlib", "urllib.request",
+                   "urllib.error", "zipfile"] + collect_submodules("cryptography"))
 
 a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],

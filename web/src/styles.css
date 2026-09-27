@@ -440,6 +440,11 @@ p {
   gap: 6px;
   white-space: nowrap;
 }
+.statusbar-plan {
+  line-height: 16px;
+  text-decoration: none;
+  letter-spacing: 0.04em;
+}
 .statusbar .live {
   font-weight: 600;
 }

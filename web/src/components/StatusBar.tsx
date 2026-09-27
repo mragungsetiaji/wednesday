@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+
+import { fetchLicence, LICENCE_EVENT } from "../api";
 import { fmtAgo, fmtFeedTime } from "../format";
 import { TagIcon } from "../icons";
 
@@ -12,8 +15,30 @@ interface Props {
   now: number;
 }
 
-/** Bottom bar, always on screen: the app version, and the feed's state in the right corner. */
+/** The plan the licence gives ("PRO"), or null on the free version. Rechecked every few minutes. */
+function usePlan(): string | null {
+  const [plan, setPlan] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetchLicence()
+        .then((l) => alive && setPlan(l.available && l.valid && l.plan ? l.plan : null))
+        .catch(() => {});
+    load();
+    const timer = window.setInterval(load, 5 * 60_000);
+    window.addEventListener(LICENCE_EVENT, load);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      window.removeEventListener(LICENCE_EVENT, load);
+    };
+  }, []);
+  return plan;
+}
+
+/** Bottom bar, always on screen: the app version and plan, and the feed's state in the right corner. */
 export function StatusBar({ version, status, source, scannedAt, barTime, now }: Props) {
+  const plan = usePlan();
   const detail = [`Scanned ${fmtAgo(scannedAt, now)}`, barTime && `last bar ${fmtFeedTime(barTime)}`].filter(Boolean).join(" · ");
   return (
     <footer className="statusbar">
@@ -21,6 +46,10 @@ export function StatusBar({ version, status, source, scannedAt, barTime, now }: 
         <TagIcon size={12} />
         {version ? `v${version}` : "—"}
       </span>
+      <a href="#settings/plan" className={`statusbar-item statusbar-plan badge${plan ? " accent" : ""}`}
+        title={plan ? "Your plan" : "Free version; see Settings > Plan"}>
+        {plan ? plan.toUpperCase() : "FREE"}
+      </a>
       <span className="statusbar-feed" title={detail}>
         {source && <span className="statusbar-item">{SOURCES[source] ?? source}</span>}
         <span className={`statusbar-item live ${status.cls}`} role="status">

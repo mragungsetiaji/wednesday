@@ -756,6 +756,8 @@ export interface LicenceStatus {
 }
 
 export const fetchLicence = () => getJson<LicenceStatus>("/api/licence");
+/** Sent on window when the licence changes, so the status bar's plan follows at once. */
+export const LICENCE_EVENT = "wednesday:licence";
 export const activateLicence = (key: string) => send<LicenceStatus>("PUT", "/api/licence", { key });
 export const removeLicence = () => send<LicenceStatus>("DELETE", "/api/licence");
 

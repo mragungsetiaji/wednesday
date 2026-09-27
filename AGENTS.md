@@ -67,7 +67,9 @@ package is `src/wednesday/`.
 - **Paid features live in the sibling `../wednesday-ee` plugin** (private repo),
   loaded through the `wednesday.plugins` entry point (`docs/plugins.md`). The core
   exposes hooks and feature ids; licence checks and paid code stay in the plugin, and
-  the core must run the same without it.
+  the core must run the same without it. Users get it by entering a licence key:
+  `plugin_install.py` downloads it from the licence server, checks its signature
+  against `plugin_keys.py` and unpacks it to `data/plugins/`.
 
 ## LLM news brief
 

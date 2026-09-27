@@ -26,7 +26,8 @@ from .lab.api import lab_router
 from .journal.api import journal_router
 from .features import catalog as feature_catalog
 from .history import older_candles
-from .plugins import PLUGIN_API, features, load_plugins
+from . import plugin_install
+from .plugins import PLUGIN_API, features, load_new_plugins, load_plugins
 from .quarters import quarters_payload, utc_to_feed
 from .mt5_terminals import find_terminals
 from .secret_store import get_secret, update_secrets
@@ -444,14 +445,32 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         provider = licence_provider()
         return {"available": False} if provider is None else {"available": True, **provider.status()}
 
-    @app.put("/api/licence")
-    def put_licence(body: dict = Body(...)) -> dict:
+    def download_plugin(key: str):
+        """No plugin handles licences yet: a licence key from the licence server fetches Wednesday EE."""
+        if runtime is None:
+            raise HTTPException(409, "The licence needs the server running with --serve")
+        if not key.upper().startswith("WEDK-"):
+            raise HTTPException(409, "Wednesday EE isn't installed. Enter a licence key (WEDK-...) "
+                                     "and Wednesday downloads it.")
+        try:
+            manifest = plugin_install.install(key, runtime.store)
+        except plugin_install.InstallError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        for info in load_new_plugins(app, runtime, plugins):
+            if not info.loaded:
+                raise HTTPException(500, f"Wednesday EE {manifest['version']} was downloaded but didn't load: "
+                                         f"{info.error}")
         provider = licence_provider()
         if provider is None:
-            raise HTTPException(409, "No plugin handles licences. Install Wednesday EE to use one.")
+            raise HTTPException(500, "Wednesday EE was downloaded; restart Wednesday to finish")
+        return provider
+
+    @app.put("/api/licence")
+    def put_licence(body: dict = Body(...)) -> dict:
         key = str(body.get("key") or "").strip()
         if not key:
             raise HTTPException(422, "Paste a licence key")
+        provider = licence_provider() or download_plugin(key)
         try:
             return {"available": True, **provider.activate(key)}
         except ValueError as exc:

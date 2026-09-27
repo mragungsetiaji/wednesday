@@ -20,6 +20,10 @@ A module works as that object::
     def register(ctx): ctx.add_router(router); ctx.on_after_scan(check)
     plugin = Plugin(name="ee", api=1, register=register, features=["llm.recap"])
 
+A plugin can also be downloaded rather than installed: ``plugin_install.py``
+fetches a signed wheel from the licence server and unpacks it under
+``data/plugins/``, which is added to ``sys.path`` before plugins are looked up.
+
 Wednesday runs the same without any plugin. A plugin written for another API
 version, or one that raises while registering, is skipped with a log line; a
 hook that raises is logged and never stops scanning.
@@ -27,13 +31,16 @@ hook that raises is logged and never stops scanning.
 
 from __future__ import annotations
 
+import importlib
 import logging
+import sys
 import threading
 from dataclasses import dataclass, field
 from importlib.metadata import EntryPoint, entry_points
 from typing import Callable, Iterable
 
 from fastapi import APIRouter, FastAPI
+from starlette.routing import Mount
 
 log = logging.getLogger(__name__)
 
@@ -129,6 +136,13 @@ class PluginContext:
     def add_router(self, router: APIRouter) -> None:
         """Routes are mounted under ``/api/ee/<plugin name>``."""
         self.app.include_router(router, prefix=f"{ROUTE_PREFIX}/{self._info.name}")
+        # A plugin loaded after startup (just downloaded) would land behind the dashboard's
+        # catch-all mount at "/"; keep mounts last so its routes are reachable.
+        routes = self.app.router.routes
+        mounts = [r for r in routes if isinstance(r, Mount)]
+        for m in mounts:
+            routes.remove(m)
+        routes.extend(mounts)
 
     def on_after_scan(self, fn: Callable) -> None:
         self.runtime.hooks.after_scan.append(fn)
@@ -164,36 +178,58 @@ def _version_of(ep: EntryPoint) -> str | None:
     return getattr(dist, "version", None)
 
 
+def _add_installed_to_path() -> None:
+    """Make downloaded plugins (``data/plugins/<name>/``) importable, after anything pip installed."""
+    from .plugin_install import installed_dirs
+
+    for d in installed_dirs():
+        if str(d) not in sys.path:
+            sys.path.append(str(d))
+
+
+def _load_one(app: FastAPI, runtime, ep: EntryPoint) -> PluginInfo:
+    info = PluginInfo(ep.name, _version_of(ep), None, [], loaded=False)
+    try:
+        obj = ep.load()
+        info.name = str(getattr(obj, "name", None) or ep.name)
+        info.version = getattr(obj, "version", None) or info.version
+        info.api = getattr(obj, "api", None)
+        info.features = list(getattr(obj, "features", None) or [])
+        register = getattr(obj, "register", None)
+        if not callable(register):
+            info.error = "has no register(ctx)"
+            log.warning("plugin %s skipped: %s", info.name, info.error)
+            return info
+        if info.api != PLUGIN_API:
+            info.error = f"written for plugin API {info.api}, this Wednesday has {PLUGIN_API}"
+            log.warning("plugin %s skipped: %s", info.name, info.error)
+            return info
+        register(PluginContext(app, runtime, info))
+        info.loaded = True
+        log.info("plugin %s %s loaded", info.name, info.version or "")
+    except Exception as exc:  # noqa: BLE001 - a broken plugin must not stop startup
+        info.error = f"{type(exc).__name__}: {exc}"
+        info.features = []
+        log.exception("plugin %s failed to load", info.name)
+    return info
+
+
 def load_plugins(app: FastAPI, runtime, eps: Iterable[EntryPoint] | None = None) -> list[PluginInfo]:
     """Load and register every installed plugin. Never raises."""
+    if eps is None:
+        _add_installed_to_path()
     found = list(entry_points(group=GROUP) if eps is None else eps)
-    infos: list[PluginInfo] = []
-    for ep in found:
-        info = PluginInfo(ep.name, _version_of(ep), None, [], loaded=False)
-        infos.append(info)
-        try:
-            obj = ep.load()
-            info.name = str(getattr(obj, "name", None) or ep.name)
-            info.version = getattr(obj, "version", None) or info.version
-            info.api = getattr(obj, "api", None)
-            info.features = list(getattr(obj, "features", None) or [])
-            register = getattr(obj, "register", None)
-            if not callable(register):
-                info.error = "has no register(ctx)"
-                log.warning("plugin %s skipped: %s", info.name, info.error)
-                continue
-            if info.api != PLUGIN_API:
-                info.error = f"written for plugin API {info.api}, this Wednesday has {PLUGIN_API}"
-                log.warning("plugin %s skipped: %s", info.name, info.error)
-                continue
-            register(PluginContext(app, runtime, info))
-            info.loaded = True
-            log.info("plugin %s %s loaded", info.name, info.version or "")
-        except Exception as exc:  # noqa: BLE001 - a broken plugin must not stop startup
-            info.error = f"{type(exc).__name__}: {exc}"
-            info.features = []
-            log.exception("plugin %s failed to load", info.name)
-    return infos
+    return [_load_one(app, runtime, ep) for ep in found]
+
+
+def load_new_plugins(app: FastAPI, runtime, infos: list[PluginInfo]) -> list[PluginInfo]:
+    """After a download: load plugins that weren't there at startup, adding them to ``infos``."""
+    _add_installed_to_path()
+    importlib.invalidate_caches()
+    known = {i.name for i in infos}
+    new = [_load_one(app, runtime, ep) for ep in entry_points(group=GROUP) if ep.name not in known]
+    infos.extend(new)
+    return new
 
 
 def features(infos: list[PluginInfo]) -> list[str]:

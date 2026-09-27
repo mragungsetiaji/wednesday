@@ -71,6 +71,29 @@ features with `ctx.set_features(...)`: all of them off without a valid licence.
 what each does, so the Plan screen can show them, locked, even when no plugin is
 installed. A plugin can provide ids that aren't in the list; they show too.
 
+## Downloading Wednesday EE with a licence key
+
+Wednesday EE isn't published; a licence key brings it. When no plugin handles
+licences and a key from the licence server (`WEDK-...`) is entered in
+**Settings > Plan**, Wednesday (`plugin_install.py`):
+
+1. sends the key and this install's device id to `POST /v1/download` on the
+   licence server (`WEDNESDAY_LICENCE_SERVER`, default `http://127.0.0.1:8790`);
+2. checks the answer: a manifest (package, version, file name, SHA-256) signed
+   with Ed25519 by a key in `plugin_keys.py`, and a wheel whose hash matches it.
+   Only `wednesday_ee` is accepted, and nothing downloaded runs before this check;
+3. unpacks the wheel to `data/plugins/wednesday_ee/` (`WEDNESDAY_PLUGINS_DIR`),
+   refusing files that would land outside it, replacing an older copy whole;
+4. loads it straight away, without a restart, and hands it the key to activate.
+
+At startup every folder in `data/plugins/` is added to `sys.path` after what pip
+installed, so a local `uv pip install -e ../wednesday-ee` wins while developing.
+The desktop app keeps `data/` in its home folder (`%LOCALAPPDATA%\Wednesday`).
+
+The public keys in `plugin_keys.py` are safe to publish; the matching private key
+stays with whoever signs. A free user never gets Wednesday EE's code: the licence
+server hands it out only for a usable key.
+
 Free, with or without a licence: the screener, alerts, the bias, the news card,
 the news brief with your own API key, labelling and training your own models, and one
 journal.
@@ -90,12 +113,11 @@ uv add --editable ../wednesday-ee   # or: uv pip install -e ../wednesday-ee
 make serve
 ```
 
-Installing from a private git repository:
-`uv pip install "git+https://<token>@github.com/<owner>/wednesday-ee"`.
+Users don't install it by hand: entering a licence key downloads it (above).
 
 ## What a plugin can and can't protect
 
 Code in a plugin is installed on the user's machine, where it can be read.
-Keeping it in a private repository keeps it out of this public one, not out of
-the hands of whoever installs it. Anything that must be enforced (licences for
+Keeping it in a private repository, and handing it out only for a licence key,
+keeps it away from free users, not from whoever has a licence. Anything that must be enforced (licences for
 hosted services, model downloads) belongs on a server the plugin talks to.
