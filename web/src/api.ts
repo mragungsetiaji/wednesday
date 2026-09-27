@@ -646,6 +646,69 @@ export async function stageImport(file: File): Promise<{ token: string; manifest
   }
   return res.json();
 }
+// ---- Lab > Data: more M1 history ----
+
+export interface BackfillState {
+  running: boolean;
+  start: string | null;
+  reached: string | null; // oldest date pulled so far
+  added: number;
+  error: string | null;
+  note: string | null;
+  finished_at: string | null;
+}
+
+export interface LabData {
+  source: string;
+  symbol: string;
+  clock: string; // the feed's clock; imported bars are moved to it
+  can_import: boolean;
+  can_backfill: boolean;
+  stored: { bars: number; first_unix: number | null; last_unix: number | null };
+  days: [number, number][]; // [day (unix midnight), M1 bars]
+  history_bars: number;
+  history_bars_max: number;
+  backfill: BackfillState;
+}
+
+export interface BarsPreview {
+  token: string;
+  format: "mt5" | "dukascopy" | "histdata" | "csv";
+  suggested_clock: string | null;
+  bars: number;
+  first: string;
+  last: string;
+  sample: { time: string; open: number; high: number; low: number; close: number; volume: number }[];
+}
+
+export interface BarsImported {
+  read: number;
+  added: number;
+  first: string;
+  last: string;
+  stored: number;
+}
+
+export const fetchLabData = () => getJson<LabData>("/api/lab/data");
+export const saveLabHistory = (history_bars: number) => send<LabData>("PUT", "/api/lab/data", { history_bars });
+export const startBackfill = (start: string) => send<LabData>("POST", "/api/lab/data/backfill", { start });
+export const stopBackfill = () => send<LabData>("DELETE", "/api/lab/data/backfill");
+export const confirmBars = (token: string, clock: string) =>
+  send<LabData & { imported: BarsImported }>("POST", `/api/lab/data/import/${token}`, { clock });
+export async function stageBars(file: File): Promise<BarsPreview> {
+  const res = await fetch("/api/lab/data/import", { method: "POST", body: file });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
 export const fetchPredictions = (tf: string, limit: number, threshold: number) =>
   getJson<{ model: { id: string; name: string } | null; blocks: MlBlock[] }>(
     `/api/lab/predictions?tf=${encodeURIComponent(tf)}&limit=${limit}&threshold=${threshold}`);

@@ -267,6 +267,23 @@ class Store:
         df.index.name = None
         return df.astype(float)
 
+    def bar_bounds(self, source: str, symbol: str) -> tuple[int, int | None, int | None]:
+        """Stored M1 bars of one stream: count, first and last open time (unix seconds)."""
+        t = bars_table
+        q = select(func.count(), func.min(t.c.time), func.max(t.c.time)).where(t.c.source == source, t.c.symbol == symbol)
+        with self.engine.connect() as conn:
+            n, first, last = conn.execute(q).one()
+        return int(n), first, last
+
+    def bar_days(self, source: str, symbol: str) -> list[tuple[int, int]]:
+        """Stored M1 bars per day: (day as unix seconds of its midnight, bar count), oldest first."""
+        t = bars_table
+        day = (t.c.time // 86400).label("day")
+        q = (select(day, func.count()).where(t.c.source == source, t.c.symbol == symbol)
+             .group_by(day).order_by(day))
+        with self.engine.connect() as conn:
+            return [(int(d) * 86400, int(n)) for d, n in conn.execute(q).all()]
+
     def bar_stats(self) -> list[dict]:
         t = bars_table
         q = select(t.c.source, t.c.symbol, func.count(), func.min(t.c.time), func.max(t.c.time)).group_by(t.c.source, t.c.symbol)

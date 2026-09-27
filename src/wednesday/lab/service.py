@@ -17,6 +17,7 @@ import pandas as pd
 from ..detectors.base import DetectorParams
 from ..storage import Store, lab_labels_table, lab_reviewed_table, lab_reviews_table
 from ..timeframes import TIMEFRAMES_BY_NAME
+from .bars import HISTORY_BARS_DEFAULT, HISTORY_BARS_MAX, LAB_DATA_KEY, Backfill, BarsFileError, ParsedBars, parse_bars
 from .dataset import ts, unix
 from .model import ModelBundle, ModelFileError, load, load_bytes, read_manifest
 from .outcome import TradePlan, plan_levels, simulate
@@ -26,7 +27,6 @@ from .train import TrainParams, frames_for, train_bundle
 log = logging.getLogger(__name__)
 
 ACTIVE_KEY = "lab_active_model"
-HISTORY_BARS = 400_000  # about a year of M1 bars from the database
 HISTORY_TTL = 600  # seconds before the stored history is read again
 
 
@@ -49,14 +49,45 @@ class Lab:
         self._active: ModelBundle | None = None
         self._lock = threading.Lock()
         self.training = {"running": False, "stage": None, "error": None, "last": None, "started_at": None}
+        self.backfill = Backfill()
+        self._staged_bars: dict[str, ParsedBars] = {}
+        saved = store.get_setting(LAB_DATA_KEY) or {}
+        self.history_bars = int(saved.get("history_bars") or HISTORY_BARS_DEFAULT)
 
     # ---- price history ---------------------------------------------------
+    def set_history_bars(self, bars: int) -> None:
+        """How many stored M1 bars the Lab loads (labelling, training, the dataset)."""
+        if not 10_000 <= bars <= HISTORY_BARS_MAX:
+            raise ValueError(f"History must be between 10,000 and {HISTORY_BARS_MAX:,} M1 bars")
+        self.history_bars = bars
+        self.store.set_setting(LAB_DATA_KEY, {"history_bars": bars})
+        self.forget_history()
+
+    def forget_history(self) -> None:
+        """Drop the cached history, after bars were imported or backfilled."""
+        self._history.clear()
+
+    def stage_bars(self, data: bytes) -> dict:
+        """Read an M1 file and keep it until :meth:`take_bars`; returns the preview."""
+        parsed = parse_bars(data)
+        token = secrets.token_hex(8)
+        while len(self._staged_bars) >= 2:
+            self._staged_bars.pop(next(iter(self._staged_bars)))
+        self._staged_bars[token] = parsed
+        return {"token": token, **parsed.preview()}
+
+    def take_bars(self, token: str) -> ParsedBars:
+        parsed = self._staged_bars.pop(token, None)
+        if parsed is None:
+            raise BarsFileError("That upload expired; choose the file again")
+        return parsed
+
     def history(self, source: str, symbol: str, live: pd.DataFrame | None) -> pd.DataFrame | None:
         """Stored M1 bars (cached for a while) joined with the engine's live buffer."""
         key = (source, symbol)
         cached = self._history.get(key)
         if cached is None or time.monotonic() - cached[0] > HISTORY_TTL:
-            stored = self.store.load_bars(source, symbol, HISTORY_BARS)
+            stored = self.store.load_bars(source, symbol, self.history_bars)
             cached = (time.monotonic(), stored)
             self._history[key] = cached
         stored = cached[1]

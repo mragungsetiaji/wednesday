@@ -6,7 +6,6 @@ import types
 
 import numpy as np
 import pandas as pd
-import pytest
 from fastapi.testclient import TestClient
 
 from wednesday.feeds import MT5Feed, SyntheticFeed

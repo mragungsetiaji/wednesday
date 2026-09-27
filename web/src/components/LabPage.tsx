@@ -7,17 +7,19 @@ import {
 import { fmtUnix } from "../format";
 import { usePref } from "../prefs";
 import type { ChartPalette } from "../theme";
+import { LabData } from "./LabData";
 import { LabLabel } from "./LabLabel";
 
-type Sub = "label" | "train" | "models";
+type Sub = "label" | "train" | "models" | "data";
 const SUBS: { id: Sub; title: string }[] = [
   { id: "label", title: "Label" },
   { id: "train", title: "Train" },
   { id: "models", title: "Models" },
+  { id: "data", title: "Data" },
 ];
 const subFromHash = (): Sub => {
   const s = window.location.hash.split("/")[1];
-  return s === "train" || s === "models" ? s : "label";
+  return s === "train" || s === "models" || s === "data" ? s : "label";
 };
 
 const pctOf = (v: number | undefined | null) => (v === undefined || v === null ? "—" : `${Math.round(v * 100)}%`);
@@ -100,6 +102,7 @@ export function LabPage({ palette }: { palette: ChartPalette }) {
       {sub === "label" && <LabLabel status={status} palette={palette} onChanged={load} />}
       {sub === "train" && <LabTrain status={status} onStatus={setStatus} />}
       {sub === "models" && <LabModels status={status} onStatus={setStatus} />}
+      {sub === "data" && <LabData onChanged={load} />}
     </main>
   );
 }

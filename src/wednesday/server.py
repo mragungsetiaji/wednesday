@@ -420,7 +420,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             raise HTTPException(502, str(exc)) from exc
         return {"ok": True}
 
-    app.include_router(lab_router(lambda: runtime.lab if runtime else None, current, current_source))
+    app.include_router(lab_router(lambda: runtime.lab if runtime else None, current, current_source, current_clock))
     app.include_router(journal_router(lambda: runtime.journals if runtime else None, current,
                                       lambda: features(app.state.plugins)))
 

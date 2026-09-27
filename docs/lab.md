@@ -14,8 +14,8 @@ training, model files and the Parquet download need it.
 ## Label
 
 1. Pick a timeframe and page through the history (**Older**, **Newer**, a date,
-   **Latest**). The history is the stored M1 bars (about a year) plus the live
-   buffer.
+   **Latest**). The history is the stored M1 bars (the latest 400,000 by
+   default, about a year; see [Data](#data)) plus the live buffer.
 2. Click a candle to select it. Shift-click, or Shift + arrow keys, selects a
    range (an order block can be more than one candle).
 3. Tag it with a button or the number keys: `1` OB bull, `2` OB bear, `3` BSL,
@@ -106,6 +106,36 @@ A review does two things:
   and the result in R).
 
 The same buttons are in the Lab (`V` / `X` on the selection).
+
+## Data
+
+**Lab > Data** shows how much M1 history is stored for the running source and
+symbol, and adds more. Early on there is little: Yahoo Finance only gives days
+of M1, and MT5 only what was fetched since Wednesday started.
+
+- **Stored history**: one row per month, one square per day. Paler squares
+  have fewer bars, outlined ones none, grey ones are weekends.
+- **Backfill from MT5** (MT5 as the source): pulls older M1 bars from the
+  terminal back to a date, five days per call between scans, with progress and
+  a Stop button. It stops with a note when the terminal has nothing older:
+  raise *Tools > Options > Charts > Max bars in chart* and scroll the M1 chart
+  back so the terminal downloads more.
+- **Import a file**: M1 bars from an MT5 export (`<DATE> <TIME> <OPEN> ...`,
+  UTF-16 is fine), Dukascopy (`Gmt time,...`), HistData ASCII (`20240102
+  180000;...` or `2024.01.02,18:00,...`) or any CSV with a time column and
+  open, high, low, close. The preview shows the format, range and first rows;
+  you confirm the file's clock (Dukascopy UTC, HistData UTC-5, an MT5 export
+  the broker's server time) and the times are moved to the feed's clock.
+  Importing is an upsert on time, so a file imported twice adds nothing.
+  Use prices of the same market as the feed: spot gold for MT5, COMEX
+  futures for Yahoo Finance.
+- **History the Lab uses**: how many of the latest stored bars are loaded for
+  labelling, training and the dataset, up to 2,000,000 (about five years,
+  roughly 100 MB of memory).
+
+Imported and backfilled bars also let the chart scroll further back (see
+[Scrolling back](data-sources.md#scrolling-back)). Demo data is never stored,
+so there is nothing to add to.
 
 ## Datasets
 

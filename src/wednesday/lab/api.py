@@ -13,6 +13,7 @@ from ..detectors import build_detectors
 from ..structure import Context
 from ..timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
 from .dataset import LADDER, minute_dataset, ts, unix
+from .bars import HISTORY_BARS_MAX, MAX_IMPORT_BYTES, BarsFileError, import_bars
 from .model import MAX_FILE_BYTES, ModelFileError
 from .service import Lab, history_bounds, ml_available
 from .tags import TAGS, tag_of
@@ -21,7 +22,8 @@ from .train import TrainParams, predict_blocks
 DETECTOR_CONTEXT = 150  # candles before the window the detectors see, so levels near its left edge are found
 
 
-def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_source: Callable[[], str]) -> APIRouter:
+def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_source: Callable[[], str],
+               get_clock: Callable[[], str] = lambda: "UTC") -> APIRouter:
     r = APIRouter(prefix="/api/lab")
     resampled: dict = {}
 
@@ -67,6 +69,87 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
             return {"editable": False, "available": ml_available()[0], "reason": "The Lab needs the server running with --serve and a database"}
         m1 = history()
         return {"editable": True, "symbol": symbol(), "history": history_bounds(m1), **found.status(symbol())}
+
+    # ---- Data: more M1 history (import, MT5 backfill, coverage) ----------------------------
+    def stream() -> tuple[str, str] | None:
+        """Where bars of the running source are stored; None for demo data (never stored)."""
+        return get_engine().buffer.key
+
+    def data_status() -> dict:
+        found = lab()
+        engine = get_engine()
+        key = stream()
+        n, first, last = found.store.bar_bounds(*key) if key else (0, None, None)
+        return {
+            "source": get_source(), "symbol": symbol(), "clock": get_clock(),
+            "can_import": key is not None, "can_backfill": key is not None and engine.feed.native_history,
+            "stored": {"bars": n, "first_unix": first, "last_unix": last},
+            "days": found.store.bar_days(*key) if key else [],
+            "history_bars": found.history_bars, "history_bars_max": HISTORY_BARS_MAX,
+            "backfill": dict(found.backfill.state),
+        }
+
+    @r.get("/data")
+    def get_data() -> dict:
+        """Stored M1 coverage per day, the Lab's history size, and the backfill's progress."""
+        return data_status()
+
+    @r.put("/data")
+    def put_data(body: dict = Body(...)) -> dict:
+        try:
+            lab().set_history_bars(int(body.get("history_bars", 0)))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return data_status()
+
+    @r.post("/data/import")
+    async def stage_bars(request: Request) -> dict:
+        """Upload an M1 file (raw body); returns a preview. Nothing is stored until the confirm call."""
+        if stream() is None:
+            raise HTTPException(409, "Demo data isn't stored: switch to Yahoo Finance, MT5 or CSV first")
+        data = await request.body()
+        if len(data) > MAX_IMPORT_BYTES:
+            raise HTTPException(413, "The file is larger than 500 MB")
+        try:
+            return lab().stage_bars(data)
+        except BarsFileError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @r.post("/data/import/{token}")
+    def confirm_bars(token: str, body: dict = Body(...)) -> dict:
+        """Store a staged file's bars, moved from the file's clock (``clock``) to the feed's."""
+        key = stream()
+        if key is None:
+            raise HTTPException(409, "Demo data isn't stored: switch to Yahoo Finance, MT5 or CSV first")
+        found = lab()
+        try:
+            parsed = found.take_bars(token)
+            result = import_bars(found.store, key, parsed, str(body.get("clock") or get_clock()), get_clock())
+        except BarsFileError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        found.forget_history()
+        return {"imported": result, **data_status()}
+
+    @r.post("/data/backfill")
+    def start_backfill(body: dict = Body(...)) -> dict:
+        """Pull older M1 bars from the MT5 terminal back to ``start`` (YYYY-MM-DD, feed clock)."""
+        try:
+            start = pd.Timestamp(str(body.get("start")))
+        except ValueError:
+            start = pd.NaT
+        if pd.isna(start) or start >= pd.Timestamp.now():
+            raise HTTPException(422, "start must be a past date like 2024-01-01")
+        found = lab()
+        try:
+            found.backfill.start(get_engine(), found.store, start, on_done=found.forget_history)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return data_status()
+
+    @r.delete("/data/backfill")
+    def cancel_backfill() -> dict:
+        lab().backfill.cancel()
+        return data_status()
 
     @r.get("/candles")
     def candles(tf: str = Query("5M"), end: int | None = Query(None), limit: int = Query(300, ge=20, le=2000),

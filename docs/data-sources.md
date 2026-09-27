@@ -108,7 +108,8 @@ memory first, then:
   so going back months is quick. How far depends on the history the terminal
   has downloaded and on **Max bars in chart**.
 - **Yahoo Finance and CSV**: the M1 bars stored in the database, so as far back
-  as the screener has been running (Yahoo itself only gives ~7 days of M1).
+  as the screener has been running (Yahoo itself only gives ~7 days of M1), or
+  as far as the files imported in [Lab > Data](lab.md#data).
 - **Demo data**: only what is in memory.
 
 Older candles show prices only; levels are drawn from the latest scan.

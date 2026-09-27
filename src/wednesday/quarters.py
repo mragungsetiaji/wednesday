@@ -63,6 +63,37 @@ def to_new_york(index: pd.DatetimeIndex, clock: str) -> pd.DatetimeIndex:
     return utc.tz_convert(NEW_YORK).tz_localize(None)
 
 
+def to_utc(index: pd.DatetimeIndex, clock: str) -> pd.DatetimeIndex:
+    """Naive times in ``clock`` -> aware UTC. Times that don't exist once (DST fall-back) become NaT."""
+    index = pd.DatetimeIndex(index)
+    m = _OFFSET.match(clock)
+    if m:
+        base, off = m.group(1), float(m.group(2) or 0)
+        shifted = index - pd.Timedelta(hours=off)
+        if base == "UTC":
+            return shifted.tz_localize("UTC")
+        index, clock = shifted, NEW_YORK
+    return index.tz_localize(clock, ambiguous="NaT", nonexistent="shift_forward").tz_convert("UTC")
+
+
+def utc_index_to_feed(index: pd.DatetimeIndex, clock: str) -> pd.DatetimeIndex:
+    """Aware times -> naive feed-clock times (the index version of :func:`utc_to_feed`)."""
+    utc = pd.DatetimeIndex(index).tz_convert("UTC")
+    m = _OFFSET.match(clock)
+    if m:
+        base, off = m.group(1), pd.Timedelta(hours=float(m.group(2) or 0))
+        wall = utc.tz_convert(NEW_YORK) if base == "NY" else utc
+        return wall.tz_localize(None) + off
+    return utc.tz_convert(clock).tz_localize(None)
+
+
+def convert_clock(index: pd.DatetimeIndex, source: str, target: str) -> pd.DatetimeIndex:
+    """Naive times in clock ``source`` -> naive times in clock ``target``."""
+    if source == target:
+        return pd.DatetimeIndex(index)
+    return utc_index_to_feed(to_utc(index, source), target)
+
+
 def utc_to_feed(ts: pd.Timestamp, clock: str) -> pd.Timestamp:
     """An aware time -> the naive feed-clock time the chart uses (inverse of :func:`to_new_york`)."""
     utc = pd.Timestamp(ts).tz_convert("UTC")

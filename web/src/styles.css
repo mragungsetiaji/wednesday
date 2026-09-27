@@ -2189,6 +2189,53 @@ fieldset:disabled .switch {
   padding-top: var(--s4);
   max-width: 880px;
 }
+/* Lab > Data: stored history, one row of day squares per month */
+.lab-data {
+  display: grid;
+  gap: var(--s8);
+  padding-top: var(--s4);
+  max-width: 880px;
+}
+.field-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.coverage {
+  display: grid;
+  gap: 3px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.coverage-row {
+  display: grid;
+  grid-template-columns: 64px 1fr 80px;
+  align-items: center;
+  gap: var(--s3);
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+.coverage-days {
+  display: grid;
+  grid-template-columns: repeat(31, minmax(0, 1fr));
+  gap: 2px;
+}
+.coverage-day {
+  height: 12px;
+  border-radius: 2px;
+  background: var(--liquidity);
+}
+.coverage-day[data-empty] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.coverage-day.is-weekend {
+  background: var(--line);
+}
+.coverage-count {
+  text-align: end;
+}
+
 .lab-models-table td {
   vertical-align: middle;
 }

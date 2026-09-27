@@ -144,6 +144,20 @@ class MT5Feed(DataFeed):
         df = df.rename(columns={"tick_volume": "volume"})
         return normalize_ohlcv(df)
 
+    def fetch_m1_range(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """M1 bars opening in [start, end] (server time), for the Lab's backfill."""
+        if self._mt5 is None:
+            self.reconnect()
+        mt5 = self._mt5
+        rates = mt5.copy_rates_range(self.symbol, mt5.TIMEFRAME_M1, int(start.timestamp()), int(end.timestamp()))
+        if rates is None:
+            raise RuntimeError(f"MT5 returned no M1 history: {mt5.last_error()}")
+        if len(rates) == 0:
+            return pd.DataFrame(columns=OHLCV_COLUMNS, index=pd.DatetimeIndex([]), dtype=float)
+        df = pd.DataFrame(rates)
+        df.index = pd.to_datetime(df["time"], unit="s")
+        return normalize_ohlcv(df.rename(columns={"tick_volume": "volume"}))
+
     def trading_spec(self) -> dict | None:
         """Balance and lot rules from the terminal, and the money one lot makes per 1.00 move."""
         mt5 = self._mt5
