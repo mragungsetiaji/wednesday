@@ -75,7 +75,7 @@ export function LabChart({ candles, marks, reviewed, selection, highlight, palet
         textColor: palette.text,
         fontFamily: FONT,
         fontSize: 11,
-        attributionLogo: false,
+        attributionLogo: false, // the TradingView notice and link are in the status bar instead
       },
       grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },
       rightPriceScale: { borderColor: palette.grid },

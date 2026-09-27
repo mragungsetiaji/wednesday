@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { fetchQuarters, fetchScan, type QuartersResponse, type ScanResponse } from "./api";
 import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
 import { ChartFocus } from "./components/ChartFocus";
+import { Dock } from "./components/Dock";
+import { DrawingStyleBar } from "./components/DrawingStyleBar";
+import { DrawingToolbar } from "./components/DrawingToolbar";
 import { EventsPanel } from "./components/EventsPanel";
 import { JournalPage } from "./components/JournalPage";
 import { LabPage } from "./components/LabPage";
@@ -13,7 +16,8 @@ import { PriceChart } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
 import { SettingsPage } from "./components/SettingsPage";
-import { StatusBar } from "./components/StatusBar";
+import { SOURCES, StatusBar } from "./components/StatusBar";
+import { LiveTickerPrice } from "./components/TickerPrice";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtPrice } from "./format";
@@ -23,18 +27,24 @@ import { useMl } from "./mlData";
 import { usePref } from "./prefs";
 import { newsMarks } from "./newsPrimitive";
 import { buildRail } from "./rail";
+import { useDrawings } from "./drawingsData";
+import { useLiveFeed } from "./liveData";
 import { useChartPalette } from "./theme";
 
 const POLL_MS = 5000;
 const STALE_MS = 150_000; // no successful scan for 2.5 minutes
 
-function useNow(ms: number) {
-  const [now, setNow] = useState(Date.now());
+/** Whether `since` (ms) is more than `ms` ago. Flips once when it gets that old, so nothing re-renders every second. */
+function useOlderThan(since: number | null, ms: number): boolean {
+  const [old, setOld] = useState(false);
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), ms);
-    return () => clearInterval(id);
-  }, [ms]);
-  return now;
+    const left = since === null ? Infinity : since + ms - Date.now();
+    setOld(left <= 0);
+    if (left <= 0 || left === Infinity) return;
+    const id = setTimeout(() => setOld(true), left);
+    return () => clearTimeout(id);
+  }, [since, ms]);
+  return old;
 }
 
 type View = "chart" | "journal" | "lab" | "settings";
@@ -63,7 +73,6 @@ const CLOCK_NAMES: Record<string, string> = { UTC: "UTC", "NY+7": "broker server
 
 export default function App() {
   const palette = useChartPalette();
-  const now = useNow(1000);
   const [data, setData] = useState<ScanResponse | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [tf, setTf] = usePref("xau.tf", "1H");
@@ -92,8 +101,10 @@ export default function App() {
         const res = await fetchScan();
         if (!alive) return;
         const biasKey = (d: ScanResponse | null) => JSON.stringify(d?.trade_bias ?? null);
-        setData((prev) =>
-          prev && prev.version === res.version && prev.error === res.error && biasKey(prev) === biasKey(res) ? prev : res);
+        // A new scan redraws the zones, the ladder and every chart: not urgent, so a drag or zoom
+        // in progress stays smooth while it renders.
+        startTransition(() => setData((prev) =>
+          prev && prev.version === res.version && prev.error === res.error && biasKey(prev) === biasKey(res) ? prev : res));
         setFetchError(null);
       } catch (e) {
         if (alive) setFetchError(e instanceof Error ? e.message : String(e));
@@ -109,7 +120,7 @@ export default function App() {
 
   // After the bias changes, reload at once: the setups' risk labels come from the server.
   const refreshScan = useCallback(() => {
-    fetchScan().then(setData).catch((e) => setFetchError(e instanceof Error ? e.message : String(e)));
+    fetchScan().then((res) => startTransition(() => setData(res))).catch((e) => setFetchError(e instanceof Error ? e.message : String(e)));
   }, []);
   // The bias panel only links to Settings to set up the brief: open that section.
   const openSettings = useCallback(() => {
@@ -127,6 +138,9 @@ export default function App() {
   const allDetectors = useMemo(() => config?.detectors ?? [], [config]);
   const detectors = useMemo(() => allDetectors.filter((d) => !hidden.includes(d.name)), [allDetectors, hidden]);
   const scan = data?.scan ?? null;
+  // The live price stays out of this component's state: a tick re-renders only what shows it.
+  const live = useLiveFeed(data?.tick_seconds ?? 0, data?.version ?? 0, refreshScan);
+  const drawings = useDrawings(data?.source, data?.symbol, scan?.sizing ?? null);
 
   useEffect(() => {
     if (timeframes.length && !timeframes.includes(tf)) setTf(timeframes[0]);
@@ -161,6 +175,7 @@ export default function App() {
   const closeFocus = useCallback(() => setFocus(false), []);
 
   const lastOk = data?.scanned_at ? Date.parse(data.scanned_at) : null;
+  const stale = useOlderThan(lastOk, STALE_MS);
   const status = fetchError
     ? { cls: "error", text: "Offline" }
     : !data
@@ -175,16 +190,37 @@ export default function App() {
               ? { cls: "idle", text: "Connecting" }
               : !lastOk
                 ? { cls: "idle", text: "Loading" }
-                : now - lastOk > STALE_MS
-                  ? { cls: "warn", text: "Stale" }
-                  : { cls: "ok", text: "Live" };
+                : data.poll === false
+                  ? { cls: "idle", text: "Paused" } // --no-poll: old on purpose, not stale
+                  : stale
+                    ? { cls: "warn", text: "Stale" }
+                    : { cls: "ok", text: "Live" };
 
   const toggleLayer = (name: string) => setHidden(hidden.includes(name) ? hidden.filter((n) => n !== name) : [...hidden, name]);
   const hasOb = detectors.some((d) => d.name === "ob");
+  const [dockTab, setDockTab] = usePref<string | null>("wed.dockTab", null);
+  const eventCount = scan ? scan.timeframes.reduce((n, t) => n + detectors.reduce((m, d) => m + (t.detectors[d.name]?.recent?.length ?? 0), 0), 0) : 0;
+  const showBanner = view !== "journal" && !!(fetchError || data?.error);
+
+  // The chart workspace fills the window below the top bar (and banner); the details sit below the fold.
+  const appRef = useRef<HTMLDivElement>(null);
+  const topbarRef = useRef<HTMLElement>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const els = [topbarRef.current, bannerRef.current].filter((el): el is HTMLElement => !!el);
+    const measure = () => {
+      const h = els.reduce((sum, el) => sum + el.getBoundingClientRect().height, 0);
+      appRef.current?.style.setProperty("--chrome-h", `${h}px`);
+    };
+    const resize = new ResizeObserver(measure);
+    els.forEach((el) => resize.observe(el));
+    measure();
+    return () => resize.disconnect();
+  }, [showBanner]);
 
   return (
-    <div className="app">
-      <header className="topbar">
+    <div ref={appRef} className="app">
+      <header ref={topbarRef} className="topbar">
         {view === "journal" ? (
           <div className="ticker">
             <span className="brand">Wednesday</span>
@@ -193,17 +229,15 @@ export default function App() {
         ) : (
           <div className="ticker">
             <span className="brand">Wednesday</span>
-            <h1>{data?.symbol ?? "XAUUSD"}</h1>
-            <span className="ticker-price num">{scan ? fmtPrice(scan.price) : "—"}</span>
-          </div>
-        )}
-        {view === "chart" && (
-          <div className="layers" role="group" aria-label="Detectors">
-            {allDetectors.map((d) => (
-              <button key={d.name} type="button" className="chip" aria-pressed={!hidden.includes(d.name)} onClick={() => toggleLayer(d.name)}>
-                {d.title}
-              </button>
-            ))}
+            <div className="ticker-symbol">
+              <h1>{data?.symbol ?? "XAUUSD"}</h1>
+              {data?.source && <span className="ticker-source">{SOURCES[data.source] ?? data.source}</span>}
+            </div>
+            <LiveTickerPrice live={live} fallback={scan?.price ?? null} />
+            <span className={`live ${status.cls}`}>
+              <span className="dot" aria-hidden="true" />
+              {status.text}
+            </span>
           </div>
         )}
         <nav className="nav" aria-label="Views">
@@ -226,8 +260,8 @@ export default function App() {
         </nav>
       </header>
 
-      {view !== "journal" && (fetchError || data?.error) && (
-        <div className="banner" role="alert">
+      {showBanner && (
+        <div ref={bannerRef} className="banner" role="alert">
           {fetchError ? (
             `Can't reach the screener API (${fetchError}). Start it with: uv run wednesday --serve`
           ) : (
@@ -267,14 +301,23 @@ export default function App() {
                     );
                   })}
                 </div>
-                <div className="toggles">
+                <div className="toolbar-layers">
+                <div className="toggles" role="group" aria-label="Detectors">
+                  {allDetectors.map((d) => (
+                    <label key={d.name} className="toggle" title={d.title}>
+                      <input type="checkbox" checked={!hidden.includes(d.name)} onChange={() => toggleLayer(d.name)} />
+                      {d.title.replace(/\s*\(.*\)$/, "")}
+                    </label>
+                  ))}
+                </div>
+                <div className="toggles" role="group" aria-label="Overlays">
                   <label className="toggle">
                     <input type="checkbox" checked={showMidOb} onChange={(e) => setShowMidOb(e.target.checked)} />
                     Mid OBs
                   </label>
-                  <label className="toggle">
+                  <label className="toggle" title="Higher timeframes">
                     <input type="checkbox" checked={showHigherTf} onChange={(e) => setShowHigherTf(e.target.checked)} />
-                    Higher timeframes
+                    HTF
                   </label>
                   <label className="toggle">
                     <input type="checkbox" checked={showSwings} onChange={(e) => setShowSwings(e.target.checked)} />
@@ -289,11 +332,18 @@ export default function App() {
                     News
                   </label>
                   <label className="toggle" title="The active model's blocks, from the Lab">
-                    <input type="checkbox" checked={showMl} onChange={(e) => setShowMl(e.target.checked)} />
+                    <input type="checkbox" checked={showMl} onChange={(e) => {
+                      setShowMl(e.target.checked);
+                      if (e.target.checked) setDockTab("ml"); // show the model's blocks to review right away
+                    }} />
                     ML
                   </label>
                 </div>
+                </div>
               </div>
+              <div className="chart-body">
+              <DrawingToolbar ctl={drawings} />
+              <DrawingStyleBar ctl={drawings} />
               <PriceChart
                 candles={chart?.candles ?? []}
                 zones={zones}
@@ -309,7 +359,10 @@ export default function App() {
                 news={news}
                 ml={showMl ? mlMarks : undefined}
                 mlHighlight={mlHot}
+                live={live}
+                drawings={drawings}
               />
+              </div>
               <div className="chart-foot">
                 <ul className="legend" aria-label="Chart legend">
                   <li><span className="key key-setup" /> S / B: limit entry, dashed stop</li>
@@ -329,11 +382,47 @@ export default function App() {
                   <ExpandIcon size={15} />
                 </button>
               </div>
+              {scan && config && (
+                <Dock open={dockTab} onOpen={setDockTab} tabs={[
+                  {
+                    id: "timeframes",
+                    label: "All timeframes",
+                    content: (
+                      <>
+                        <TimeframeTable rows={scan.timeframes} detectors={detectors} price={scan.price} selected={tf} onSelect={setTf} />
+                        <p className="settings">
+                          Lookback {config.lookback} candles, swing {config.swing_length}. OB {config.zone},{" "}
+                          {config.mitigation === "wick" ? "taken by a wick through the body" : "taken by a close beyond the body"}, max stop{" "}
+                          {config.max_sl}. Equal levels within {config.eq_tolerance}×ATR. IDM swing {config.idm_length}.
+                        </p>
+                      </>
+                    ),
+                  },
+                  ...(quarters ? [{ id: "quarters", label: "Quarters", content: <QuartersPanel quarters={quarters} /> }] : []),
+                  ...(showMl && ml ? [{
+                    id: "ml",
+                    label: "Model",
+                    content: (
+                      <MlPanel tf={tf} ml={ml} threshold={mlThreshold} onThreshold={setMlThreshold} onReviewed={refreshMl}
+                        onHighlight={setMlHot} onOpenLab={openLab} />
+                    ),
+                  }] : []),
+                ]} />
+              )}
             </section>
 
             {scan ? (
-              <Rail items={rail} sizing={scan.sizing} price={scan.price} status={status} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf}
-                bias={tradeBias} onBiasChanged={refreshScan} onOpenSettings={openSettings} />
+              <Rail items={rail} sizing={scan.sizing} price={scan.price} live={live} status={status} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf}
+                bias={tradeBias} onBiasChanged={refreshScan} onOpenSettings={openSettings}
+                panels={config ? [
+                  { id: "structure", label: "Structure", content: <StructurePanel scan={scan} selected={tf} onSelect={setTf} /> },
+                  {
+                    id: "events",
+                    label: "Events",
+                    badge: eventCount,
+                    content: <EventsPanel scan={scan} detectors={detectors} recentBars={config.recent_bars} onSelect={setTf} />,
+                  },
+                ] : []} />
             ) : (
               <aside className="rail" aria-busy="true">
                 <div className="rail-head">
@@ -352,29 +441,11 @@ export default function App() {
               </aside>
             )}
           </main>
-
-          {scan && config && (
-            <div className="details">
-              {showMl && ml && (
-                <MlPanel tf={tf} ml={ml} threshold={mlThreshold} onThreshold={setMlThreshold} onReviewed={refreshMl}
-                  onHighlight={setMlHot} onOpenLab={openLab} />
-              )}
-              <StructurePanel scan={scan} selected={tf} onSelect={setTf} />
-              <EventsPanel scan={scan} detectors={detectors} recentBars={config.recent_bars} onSelect={setTf} />
-              {quarters && <QuartersPanel quarters={quarters} />}
-              <TimeframeTable rows={scan.timeframes} detectors={detectors} price={scan.price} selected={tf} onSelect={setTf} />
-              <p className="settings">
-                Lookback {config.lookback} candles, swing {config.swing_length}. OB {config.zone},{" "}
-                {config.mitigation === "wick" ? "taken by a wick through the body" : "taken by a close beyond the body"}, max stop{" "}
-                {config.max_sl}. Equal levels within {config.eq_tolerance}×ATR. IDM swing {config.idm_length}.
-              </p>
-            </div>
-          )}
         </>
       )}
 
       <StatusBar version={data?.app_version} status={status} source={data?.source}
-        scannedAt={data?.scanned_at ?? null} barTime={scan?.time ?? null} now={now} />
+        scannedAt={data?.scanned_at ?? null} barTime={scan?.time ?? null} />
 
       {/* Full screen renders its own copy: the browser only shows the full screen element. */}
       {!(focus && scan && data) && <NewsAlert events={upcomingNews} />}
@@ -393,7 +464,7 @@ export default function App() {
           showQuarters={showQuarters}
           toggles={[
             { label: "Mid OBs", checked: showMidOb, onChange: setShowMidOb },
-            { label: "Higher timeframes", checked: showHigherTf, onChange: setShowHigherTf },
+            { label: "HTF", title: "Higher timeframes", checked: showHigherTf, onChange: setShowHigherTf },
             { label: "Swings", checked: showSwings, onChange: setShowSwings },
             { label: "Quarters", checked: showQuarters, onChange: setShowQuarters },
             { label: "News", checked: showNews, onChange: setShowNews },
@@ -403,6 +474,8 @@ export default function App() {
           status={status}
           bias={tradeBias}
           news={news}
+          live={live}
+          drawings={drawings}
           upcomingNews={upcomingNews}
           onClose={closeFocus}
         />

@@ -33,7 +33,7 @@ function SideCell({ row, detectors, side, price }: { row: TimeframeScan; detecto
 /** Nearest level per detector on each side, for every timeframe (the table view of the chart). */
 export function TimeframeTable({ rows, detectors, price, selected, onSelect }: Props) {
   return (
-    <section className="detail detail-wide" aria-labelledby="tf-h">
+    <section className="detail" aria-labelledby="tf-h">
       <div className="detail-head">
         <h2 id="tf-h">All timeframes</h2>
         <span className="detail-note">Nearest level per detector, above and below price</span>

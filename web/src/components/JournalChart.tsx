@@ -87,6 +87,7 @@ export function JournalChart({ stats, view, palette, currency }: { stats: Journa
   }, []);
 
   useEffect(() => {
+    // No logo on the chart: the TradingView notice and link are in the status bar instead.
     chartRef.current?.applyOptions({
       layout: { background: { type: ColorType.Solid, color: palette.surface }, textColor: palette.text, fontFamily: FONT, fontSize: 11, attributionLogo: false },
       grid: { vertLines: { visible: false }, horzLines: { color: palette.grid } },

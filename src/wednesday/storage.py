@@ -16,8 +16,10 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
     Float,
+    Index,
     Integer,
     MetaData,
     String,
@@ -184,6 +186,31 @@ journal_notes_table = Table(
 )
 
 
+# ---- Chart drawings: trendlines, horizontal lines, rectangles, ... ---------------------------
+# Anchored to (time, price), not pixels, so one drawing shows on every timeframe. Kept per
+# source and symbol: MT5 times are the broker's clock and Yahoo's GC=F isn't spot XAUUSD.
+
+DRAWING_KINDS = ("trendline", "hline", "rect", "long", "short", "path", "text")
+
+drawings_table = Table(
+    "drawings",
+    metadata,
+    Column("id", String(36), primary_key=True),  # uuid made by the browser
+    Column("source", String(32), nullable=False),
+    Column("symbol", String(64), nullable=False),
+    Column("kind", String(16), nullable=False),
+    Column("points", Text, nullable=False),  # JSON [{"t": unix seconds (feed clock), "p": price}, ...]
+    Column("style", Text, nullable=False),  # JSON {"color": null = theme default, "width": 1, ...}
+    Column("props", Text, nullable=True),  # JSON, per kind (e.g. a position's entry, stop, target)
+    Column("timeframes", Text, nullable=True),  # JSON list the drawing shows on; null = every timeframe
+    Column("locked", Boolean, nullable=False, default=False),
+    Column("hidden", Boolean, nullable=False, default=False),
+    Column("updated_at", String(40), nullable=False),
+    Index("ix_drawings_source_symbol", "source", "symbol"),
+)
+_DRAWING_JSON = ("points", "style", "props", "timeframes")
+
+
 class Store:
     def __init__(self, url: str = DEFAULT_DB_URL):
         self.url = make_url(url)
@@ -339,6 +366,27 @@ class Store:
     def lab_delete(self, table: Table, row_id: str) -> bool:
         with self.engine.begin() as conn:
             return conn.execute(table.delete().where(table.c.id == row_id)).rowcount > 0
+
+    # ---- drawings -------------------------------------------------------
+    def drawings(self, source: str, symbol: str) -> list[dict]:
+        t = drawings_table
+        q = select(t).where(t.c.source == source, t.c.symbol == symbol).order_by(t.c.updated_at)
+        with self.engine.connect() as conn:
+            rows = [dict(r._mapping) for r in conn.execute(q)]
+        for r in rows:
+            for k in _DRAWING_JSON:
+                r[k] = json.loads(r[k]) if r[k] is not None else None
+        return rows
+
+    def drawing_put(self, row: dict) -> None:
+        row = {**row, **{k: json.dumps(row[k]) if row.get(k) is not None else None for k in _DRAWING_JSON}}
+        self._upsert(drawings_table, [row], ["id"])
+
+    def drawing_delete(self, drawing_id: str, source: str, symbol: str) -> bool:
+        t = drawings_table
+        with self.engine.begin() as conn:
+            cond = (t.c.id == drawing_id, t.c.source == source, t.c.symbol == symbol)
+            return conn.execute(t.delete().where(*cond)).rowcount > 0
 
     # ---- journal --------------------------------------------------------
     def journals(self) -> list[dict]:

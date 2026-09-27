@@ -59,6 +59,28 @@ that clock. Set it in **Settings > Data source > Feed clock**, `XAU_CLOCK` or `-
 If your broker doesn't follow the NY+7 convention, compare the time of the last
 candle in MT5 with the time in New York and pick the matching value.
 
+## Live price
+
+The scan runs once a minute, after each M1 candle closes. Between scans the
+screener polls the live price and folds it into the forming M1 candle, so the
+header price, the ladder and the chart's last candle move without waiting for the
+next scan. When the minute closes, the scan fetches only that closed bar (history
+already loaded is never fetched again) and it replaces the candle the ticks built,
+since ticks sampled every second or more can miss the minute's true high or low.
+
+Set the interval in **Settings > Data source > Live price every**, `XAU_TICK` in
+`.env`, or leave it empty for the source's default:
+
+| Source | Default | Fastest |
+| --- | --- | --- |
+| MT5 | 1 s | 0.5 s |
+| Demo data | 2 s | 0.5 s |
+| Yahoo Finance | 60 s (once a minute, with the scan) | 15 s: each update is a request to Yahoo |
+| CSV | none: a CSV has closed bars only | - |
+
+`0` turns live prices off. A tick only starts a forming candle within 5 minutes of
+the last closed bar, so a closed market doesn't draw a candle after the gap.
+
 ## MetaTrader 5
 
 The MT5 Python API talks to a terminal running on the same Windows machine, so

@@ -17,6 +17,7 @@ datas = [
     (str(ROOT / "web" / "dist"), "web/dist"),
     (str(ROOT / "DISCLAIMER.md"), "."),  # shown in the app until accepted (terms.py)
     (str(ROOT / "LICENSE"), "."),
+    (str(ROOT / "THIRD_PARTY_NOTICES.md"), "."),  # Lightweight Charts (Apache-2.0) and the other bundled packages
 ]
 # Time zone database for zoneinfo: Windows has none of its own.
 datas += collect_data_files("tzdata")

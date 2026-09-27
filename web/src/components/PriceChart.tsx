@@ -12,10 +12,13 @@ import {
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Candle, QuarterBlock, QuarterRow, QuartersResponse, SwingPoint } from "../api";
 import type { CrosshairBus } from "../crosshairSync";
+import { DrawingEditor } from "../drawingEditor";
+import type { DrawingCtl } from "../drawings";
+import { useLiveTick, type LiveFeed } from "../liveData";
 import { fmtPrice } from "../format";
 import { LabPrimitive, type LabMark } from "../labPrimitive";
 import { NewsPrimitive, type NewsMark } from "../newsPrimitive";
@@ -45,6 +48,8 @@ interface Props {
   ml?: LabMark[]; // the active model's blocks, [] hides them
   mlHighlight?: string | null;
   onNeedOlder?: () => void; // the view reached the first candle: load older ones
+  live?: LiveFeed | null; // live ticks: their forming M1 candle is folded into the last candle
+  drawings?: DrawingCtl | null; // the trader's drawings, shown and edited here
 }
 
 const ROW_PX = 22;
@@ -64,6 +69,28 @@ function blocksAt(quarters: QuartersResponse | null, rows: QuarterRow[], t: numb
   });
 }
 
+/** Seconds per candle: the smallest gap among the last few (a weekend gap is never the smallest). */
+function candlePeriod(candles: Candle[]): number {
+  let p = Infinity;
+  for (let i = Math.max(1, candles.length - 10); i < candles.length; i++) p = Math.min(p, candles[i].time - candles[i - 1].time);
+  return Number.isFinite(p) && p > 0 ? p : 60;
+}
+
+/**
+ * The chart's last candle with the live M1 candle folded in: the same candle while the minute
+ * falls inside it, or a new one once the minute starts the next period.
+ */
+function withLive(candles: Candle[], live: Candle): Candle | null {
+  const last = candles[candles.length - 1];
+  if (!last || live.time < last.time) return null;
+  const period = candlePeriod(candles);
+  const k = Math.floor((live.time - last.time) / period);
+  if (k === 0) {
+    return { ...last, high: Math.max(last.high, live.high), low: Math.min(last.low, live.low), close: live.close };
+  }
+  return { ...live, time: last.time + k * period };
+}
+
 /** Open time of the candle containing t (last candle time <= t). */
 function candleAt(times: number[], t: number): number {
   let lo = 0;
@@ -79,7 +106,8 @@ function candleAt(times: number[], t: number): number {
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
-  ml = NO_ML, mlHighlight = null, onNeedOlder }: Props) {
+  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null }: Props) {
+  const liveBar = useLiveTick(live)?.bar ?? null; // only the chart re-renders on a tick, not its parent
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -89,6 +117,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const quartersRef = useRef<QuartersPrimitive | null>(null);
   const newsRef = useRef<NewsPrimitive | null>(null);
   const mlRef = useRef<LabPrimitive | null>(null);
+  const editorRef = useRef<DrawingEditor | null>(null);
   const quarterPaneHeight = useRef(0);
   const candlesRef = useRef<Candle[]>([]);
   const syncRef = useRef(sync);
@@ -97,6 +126,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   needOlderRef.current = onNeedOlder;
   const fittedKey = useRef<string | null>(null);
   const [hover, setHover] = useState<Candle | null>(null);
+  const liveCandle = useMemo(() => (liveBar ? withLive(candles, liveBar) : null), [liveBar, candles]);
 
   useEffect(() => {
     const chart = createChart(containerRef.current!, {
@@ -142,10 +172,16 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       if (h) requestAnimationFrame(() => chartRef.current?.panes()[QUARTER_PANE]?.setHeight(h));
     });
     resize.observe(containerRef.current!);
+    // Drawings last: they sit above everything else on the price pane.
+    const editor = new DrawingEditor(chart, series, containerRef.current!, palette);
+    editor.update({ font: FONT });
+    editorRef.current = editor;
     chartRef.current = chart;
     seriesRef.current = series;
     zonesRef.current = primitive;
     return () => {
+      editor.destroy();
+      editorRef.current = null;
       resize.disconnect();
       chart.remove();
       chartRef.current = null;
@@ -161,7 +197,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
         textColor: palette.text,
         fontFamily: FONT,
         fontSize: 11,
-        attributionLogo: false,
+        attributionLogo: false, // the TradingView notice and link are in the status bar instead
         panes: { separatorColor: palette.grid, separatorHoverColor: palette.grid, enableResize: false },
       },
       grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },
@@ -175,6 +211,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     quartersRef.current?.update({ palette });
     newsRef.current?.update({ palette });
     mlRef.current?.update({ palette });
+    editorRef.current?.update({ palette });
     seriesRef.current?.applyOptions({
       upColor: palette.bull,
       downColor: palette.bear,
@@ -218,6 +255,20 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       fittedKey.current = resetKey;
     }
   }, [candles, zones, events, swings, palette, resetKey]);
+
+  useEffect(() => {
+    editorRef.current?.update({ ctl: drawings });
+  }, [drawings]);
+
+  useEffect(() => {
+    editorRef.current?.update({ candles });
+  }, [candles]);
+
+  // Live ticks move the last candle between scans; the next scan's candles replace it.
+  useEffect(() => {
+    if (liveCandle) seriesRef.current?.update({ ...liveCandle, time: liveCandle.time as UTCTimestamp });
+    editorRef.current?.update({ live: liveCandle }); // positions track the forming candle too
+  }, [liveCandle]);
 
   useEffect(() => {
     zonesRef.current?.update({ highlight });
@@ -285,7 +336,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     chart.panes()[QUARTER_PANE]?.setHeight(quarterPaneHeight.current);
   }, [candles, quarters, quarterRows]);
 
-  const shown = hover ?? candles[candles.length - 1];
+  const shown = hover ?? liveCandle ?? candles[candles.length - 1];
   const quarterNow = shown ? blocksAt(quarters, quarterRows, shown.time) : [];
   return (
     <div className="chart-wrap" aria-busy={loading} onMouseLeave={onLeave}>

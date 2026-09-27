@@ -12,6 +12,7 @@ export interface ChartPalette {
   liquidity: string;
   idm: string; // neutral: IDM is told apart by its dotted line + label, not a 4th hue
   accent: string; // state only: events, selection
+  draw: string; // the trader's own drawings: a hue no detector uses
   mode: "light" | "dark";
 }
 
@@ -26,6 +27,7 @@ const DARK: ChartPalette = {
   liquidity: "#3987e5",
   idm: "#c3c2b7",
   accent: "#d99a1e",
+  draw: "#a78bfa",
   mode: "dark",
 };
 
@@ -40,6 +42,7 @@ const LIGHT: ChartPalette = {
   liquidity: "#2a78d6",
   idm: "#52514e",
   accent: "#8f5b00",
+  draw: "#7c3aed",
   mode: "light",
 };
 

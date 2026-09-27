@@ -29,6 +29,9 @@ log = logging.getLogger(__name__)
 
 # A feed that doesn't retry its connection (MT5) gets this many tries after losing it.
 RECONNECT_ATTEMPTS = 3
+# A tick starts the forming candle only this soon after the last closed bar: older bars mean
+# the market is closed or the feed lags, and a candle "now" would sit after a gap.
+FORMING_WINDOW = pd.Timedelta(minutes=5)
 
 
 def seconds_to_next_minute(delay: float) -> float:
@@ -47,12 +50,18 @@ class EngineState:
     conn: str = "connecting"
     attempt: int = 0  # reconnect attempts so far
     spec: dict | None = None  # balance and contract spec from the feed (MT5), for position sizing
+    # Between scans: {"price", "time", "bar"}; bar is the forming M1 candle built from ticks, or None.
+    live: dict | None = None
+    tick: int = 0  # bumps on every live price
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
 class Engine:
-    def __init__(self, feed: DataFeed, cfg: ScanConfig, symbol: str, store: Store | None = None):
+    def __init__(self, feed: DataFeed, cfg: ScanConfig, symbol: str, store: Store | None = None,
+                 tick_seconds: float = 0, poll: bool = True):
         self.feed = feed
+        self.poll = poll  # False: scan once, then no minute scans and no live prices (dev: a still chart)
+        self.tick_seconds = tick_seconds if poll else 0  # live price interval between scans; 0 (or a minute) = none
         self.cfg = cfg
         self.symbol = symbol
         self.store = store
@@ -94,7 +103,35 @@ class Engine:
             self.state.scanned_at = datetime.now(timezone.utc)
             self.state.error = None
             self.state.error_at = None
+            live = self.state.live
+            if live and live["bar"] is not None and len(m1) and live["bar"]["time"] <= m1.index[-1]:
+                live["bar"] = None  # that minute closed: the fetched bar replaces the one ticks built
         return result
+
+    def tick(self) -> None:
+        """Poll the live price and fold it into the forming M1 candle. Never raises."""
+        try:
+            got = self.feed.last_tick()
+        except Exception:  # a missed tick is fine; the next scan still runs
+            log.debug("tick failed", exc_info=True)
+            return
+        if got is None:
+            return
+        at, price = got
+        minute = at.floor("min")
+        with self.state.lock:
+            m1 = self.state.m1
+            last = m1.index[-1] if m1 is not None and len(m1) else None
+            live = self.state.live or {}
+            bar = live.get("bar")
+            if last is None or not (last < minute <= last + FORMING_WINDOW):
+                bar = None
+            elif bar is not None and bar["time"] == minute:
+                bar = {**bar, "high": max(bar["high"], price), "low": min(bar["low"], price), "close": price}
+            else:
+                bar = {"time": minute, "open": price, "high": price, "low": price, "close": price}
+            self.state.live = {"price": price, "time": at, "bar": bar}
+            self.state.tick += 1
 
     def snapshot(self) -> tuple[int, ScanResult | None, pd.DataFrame | None]:
         with self.state.lock:
@@ -140,6 +177,20 @@ class Engine:
                 continue
             task()
 
+    def _wait(self, seconds: float) -> None:
+        """Wait until the next scan, polling the live price every ``tick_seconds`` meanwhile."""
+        if not 0 < self.tick_seconds < 60:
+            self._idle(seconds)
+            return
+        deadline = time.monotonic() + seconds
+        while not self._stop.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            self._idle(min(self.tick_seconds, remaining))
+            if deadline - time.monotonic() > 0.2:  # not right before the scan, which prices it anyway
+                self.tick()
+
     def run_forever(self, delay: float = 2.0, on_result=None) -> None:
         """Connect, then scan now and after every minute close until :meth:`stop`.
 
@@ -162,6 +213,11 @@ class Engine:
                     self._set_conn("connected")
                     if on_result:
                         on_result(result)
+                    if not self.poll:
+                        log.info("%s: polling off, keeping this scan", self.feed.name)
+                        while not self._stop.is_set():
+                            self._idle(3600)  # still runs queued feed work (scrolling back, journal sync)
+                        break
                 except Exception as exc:
                     failures += 1
                     self._record_error(exc)
@@ -171,7 +227,7 @@ class Engine:
                         return
                     self._set_conn("reconnecting" if connected else "connecting", failures)
                     log.exception("scan failed; retrying next minute")
-                self._idle(seconds_to_next_minute(delay))
+                self._wait(seconds_to_next_minute(delay))
         finally:
             if connected:
                 self.feed.close()
@@ -203,8 +259,9 @@ class Runtime:
 
     def __init__(self, cfg: ScanConfig, settings: DataSettings, store: Store | None = None,
                  mt5_password: str | None = None, delay: float = 2.0, on_result=None, alerts=None, brief=None,
-                 calendar=None, lab=None, journals=None):
+                 calendar=None, lab=None, journals=None, poll: bool = True):
         self.cfg = cfg
+        self.poll = poll  # False: every engine scans once and stops (--no-poll)
         self.store = store
         self.mt5_password = mt5_password  # MT5_PASSWORD from the environment, for setups that still use it
         self.delay = delay
@@ -223,7 +280,8 @@ class Runtime:
 
     def _build(self, settings: DataSettings) -> Engine:
         feed = build_feed(settings, self.mt5_password_for(settings)[0])
-        return Engine(feed, self.cfg, settings.resolved_symbol, self.store)
+        return Engine(feed, self.cfg, settings.resolved_symbol, self.store, tick_seconds=settings.resolved_tick,
+                      poll=self.poll)
 
     def mt5_password_for(self, settings: DataSettings) -> tuple[str | None, str | None]:
         """The MT5 password for the settings' account and where it came from: saved, session or env."""

@@ -110,6 +110,8 @@ export interface ScanResponse {
   error: string | null;
   error_at: string | null;
   conn: FeedConn;
+  tick_seconds: number; // live price interval between scans; 0 = none
+  poll?: boolean; // false: started with --no-poll, the scan never updates
   app_version: string;
   config: {
     timeframes: string[];
@@ -158,6 +160,16 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 export const fetchScan = () => getJson<ScanResponse>("/api/scan");
+
+/** The live price between scans and the forming M1 candle (times are unix seconds on the feed clock). */
+export interface TickResponse {
+  version: number; // the scan version: a new one means /api/scan has news
+  tick: number;
+  price: number | null;
+  time: number | null;
+  bar: { time: number; open: number; high: number; low: number; close: number } | null;
+}
+export const fetchTick = () => getJson<TickResponse>("/api/tick");
 
 export const fetchCandles = (tf: string, limit: number) =>
   getJson<CandlesResponse>(`/api/candles?tf=${encodeURIComponent(tf)}&limit=${limit}`);
@@ -210,6 +222,8 @@ export interface SourceInfo {
   description: string;
   default_symbol: string;
   default_clock: string;
+  default_tick: number; // live price interval in seconds; 0 = none
+  min_tick: number;
   available: boolean;
   unavailable_reason: string | null;
 }
@@ -222,6 +236,7 @@ export interface DataSettings {
   mt5_server: string | null;
   mt5_path: string | null;
   clock: string | null; // null = the source default
+  tick_seconds: number | null; // null = the source default, 0 = off
 }
 
 /** connecting -> connected; reconnecting while a lost connection is retried; failed once it gave up. */
@@ -328,6 +343,35 @@ async function send<T>(method: string, url: string, body?: unknown): Promise<T> 
   }
   return res.json() as Promise<T>;
 }
+
+// ---- Chart drawings ----
+
+export type DrawingKind = "trendline" | "hline" | "rect" | "long" | "short" | "path" | "text";
+export type DrawingDash = "solid" | "dashed" | "dotted";
+
+/** Anchored to (time, price): t is unix seconds on the feed clock, like the candles. */
+export interface DrawingPoint {
+  t: number;
+  p: number;
+}
+
+export interface Drawing {
+  id: string;
+  kind: DrawingKind;
+  points: DrawingPoint[]; // trendline and rect: 2, hline and text: 1, path: 2+; long / short: start and end, at the entry
+  // color null: the theme's drawing colour; size: a text's font size
+  style: { color: string | null; width: number; dash?: DrawingDash; size?: number };
+  props: { stop?: number; target?: number; text?: string } | null; // long / short: stop and target; text: its text
+  timeframes: string[] | null; // null: every timeframe
+  locked: boolean;
+  hidden: boolean;
+  updated_at?: string;
+}
+
+export const fetchDrawings = () =>
+  getJson<{ source: string; symbol: string; drawings: Drawing[] }>("/api/drawings");
+export const putDrawing = (d: Drawing) => send<Drawing>("PUT", `/api/drawings/${d.id}`, d);
+export const deleteDrawing = (id: string) => send<{ deleted: string }>("DELETE", `/api/drawings/${id}`);
 
 export interface TermsResponse {
   version: string;

@@ -40,7 +40,7 @@ export function MlPanel({ tf, ml, threshold, onThreshold, onReviewed, onHighligh
   };
 
   return (
-    <section className="detail detail-wide ml-panel" aria-labelledby="ml-h">
+    <section className="detail ml-panel" aria-labelledby="ml-h">
       <div className="detail-head">
         <h2 id="ml-h">Model on {tf}</h2>
         {ml.model ? (

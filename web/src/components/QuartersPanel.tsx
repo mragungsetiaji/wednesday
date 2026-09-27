@@ -15,7 +15,7 @@ export function QuartersPanel({ quarters }: { quarters: QuartersResponse }) {
   const days = quarters.stats.week.reduce((n, s) => n + s.count, 0);
 
   return (
-    <section className="detail detail-wide" aria-labelledby="quarters-h">
+    <section className="detail" aria-labelledby="quarters-h">
       <div className="detail-head">
         <h2 id="quarters-h">Quarters</h2>
         <span className="detail-note">

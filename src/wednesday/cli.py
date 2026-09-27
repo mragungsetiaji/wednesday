@@ -86,6 +86,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--recent-bars", type=int, default=3, help="report levels swept/mitigated within N candles")
     p.add_argument("--delay", type=float, default=2.0, help="seconds after each minute close before polling")
     p.add_argument("--once", action="store_true", help="scan once and exit")
+    p.add_argument("--no-poll", dest="poll", action="store_false",
+                   help="with --serve: scan once at start, then fetch nothing (no minute scans, no live prices)")
     p.add_argument("--check", action="store_true", help="test the feed connection, print details and exit")
     p.add_argument("--serve", action="store_true", default=_env("XAU_SERVE") == "1",
                    help="run the web dashboard + API alongside the scan loop")
@@ -192,7 +194,8 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
     calendar = Calendar(store, CalendarSettings.from_dict(store.get_setting(CALENDAR_KEY) if store else None))
     lab = Lab(store, _env("XAU_MODELS_DIR") or "data/models", cfg.params) if store else None
     journals = Journals(store) if store else None
-    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts, brief, calendar, lab, journals)
+    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts, brief, calendar, lab, journals,
+                      poll=args.poll)
     engine = runtime.engine
     feed = engine.feed
     if store:

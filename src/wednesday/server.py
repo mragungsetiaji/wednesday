@@ -21,6 +21,7 @@ from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
 from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .news import CALENDAR_KEY, CalendarSettings
+from .drawings import clean_drawing, drawing_payload
 from .engine import RECONNECT_ATTEMPTS, Engine, Runtime
 from .lab.api import lab_router
 from .journal.api import journal_router
@@ -96,6 +97,8 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                 "error": st.error,
                 "error_at": _iso(st.error_at),
                 "conn": st.conn,
+                "tick_seconds": engine.tick_seconds if 0 < engine.tick_seconds < 60 else 0,
+                "poll": engine.poll,  # False with --no-poll: one scan, then nothing new
                 "app_version": __version__,
                 "config": cfg.to_dict(),
             }
@@ -153,6 +156,48 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     def get_scan() -> dict:
         _, result, _ = current().snapshot()
         return {**status(), "scan": with_sizes(result.to_dict(trade_bias())) if result else None}
+
+    @app.get("/api/tick")
+    def get_tick() -> dict:
+        """The live price between scans and the forming M1 candle, small enough to poll every second."""
+        st = current().state
+        with st.lock:
+            live, version, tick = st.live, st.version, st.tick
+        bar = live["bar"] if live else None
+        return {
+            "version": version,  # a new scan: refetch /api/scan
+            "tick": tick,
+            "price": live["price"] if live else None,
+            "time": _unix(live["time"]) if live else None,
+            "bar": {"time": _unix(bar["time"]), **{k: bar[k] for k in ("open", "high", "low", "close")}} if bar else None,
+        }
+
+    # ---- drawings: per source and symbol, so they follow a data source switch ----
+    def drawing_store():
+        store = runtime.store if runtime else target.store
+        if store is None:
+            raise HTTPException(409, "Drawings need a database")
+        return store
+
+    @app.get("/api/drawings")
+    def get_drawings() -> dict:
+        rows = drawing_store().drawings(current_source(), current().symbol)
+        return {"source": current_source(), "symbol": current().symbol, "drawings": [drawing_payload(r) for r in rows]}
+
+    @app.put("/api/drawings/{drawing_id}")
+    def put_drawing(drawing_id: str, body: dict = Body(...)) -> dict:
+        try:
+            row = clean_drawing(drawing_id, body)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        drawing_store().drawing_put({**row, "source": current_source(), "symbol": current().symbol})
+        return row
+
+    @app.delete("/api/drawings/{drawing_id}")
+    def delete_drawing(drawing_id: str) -> dict:
+        if not drawing_store().drawing_delete(drawing_id, current_source(), current().symbol):
+            raise HTTPException(404, "No such drawing")
+        return {"deleted": drawing_id}
 
     @app.get("/api/candles")
     def get_candles(tf: str = Query("1H"), limit: int = Query(200, ge=10, le=2000),

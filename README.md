@@ -149,3 +149,16 @@ Wednesday or a modified copy, charge for access to it, or offer it or its signal
 service. Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE) with an added
 permission for personal trading; see [LICENSE](LICENSE) for the exact terms and
 [DISCLAIMER.md](DISCLAIMER.md) for the risk agreement.
+
+The charts are drawn with TradingView's [Lightweight Charts™](https://github.com/tradingview/lightweight-charts),
+under the Apache License 2.0:
+
+```
+TradingView Lightweight Charts™
+Copyright (с) 2025 TradingView, Inc. https://www.tradingview.com/
+```
+
+That notice and a link to <https://www.tradingview.com/> sit in the dashboard's status bar.
+It and the other bundled packages keep their own licenses, which Wednesday's license
+doesn't change; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The notices ship
+with the installer and the portable zip.

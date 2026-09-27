@@ -45,7 +45,7 @@ export function StructurePanel({ scan, selected, onSelect }: Props) {
                       <td>
                         <span className={`dir ${b.direction}`}>
                           <Direction dir={b.direction} />
-                          {b.direction === "bullish" ? "Bullish" : "Bearish"}
+                          <span className="dir-label">{b.direction === "bullish" ? "Bullish" : "Bearish"}</span>
                         </span>
                       </td>
                       <td>

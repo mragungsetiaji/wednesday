@@ -2,6 +2,8 @@ import { useMemo } from "react";
 
 import type { QuartersResponse, Scan } from "../api";
 import type { CrosshairBus } from "../crosshairSync";
+import type { DrawingCtl } from "../drawings";
+import type { LiveFeed } from "../liveData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "../chartData";
 import { fmtPrice } from "../format";
 import { Direction } from "../icons";
@@ -25,10 +27,12 @@ interface Props {
   label: string; // accessible name, e.g. "Chart 2"
   sync?: { bus: CrosshairBus; id: number };
   news?: NewsMark[];
+  live?: LiveFeed | null;
+  drawings?: DrawingCtl | null;
 }
 
 /** One chart of the full-screen layout, with its own timeframe. */
-export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers, palette, quarters, showQuarters, label, sync, news }: Props) {
+export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers, palette, quarters, showQuarters, label, sync, news, live, drawings }: Props) {
   const [chart, loadOlder] = useCandles(tf, version, lookback);
   const zones = useMemo(() => (chart ? buildZones(scan, chart, tf, rail, layers) : []), [scan, chart, tf, rail, layers]);
   const events = useMemo(() => buildEvents(scan, tf, layers.detectors), [scan, tf, layers.detectors]);
@@ -68,6 +72,8 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
         sync={sync}
         swings={layers.showSwings ? chart?.swings : undefined}
         news={news}
+        live={live}
+        drawings={drawings}
       />
     </section>
   );

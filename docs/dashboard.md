@@ -22,9 +22,56 @@ found on it:
   lows, so the structure reads at a glance.
 - **Recent sweeps** as markers on the candle that swept.
 
-The timeframe tabs carry each timeframe's structure direction (↑ / ↓).
-**Mid OBs**, **Higher timeframes**, **Swings** and **Quarters** can be switched off above the chart, and
-each detector can be hidden from the top bar.
+The timeframe tabs carry each timeframe's structure direction (↑ / ↓). Beside
+them, the detectors (**Order blocks**, **Liquidity**, **Inducement**) and the
+overlays (**Mid OBs**, **HTF**, **Swings**, **Quarters**, **News**, **ML**) switch on and off.
+
+The header price follows the [live price](data-sources.md#live-price): each tick
+flashes green or red, and the arrow keeps the last direction.
+
+## Drawings
+
+The column left of the chart holds drawing tools, TradingView style:
+
+- **Trendline**: click two points, or press and drag.
+- **Horizontal line**: click a price; its price shows at the right edge.
+- **Rectangle**: click two corners, or press and drag.
+- **Path**: click each point; click the last point again, double-click or press
+  Enter to finish (Esc drops it).
+- **Text**: click where it goes, then type in the field that opens.
+- **Long / short position**: click the entry. It starts with the stop 40 px away,
+  the target at 2R and 20 candles wide; drag the handles on its left edge to set
+  the entry, stop and target, and the one on the entry line's right end to set how
+  long it runs. The stop and target stay on their own side of the entry. Hover or
+  select the position to see the prices, the distance to each, the R:R and, with
+  [position sizing](risk.md) set up in **Settings > Risk** (or read from MT5),
+  the lot size and the money at risk and to gain, sized the same way as the
+  ladder's setups.
+
+  The position also follows price, live ticks included. Like a limit order, it
+  fills on the first candle from its start that reaches the entry (until then
+  the entry label says *waiting for entry*, and a box that ends unfilled fades).
+  Once filled, the area from the entry to the current price is shaded green in
+  profit and red in loss, with a label: **Open**, then **Target hit** or **Stop
+  hit** at the first candle that reaches one, or **Closed** at the close where
+  the box ends. On the fill candle itself only its close counts, and a candle
+  reaching both levels counts as the stop. It works on the candles of the chart
+  you are looking at, so a higher timeframe can resolve a close call differently.
+
+Points snap to the candle under the pointer. With the cursor, click a drawing to
+select it, drag it to move it, or drag a handle to reshape it; double-click a text
+to edit it. A bar above the chart styles the selected drawing: color, line width,
+solid, dashed or dotted line, a text's words and size, plus **Lock** (it can't be
+moved or deleted) and **Delete** (or the Delete key).
+
+Below the tools, **Undo** and **Redo** (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; Cmd on a
+Mac) step back through the last 100 changes; a drag counts as one. The eye hides
+or shows every drawing, and Esc cancels a tool or the selection.
+
+Drawings are anchored to time and price, not pixels, so one drawing shows on
+every timeframe and in full screen. They are saved in the database per data
+source and symbol (MT5 times are the broker's clock, and Yahoo's `GC=F` isn't
+spot XAUUSD), in the `drawings` table.
 
 ## Risk-time news card
 
@@ -107,7 +154,7 @@ The blocks need to know what clock the bar times are in: see
 
 **ML** above the chart shows the active model from the [Lab](lab.md): each block
 the model finds on the chart's timeframe, as a dashed outline with its
-probability, and a **Model on 5M** panel under the chart listing them with ✓ / ✕
+probability, and a **Model** tab under the chart listing them with ✓ / ✕
 to mark them valid or invalid. Without an active model the panel links to the Lab.
 
 ## Level ladder
@@ -127,11 +174,20 @@ with its price. Clicking a row opens its timeframe.
 
 ![Hovering S3 highlights it on the chart](images/ladder-highlight.png)
 
-## Below the chart
+## Panels
 
+The rail beside the chart keeps the bias on top and tabs under it:
+
+- **Levels**: the ladder above.
 - **Structure**: direction, last break (BOS / CHoCH, with the streak), its level and age, per timeframe.
-- **Events**: levels swept or taken in the last few candles of each timeframe.
+- **Events**: levels swept or taken in the last few candles of each timeframe; the tab counts them.
+
+Under the chart, a dock opens with its tabs (drag its top edge to resize, click
+the open tab again to close it):
+
 - **All timeframes**: the nearest level above and below per detector and timeframe.
+- **Quarters**: how often each weekday, session and 90-minute quarter closed green.
+- **Model**: the active model's blocks, when **ML** is on.
 
 ## Light theme and mobile
 

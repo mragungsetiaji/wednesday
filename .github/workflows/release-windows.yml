@@ -67,6 +67,7 @@ jobs:
         run: |
           Copy-Item LICENSE dist\Wednesday\LICENSE.txt
           Copy-Item DISCLAIMER.md dist\Wednesday\DISCLAIMER.txt
+          Copy-Item THIRD_PARTY_NOTICES.md dist\Wednesday\THIRD_PARTY_NOTICES.txt
           Compress-Archive -Path dist\Wednesday -DestinationPath "dist\Wednesday-${{ steps.version.outputs.version }}-portable.zip"
 
       - uses: actions/upload-artifact@v4

@@ -4,14 +4,18 @@ import type { CalendarEvent, QuartersResponse, Scan, TradeBias } from "../api";
 import type { NewsMark } from "../newsPrimitive";
 import type { LayerOptions } from "../chartData";
 import { CrosshairBus } from "../crosshairSync";
-import { fmtPrice } from "../format";
 import { CollapseIcon, LayoutIcon } from "../icons";
+import type { LiveFeed } from "../liveData";
 import { usePref } from "../prefs";
 import type { RailItem } from "../rail";
 import type { ChartPalette } from "../theme";
 import { BiasPill } from "./BiasPill";
 import { ChartPane } from "./ChartPane";
+import { DrawingStyleBar } from "./DrawingStyleBar";
+import { DrawingToolbar } from "./DrawingToolbar";
+import type { Drawings } from "../drawingsData";
 import { NewsAlert } from "./NewsAlert";
+import { LiveTickerPrice } from "./TickerPrice";
 
 type Layout = 1 | 2 | 4;
 const LAYOUTS: { panes: Layout; title: string }[] = [
@@ -88,6 +92,7 @@ function Splitter({ axis, value, onChange, onDone }: {
 
 interface Toggle {
   label: string;
+  title?: string; // full name when the label is short
   checked: boolean;
   onChange: (v: boolean) => void;
 }
@@ -109,6 +114,8 @@ interface Props {
   status: { cls: string; text: string };
   bias: TradeBias | null;
   news: NewsMark[];
+  live: LiveFeed | null; // live ticks
+  drawings: Drawings;
   upcomingNews: CalendarEvent[];
   onClose: () => void;
 }
@@ -118,7 +125,7 @@ interface Props {
  * grid, each with its own timeframe. Uses the browser's full screen when it is
  * allowed; leaving it (Esc) closes the view.
  */
-export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, toggles, tf, onTf, status, bias, news, upcomingNews, onClose }: Props) {
+export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, toggles, tf, onTf, status, bias, news, live, drawings, upcomingNews, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = usePref<Layout>("wed.focusLayout", 2);
   const [tfs, setTfs] = usePref<string[]>("wed.focusTfs", DEFAULT_TFS);
@@ -162,7 +169,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
         <div className="ticker">
           <span className="brand">Wednesday</span>
           <span className="focus-symbol">{symbol}</span>
-          <span className="ticker-price num">{fmtPrice(scan.price)}</span>
+          <LiveTickerPrice live={live} fallback={scan.price} />
           {bias && <BiasPill bias={bias} />}
           <span className={`live ${status.cls}`}>
             <span className="dot" aria-hidden="true" />
@@ -170,6 +177,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
           </span>
         </div>
         <div className="focus-tools">
+          <DrawingToolbar ctl={drawings} row />
           <div className="segmented" role="group" aria-label="Layout">
             {LAYOUTS.map((l) => (
               <button key={l.panes} type="button" className="seg" aria-pressed={layout === l.panes} title={l.title} aria-label={l.title}
@@ -180,7 +188,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
           </div>
           <div className="toggles">
             {toggles.map((t) => (
-              <label key={t.label} className="toggle">
+              <label key={t.label} className="toggle" title={t.title}>
                 <input type="checkbox" checked={t.checked} onChange={(e) => t.onChange(e.target.checked)} />
                 {t.label}
               </label>
@@ -196,7 +204,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
         {Array.from({ length: layout }, (_, i) => (
           <ChartPane key={i} label={`Chart ${i + 1}`} tf={paneTf(i)} onTf={(v) => setPaneTf(i, v)} timeframes={known}
             scan={scan} version={version} lookback={lookback} rail={rail} layers={layers} palette={palette}
-            quarters={quarters} showQuarters={showQuarters} sync={{ bus, id: i }} news={news} />
+            quarters={quarters} showQuarters={showQuarters} sync={{ bus, id: i }} news={news} live={live} drawings={drawings} />
         ))}
         {layout > 1 && (
           <Splitter axis="x" value={split.x} onChange={(x) => setSplit((s) => ({ ...s, x }))}
@@ -207,6 +215,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
             onDone={(y) => saveSplit({ ...split, y })} />
         )}
       </div>
+      <DrawingStyleBar ctl={drawings} />
       <NewsAlert events={upcomingNews} />
     </div>
   );

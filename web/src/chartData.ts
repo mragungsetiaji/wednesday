@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { fetchCandles, fetchOlderCandles, type Candle, type CandlesResponse, type DetectorInfo, type Level, type QuarterRow, type Scan } from "./api";
 import type { ChartEvent } from "./components/PriceChart";
@@ -47,8 +47,11 @@ export function useCandles(tf: string, version: number, lookback: number,
     fetchCandles(tf, lookback)
       .then((res) => {
         if (!alive) return;
-        setChart(res);
-        setLoaded((l) => (l.tf === tf ? { ...l, candles: mergeCandles(l.candles, res.candles) } : { tf, candles: res.candles, more: true }));
+        // Not urgent: the chart keeps answering the pointer while the new candles render.
+        startTransition(() => {
+          setChart(res);
+          setLoaded((l) => (l.tf === tf ? { ...l, candles: mergeCandles(l.candles, res.candles) } : { tf, candles: res.candles, more: true }));
+        });
       })
       .catch((e) => alive && onError?.(e instanceof Error ? e.message : String(e)));
     return () => {

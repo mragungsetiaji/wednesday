@@ -1,8 +1,11 @@
 import type { Risk, Setup, SetupSize, Sizing, TradeBias } from "../api";
 import { detail, fmtMoney, fmtPrice, fmtSigned } from "../format";
+import { useLiveTick, type LiveFeed } from "../liveData";
+import { usePref } from "../prefs";
 import type { RailItem } from "../rail";
 import { BiasPanel } from "./BiasPanel";
 import { LevelTag } from "./LevelTag";
+import { PanelTabs, type PanelTab } from "./PanelTabs";
 
 const RISK_LABEL: Record<Exclude<Risk, null>, string> = { on: "Risk on", off: "Risk off", no_trade: "No trade" };
 
@@ -25,7 +28,8 @@ function SizeLine({ size, currency }: { size: SetupSize; currency: string }) {
 interface Props {
   items: RailItem[];
   sizing?: Sizing | null;
-  price: number;
+  price: number; // the last scan's; a live tick replaces it
+  live?: LiveFeed | null;
   status: { cls: string; text: string };
   hasOb: boolean;
   highlight: string | null;
@@ -34,6 +38,7 @@ interface Props {
   bias: TradeBias | null;
   onBiasChanged: () => void;
   onOpenSettings: () => void;
+  panels: PanelTab[]; // more tabs after Levels, e.g. structure and events
 }
 
 function Row({ item, sizing, highlight, onHighlight, onOpen }: { item: RailItem } & Pick<Props, "sizing" | "highlight" | "onHighlight" | "onOpen">) {
@@ -78,41 +83,58 @@ function Row({ item, sizing, highlight, onHighlight, onOpen }: { item: RailItem 
   );
 }
 
-/** Price ladder: everything above price on top, the live price in the middle, everything below under it. */
-export function Rail({ items, sizing, price, status, hasOb, highlight, onHighlight, onOpen, bias, onBiasChanged, onOpenSettings }: Props) {
+/**
+ * The rail: the bias on top, always in view, then tabs. Levels (the price ladder: everything
+ * above price, the live price, everything below) comes first; the other panels follow.
+ */
+/** The ladder's current price: the only part of the rail that re-renders on a live tick. */
+function NowPrice({ live, fallback }: { live: LiveFeed | null; fallback: number }) {
+  return <span className="num">{fmtPrice(useLiveTick(live)?.price ?? fallback)}</span>;
+}
+
+export function Rail({ items, sizing, price, live = null, status, hasOb, highlight, onHighlight, onOpen, bias, onBiasChanged, onOpenSettings, panels }: Props) {
+  const [tab, setTab] = usePref<string>("wed.railTab", "levels");
   const above = items.filter((i) => i.side === "above");
   const below = items.filter((i) => i.side === "below");
   const rowProps = { sizing, highlight, onHighlight, onOpen };
+  const panel = panels.find((p) => p.id === tab);
+  const selected = panel ? panel.id : "levels";
   return (
-    <aside className="rail" aria-label="Bias and levels around price">
+    <aside className="rail" aria-label="Bias, levels and structure">
       <BiasPanel bias={bias} onChanged={onBiasChanged} onOpenSettings={onOpenSettings} />
-      <div className="rail-head">
-        <h2>Levels</h2>
-        <p>Hover to find it on the chart. Click to open its timeframe.</p>
+      <div className="rail-tabs">
+        <PanelTabs tabs={[{ id: "levels", label: "Levels" }, ...panels]} selected={selected} onSelect={setTab} label="Rail" idPrefix="rail" />
       </div>
-      <ol className="ladder above" aria-label="Above price">
-        {above.map((item) => <Row key={item.id} item={item} {...rowProps} />)}
-        {above.length === 0 && (
-          <li className="ladder-empty">
-            {hasOb ? "No sell setup yet. One appears when a bearish break leaves an untaken green candle above price." : "Nothing above price."}
-          </li>
+      <div className="rail-body panel-body" id="rail-panel" role="tabpanel" aria-labelledby={`rail-tab-${selected}`}>
+        {panel ? panel.content : (
+          <>
+            <p className="rail-hint">Hover to find it on the chart. Click to open its timeframe.</p>
+            <ol className="ladder above" aria-label="Above price">
+              {above.map((item) => <Row key={item.id} item={item} {...rowProps} />)}
+              {above.length === 0 && (
+                <li className="ladder-empty">
+                  {hasOb ? "No sell setup yet. One appears when a bearish break leaves an untaken green candle above price." : "Nothing above price."}
+                </li>
+              )}
+            </ol>
+            <div className="ladder-now" role="status">
+              <NowPrice live={live} fallback={price} />
+              <span className={`live ${status.cls}`}>
+                <span className="dot" aria-hidden="true" />
+                {status.text}
+              </span>
+            </div>
+            <ol className="ladder below" aria-label="Below price">
+              {below.map((item) => <Row key={item.id} item={item} {...rowProps} />)}
+              {below.length === 0 && (
+                <li className="ladder-empty">
+                  {hasOb ? "No buy setup yet. One appears when a bullish break leaves an untaken red candle below price." : "Nothing below price."}
+                </li>
+              )}
+            </ol>
+          </>
         )}
-      </ol>
-      <div className="ladder-now" role="status">
-        <span className="num">{fmtPrice(price)}</span>
-        <span className={`live ${status.cls}`}>
-          <span className="dot" aria-hidden="true" />
-          {status.text}
-        </span>
       </div>
-      <ol className="ladder below" aria-label="Below price">
-        {below.map((item) => <Row key={item.id} item={item} {...rowProps} />)}
-        {below.length === 0 && (
-          <li className="ladder-empty">
-            {hasOb ? "No buy setup yet. One appears when a bullish break leaves an untaken red candle below price." : "Nothing below price."}
-          </li>
-        )}
-      </ol>
     </aside>
   );
 }

@@ -52,7 +52,11 @@ package is `src/wednesday/`.
   disclaimer changes in substance, bump `TERMS_VERSION` so it is accepted again.
 - **License.** PolyForm Noncommercial 1.0.0 plus personal trading use (`LICENSE`):
   free for personal use, never sold. Don't add dependencies whose license forbids
-  that.
+  that. Bundled dependencies keep their own licenses: list a new one in
+  `THIRD_PARTY_NOTICES.md`. Lightweight Charts (Apache-2.0) asks for TradingView's
+  notice and a link to tradingview.com where users see the charts; the status bar
+  carries both (the charts set `attributionLogo: false`), so keep it visible,
+  full screen included.
 - **The dashboard has no login.** Keep the default host `127.0.0.1`, and don't add
   endpoints that expose secrets or files outside `data/`.
 - **Time zones are explicit.** Bar times come in the feed's clock (`XAU_CLOCK`, often

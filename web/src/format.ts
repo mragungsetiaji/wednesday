@@ -2,8 +2,11 @@ import type { Level } from "./api";
 
 export const DIGITS = 2;
 
-export const fmtPrice = (v: number) =>
-  v.toLocaleString("en-US", { minimumFractionDigits: DIGITS, maximumFractionDigits: DIGITS });
+// One formatter for every price: toLocaleString with options builds a new one on each call,
+// and the chart formats every label on each redraw.
+const PRICE = new Intl.NumberFormat("en-US", { minimumFractionDigits: DIGITS, maximumFractionDigits: DIGITS });
+
+export const fmtPrice = (v: number) => PRICE.format(v);
 
 export const fmtSigned = (v: number) => `${v >= 0 ? "+" : "−"}${fmtPrice(Math.abs(v))}`;
 
@@ -66,8 +69,10 @@ export function fmtSpan(fromIso: string, toIso: string): string {
 /** Unix seconds on the feed clock, shown as-is: "2026-03-02 09:35". */
 export const fmtUnix = (t: number) => new Date(t * 1000).toISOString().slice(0, 16).replace("T", " ");
 
+const MONEY = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 /** Money in the account currency: "$105.00" for USD, "105.00 EUR" otherwise. */
 export const fmtMoney = (v: number, currency: string) => {
-  const n = v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const n = MONEY.format(v);
   return currency === "USD" ? `$${n}` : `${n} ${currency}`;
 };

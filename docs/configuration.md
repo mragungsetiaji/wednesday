@@ -44,6 +44,7 @@ wednesday ...` commands directly (see [deploy-windows.md](deploy-windows.md)).
 | `--idm-length` | `2` | Internal swing bars each side for inducement |
 | `--recent-bars` | `3` | Report levels swept/mitigated within this many candles |
 | `--serve` | off | Also run the web dashboard + API (`XAU_SERVE=1`) |
+| `--no-poll` | off | With `--serve`: scan once at start, then fetch nothing (no minute scans, no live prices); for working on the dashboard (the status shows *Paused*) |
 | `--host` / `--port` | `127.0.0.1` / `8000` | Dashboard address (`XAU_HOST`, `XAU_PORT`) |
 | `--db` | `sqlite:///data/xau.db` | Storage URL (`XAU_DB_URL`); `none` disables it |
 | `--reset-settings` | off | Forget the data source saved from the dashboard |
@@ -64,6 +65,7 @@ bars are fetched each minute.
 | --- | --- |
 | `XAU_SOURCE`, `XAU_SYMBOL` | Data source and symbol |
 | `XAU_CLOCK` | The feed's clock ([Feed clock](data-sources.md#feed-clock)) |
+| `XAU_TICK` | Live price interval in seconds, 0 = off ([Live price](data-sources.md#live-price)) |
 | `XAU_DB_URL` | Storage URL |
 | `MT5_LOGIN`, `MT5_SERVER`, `MT5_PATH` | MetaTrader 5 connection (also set in Settings). The password is entered in Settings; `MT5_PASSWORD` is still read for older setups |
 | `XAU_MAX_SL`, `XAU_DETECTORS` | Strategy settings |

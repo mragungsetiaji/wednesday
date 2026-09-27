@@ -12,7 +12,7 @@ import { AlertsSettings } from "./AlertsSettings";
 import { BriefSettingsForm } from "./BriefSettingsForm";
 import { CalendarSettingsForm } from "./CalendarSettingsForm";
 
-const EMPTY: DataSettings = { source: "yfinance", symbol: null, csv_path: null, mt5_login: null, mt5_server: null, mt5_path: null, clock: null };
+const EMPTY: DataSettings = { source: "yfinance", symbol: null, csv_path: null, mt5_login: null, mt5_server: null, mt5_path: null, clock: null, tick_seconds: null };
 
 const same = (a: DataSettings, b: DataSettings) => JSON.stringify(a) === JSON.stringify(b);
 const orNull = (v: string) => (v.trim() === "" ? null : v.trim());
@@ -26,6 +26,8 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     </label>
   );
 }
+
+const fmtTick = (s: number) => (s === 0 || s >= 60 ? "once a minute, with each scan" : `${s}s`);
 
 type Section = "data" | "risk" | "alerts" | "calendar" | "brief" | "plan" | "plugins";
 const SECTIONS: { id: Section; title: string }[] = [
@@ -225,7 +227,7 @@ function DataSourceSettings() {
             {data.sources.map((s) => (
               <label key={s.id} className={`choice${form.source === s.id ? " is-checked" : ""}${s.available ? "" : " is-disabled"}`}>
                 <input type="radio" name="source" value={s.id} checked={form.source === s.id} disabled={!s.available}
-                  onChange={() => set({ source: s.id, symbol: null, clock: null })} />
+                  onChange={() => set({ source: s.id, symbol: null, clock: null, tick_seconds: null })} />
                 <span className="choice-body">
                   <span className="choice-title">
                     {s.title}
@@ -257,6 +259,14 @@ function DataSourceSettings() {
                 <option value="Asia/Jakarta" />
               </datalist>
             </Field>
+            {source && source.min_tick > 0 && (
+              <Field label="Live price every (seconds)"
+                hint={`Between the minute scans, the price and the forming candle update this often. Leave empty for ${fmtTick(source.default_tick)}; 0 turns it off. ${source.min_tick}s at the fastest${form.source === "yfinance" ? ", as each update is a request to Yahoo" : ""}.`}>
+                <input type="number" inputMode="decimal" min={0} max={60} step={0.5} value={form.tick_seconds ?? ""}
+                  placeholder={String(source.default_tick)}
+                  onChange={(e) => set({ tick_seconds: e.target.value === "" ? null : Number(e.target.value) })} />
+              </Field>
+            )}
 
             {form.source === "csv" && (
               <Field label="CSV file" hint="Columns: time, open, high, low, close, and optionally volume.">

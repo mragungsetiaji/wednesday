@@ -51,6 +51,11 @@ class DataFeed(ABC):
         """Live price if the feed has one; otherwise the scanner uses the last M1 close."""
         return None
 
+    def last_tick(self) -> tuple[pd.Timestamp, float] | None:
+        """The live price and when it traded, on the feed's clock (naive), polled between the
+        minute scans to build the forming candle. None when the feed has no live price."""
+        return None
+
     def trading_spec(self) -> dict | None:
         """Account balance and the symbol's contract spec, for position sizing; None when the feed has none."""
         return None
@@ -193,6 +198,12 @@ class MT5Feed(DataFeed):
         tick = self._mt5.symbol_info_tick(self.symbol) if self._mt5 else None
         return float(tick.bid) if tick else None
 
+    def last_tick(self) -> tuple[pd.Timestamp, float] | None:
+        tick = self._mt5.symbol_info_tick(self.symbol) if self._mt5 else None
+        if not tick or not tick.bid:
+            return None
+        return pd.Timestamp(int(tick.time), unit="s"), float(tick.bid)  # broker server time, like the bars
+
     def account_summary(self) -> dict:
         """The logged-in account's number, server and company (no history). Runs on the scan thread."""
         mt5 = self._mt5
@@ -273,6 +284,16 @@ class YFinanceFeed(DataFeed):
         df = df[df.index < now]
         return df.tail(count)
 
+    def last_tick(self) -> tuple[pd.Timestamp, float] | None:
+        # The forming minute's close. Its bar time also says when the price is from, so a
+        # closed market (last bar hours old) doesn't start a candle now.
+        df = self._history("1d")
+        if df.empty:
+            return None
+        t = df.index[-1]
+        t = t.tz_convert("UTC").tz_localize(None) if t.tz is not None else t
+        return t, float(df["Close"].iloc[-1])
+
 
 class CSVFeed(DataFeed):
     """M1 bars from a CSV with columns time/datetime, open, high, low, close[, volume].
@@ -305,6 +326,7 @@ class SyntheticFeed(DataFeed):
     def __init__(self, start_price: float = 2650.0, seed: int | None = 42,
                  history: int = 60_000, end: pd.Timestamp | None = None):
         self._rng = np.random.default_rng(seed)
+        self._forming: dict | None = None  # the next minute, built from ticks
         end = (end or pd.Timestamp.now(tz="UTC").tz_localize(None)).floor("min") - M1
         index = pd.date_range(end=end, periods=history, freq="1min")
         self._bars = self._generate(index, start_price)
@@ -322,9 +344,26 @@ class SyntheticFeed(DataFeed):
         vol = self._rng.integers(50, 500, n).astype(float)
         return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": vol}, index=index)
 
+    def last_tick(self) -> tuple[pd.Timestamp, float]:
+        # A small random step within the next minute; its ticks become that minute's bar.
+        t = self._bars.index[-1] + M1
+        f = self._forming
+        price = (f["close"] if f else float(self._bars["close"].iloc[-1])) + float(self._rng.normal(0, 0.15))
+        if f is None:
+            open_ = float(self._bars["close"].iloc[-1])
+            f = self._forming = {"open": open_, "high": open_, "low": open_, "volume": 0.0}
+        f["high"], f["low"], f["close"] = max(f["high"], price), min(f["low"], price), price
+        f["volume"] += 1
+        return t, price
+
     def fetch_m1(self, count: int) -> pd.DataFrame:
-        last = self._bars.iloc[-1]
-        nxt = self._generate(pd.DatetimeIndex([self._bars.index[-1] + M1]), float(last["close"]))
+        # Each fetch closes one minute: the one the ticks built, or a generated one without ticks.
+        t = self._bars.index[-1] + M1
+        if self._forming:
+            nxt = pd.DataFrame([self._forming], index=pd.DatetimeIndex([t]))[OHLCV_COLUMNS]
+            self._forming = None
+        else:
+            nxt = self._generate(pd.DatetimeIndex([t]), float(self._bars["close"].iloc[-1]))
         self._bars = pd.concat([self._bars, nxt]).iloc[1:]
         return self._bars.tail(count).copy()
 
