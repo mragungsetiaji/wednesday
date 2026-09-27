@@ -32,10 +32,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
   <a href="docs/README.md">All docs</a>
 </p>
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/dashboard-light.png">
-  <img src="docs/images/dashboard-dark.png" alt="Wednesday dashboard: chart with order blocks and liquidity, and the level ladder beside it" width="100%">
-</picture>
+<img src="docs/images/dashboard.png" alt="Wednesday dashboard: the 30M gold chart with order blocks, liquidity and a long position that hit its target, drawing tools on the left, the bias and level ladder on the right" width="100%">
 
 </div>
 
@@ -88,12 +85,7 @@ High-impact US releases are dashed lines on the chart (amber ahead, grey once ou
 
 Full screen, split into two or four charts. Hover one and the others follow to the same moment on their own timeframe; drag the lines between charts to resize.
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/images/fullscreen-2.png">
-  <img src="docs/images/fullscreen-4.png" alt="Four charts full screen (1H, 15M, 4H, 5M) with linked crosshairs" width="100%">
-</picture>
-
-<img src="docs/images/fullscreen-4-light.png" alt="Four charts full screen (30M, 15M, 4H, 5M) on gold, light theme" width="100%">
+<img src="docs/images/fullscreen-4.png" alt="Four charts full screen (30M, 15M, 4H, 5M) on gold, with the drawing tools in the top bar and the same long position on each timeframe" width="100%">
 
 ### Lab: label, train, review
 

@@ -7,7 +7,7 @@ make serve          # or: uv run wednesday --serve
 Opens on http://127.0.0.1:8000. It refreshes every few seconds; the server
 rescans once a minute. API docs live at `/api/docs`.
 
-![Dashboard, dark theme](images/dashboard-dark.png)
+![Dashboard: 30M chart with the drawing tools, the rail and the dock](images/dashboard.png)
 
 ## Chart first
 
@@ -120,7 +120,7 @@ and scroll.
   (Shift for bigger steps), double-click puts it back in the middle. The sizes
   are remembered.
 
-![Four charts: 1H, 15M, 4H and 5M, crosshairs linked](images/fullscreen-4.png)
+![Four charts: 30M, 15M, 4H and 5M, crosshairs linked](images/fullscreen-4.png)
 
 ![Two charts side by side, light theme](images/fullscreen-2.png)
 
@@ -194,7 +194,7 @@ the open tab again to close it):
 The dashboard follows the system theme and works down to phone width.
 
 <p>
-  <img src="images/dashboard-light.png" alt="Dashboard, light theme" width="72%">
+  <img src="images/dashboard.png" alt="Dashboard, light theme" width="72%">
   <img src="images/mobile.png" alt="Dashboard on a phone" width="24%">
 </p>
 
