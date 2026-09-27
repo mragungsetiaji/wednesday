@@ -130,6 +130,7 @@ developing: [Windows and VPS](docs/deploy-windows.md) and [Development](docs/dev
 | [Dashboard](docs/dashboard.md) | Chart, level ladder, quarterly pane, panels |
 | [Data sources and storage](docs/data-sources.md) | Yahoo Finance, MT5, CSV, SQLite / PostgreSQL |
 | [Bias and news brief](docs/bias.md) | Setting a bias, risk on / off labels, the LLM news brief |
+| [Position size](docs/risk.md) | Lot size per setup from your risk, MT5 balance and lot rules |
 | [Lab: labels and models](docs/lab.md) | Tag candles, train models, model files, reviewing model blocks, the dataset |
 | [Journal](docs/journal.md) | MT5 sync and report import, gain and drawdown, how the numbers are checked |
 | [Telegram alerts](docs/alerts.md) | Bot setup and when alerts fire |

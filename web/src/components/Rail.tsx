@@ -1,13 +1,30 @@
-import type { Risk, Setup, TradeBias } from "../api";
-import { detail, fmtPrice, fmtSigned } from "../format";
+import type { Risk, Setup, SetupSize, Sizing, TradeBias } from "../api";
+import { detail, fmtMoney, fmtPrice, fmtSigned } from "../format";
 import type { RailItem } from "../rail";
 import { BiasPanel } from "./BiasPanel";
 import { LevelTag } from "./LevelTag";
 
 const RISK_LABEL: Record<Exclude<Risk, null>, string> = { on: "Risk on", off: "Risk off", no_trade: "No trade" };
 
+function SizeLine({ size, currency }: { size: SetupSize; currency: string }) {
+  if (size.below_min) {
+    return (
+      <span className="ladder-size is-over">
+        Min lot risks <span className="num">{fmtMoney(size.min_lot_risk, currency)}</span>, over the{" "}
+        <span className="num">{fmtMoney(size.budget, currency)}</span> budget
+      </span>
+    );
+  }
+  return (
+    <span className="ladder-size num">
+      <strong>{size.lots} lot</strong> · risk {fmtMoney(size.risk, currency)} · 2R {fmtMoney(size.reward_2r, currency)}
+    </span>
+  );
+}
+
 interface Props {
   items: RailItem[];
+  sizing?: Sizing | null;
   price: number;
   status: { cls: string; text: string };
   hasOb: boolean;
@@ -19,10 +36,11 @@ interface Props {
   onOpenSettings: () => void;
 }
 
-function Row({ item, highlight, onHighlight, onOpen }: { item: RailItem } & Pick<Props, "highlight" | "onHighlight" | "onOpen">) {
+function Row({ item, sizing, highlight, onHighlight, onOpen }: { item: RailItem } & Pick<Props, "sizing" | "highlight" | "onHighlight" | "onOpen">) {
   const lv = item.level;
   const s = item.setup;
   const risk = s ? (lv as Setup).risk : null;
+  const size = s ? (lv as Setup).size : null;
   return (
     <li>
       <button
@@ -54,16 +72,17 @@ function Row({ item, highlight, onHighlight, onOpen }: { item: RailItem } & Pick
             </>
           )}
         </span>
+        {size && sizing && <SizeLine size={size} currency={sizing.currency} />}
       </button>
     </li>
   );
 }
 
 /** Price ladder: everything above price on top, the live price in the middle, everything below under it. */
-export function Rail({ items, price, status, hasOb, highlight, onHighlight, onOpen, bias, onBiasChanged, onOpenSettings }: Props) {
+export function Rail({ items, sizing, price, status, hasOb, highlight, onHighlight, onOpen, bias, onBiasChanged, onOpenSettings }: Props) {
   const above = items.filter((i) => i.side === "above");
   const below = items.filter((i) => i.side === "below");
-  const rowProps = { highlight, onHighlight, onOpen };
+  const rowProps = { sizing, highlight, onHighlight, onOpen };
   return (
     <aside className="rail" aria-label="Bias and levels around price">
       <BiasPanel bias={bias} onChanged={onBiasChanged} onOpenSettings={onOpenSettings} />

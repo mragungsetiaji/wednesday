@@ -30,6 +30,7 @@ from .plugins import PLUGIN_API, features, load_plugins
 from .quarters import quarters_payload, utc_to_feed
 from .mt5_terminals import find_terminals
 from .secret_store import get_secret, update_secrets
+from .sizing import RiskSettings
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .terms import Terms
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
@@ -110,6 +111,39 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         terms.accept()
         return terms.status()
 
+    def with_sizes(scan_dict: dict) -> dict:
+        """Each setup's lot size for its stop, when Settings > Risk is on."""
+        sizer = runtime.sizer() if runtime else None
+        scan_dict["sizing"] = sizer.to_dict() if sizer else None
+        for setups in scan_dict["setups"].values():
+            for s in setups:
+                s["size"] = sizer.size(s["meta"].get("risk"), s["risk"]) if sizer else None
+        return scan_dict
+
+    def risk_payload() -> dict:
+        engine = current()
+        with engine.state.lock:
+            spec = engine.state.spec
+        sizer = runtime.sizer() if runtime else None
+        return {"editable": runtime is not None, "settings": runtime.risk.to_dict() if runtime else None,
+                "mt5": spec, "sizer": sizer.to_dict() if sizer else None}
+
+    @app.get("/api/risk")
+    def get_risk() -> dict:
+        """Settings > Risk, what the terminal reports (MT5), and the sizing in use."""
+        return risk_payload()
+
+    @app.put("/api/risk")
+    def put_risk(body: dict = Body(...)) -> dict:
+        if not runtime:
+            raise HTTPException(409, "Risk settings need the server running with --serve")
+        try:
+            new = RiskSettings.from_dict({**runtime.risk.to_dict(), **body})
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        runtime.set_risk(new)
+        return risk_payload()
+
     @app.get("/api/status")
     def get_status() -> dict:
         return status()
@@ -117,7 +151,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     @app.get("/api/scan")
     def get_scan() -> dict:
         _, result, _ = current().snapshot()
-        return {**status(), "scan": result.to_dict(trade_bias()) if result else None}
+        return {**status(), "scan": with_sizes(result.to_dict(trade_bias())) if result else None}
 
     @app.get("/api/candles")
     def get_candles(tf: str = Query("1H"), limit: int = Query(200, ge=10, le=2000),

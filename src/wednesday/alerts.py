@@ -31,6 +31,7 @@ from .bias import RISK_TEXT, TradeBias, setup_risk
 from .levels import Level
 from .secret_store import get_secret
 from .scanner import ScanResult
+from .sizing import Sizer, size_text
 from .storage import Store
 from .timeframes import TIMEFRAMES, Timeframe
 
@@ -130,7 +131,7 @@ def ob_key(source: str, symbol: str, tf: str, ob: Level) -> str:
 
 
 def format_alert(symbol: str, tf: str, ob: Level, price: float, bias_text: str | None, digits: int = 2,
-                 trade_bias: TradeBias | None = None) -> str:
+                 trade_bias: TradeBias | None = None, sizer: Sizer | None = None) -> str:
     m = ob.meta
     side = "Buy" if ob.kind == "bullish" else "Sell"
     prio = "extreme" if m.get("priority") == "extreme" else "mid"
@@ -142,6 +143,8 @@ def format_alert(symbol: str, tf: str, ob: Level, price: float, bias_text: str |
         f"{side} limit <b>{f(m['entry'])}</b> · SL {f(m['sl'])} · risk {f(m['risk'])}{' (capped)' if m.get('sl_capped') else ''}",
         f"Zone {f(ob.bottom)} – {f(ob.top)} · price {f(price)}",
     ]
+    if sizer and (text := size_text(sizer.size(m.get("risk"), risk), sizer.currency)):
+        lines.append(f"Size: {html.escape(text)}")
     if ob.touches:
         lines.append(f"Entry tested {ob.touches}× before")
     if bias_text:
@@ -182,11 +185,12 @@ class AlertManager:
             self._sent_memory.add(key)
 
     def check(self, source: str, symbol: str, result: ScanResult, m1: pd.DataFrame,
-              trade_bias: TradeBias | None = None) -> list[str]:
+              trade_bias: TradeBias | None = None, sizer: Sizer | None = None) -> list[str]:
         """Alert for order blocks entered by bars since the last check. Returns the alert keys sent.
 
         ``trade_bias`` (the active one) labels each alert RISK ON / OFF; with a
-        neutral bias alerts are held back unless ``neutral_alerts`` is on.
+        neutral bias alerts are held back unless ``neutral_alerts`` is on. With
+        ``sizer`` each alert carries the lot size for its stop.
         """
         if m1 is None or m1.empty:
             return []
@@ -224,7 +228,8 @@ class AlertManager:
                     "price": float(result.price), "sent_at": datetime.now(timezone.utc).isoformat(),
                 }
                 try:
-                    self.client.send(format_alert(symbol, tf.name, ob, result.price, bias_text, trade_bias=trade_bias))
+                    self.client.send(format_alert(symbol, tf.name, ob, result.price, bias_text, trade_bias=trade_bias,
+                                                 sizer=sizer))
                 except TelegramError as exc:
                     self.last_error = str(exc)
                     log.warning("alert not sent: %s", exc)

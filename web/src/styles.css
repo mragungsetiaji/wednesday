@@ -852,7 +852,8 @@ p {
   grid-template-columns: auto 1fr auto auto;
   grid-template-areas:
     "tag price risk dist"
-    "meta meta meta meta";
+    "meta meta meta meta"
+    "size size size size";
   align-items: center;
   gap: 2px var(--s2);
   padding: var(--s2);
@@ -870,6 +871,9 @@ p {
 .ladder-dist { grid-area: dist; font-size: var(--text-sm); color: var(--text-2); }
 .ladder-meta { grid-area: meta; font-size: var(--text-xs); color: var(--text-3); }
 .ladder-meta .swing { font-weight: 700; color: var(--text-2); }
+.ladder-size { grid-area: size; font-size: var(--text-xs); color: var(--text-2); }
+.ladder-size strong { font-weight: 700; color: var(--text); }
+.ladder-size.is-over { color: var(--warn); }
 
 /* Bias labels on setups: text chips, not status colours; the bias itself carries direction. */
 .risk {

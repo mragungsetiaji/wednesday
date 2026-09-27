@@ -37,6 +37,11 @@ lower high or higher low. With a **neutral** bias you're not trading, so alerts
 pause; tick *Alert with a neutral bias too* in Settings to keep them. See
 [bias.md](bias.md).
 
+## Position size
+
+With **Settings > Risk** on, each alert has a size line, e.g.
+`Size: 0.33 lot · risk $99.00 · 2R $198.00`. See [risk.md](risk.md).
+
 ## How entry is detected
 
 - The check uses the **high/low of each new M1 bar**, so a wick into the zone

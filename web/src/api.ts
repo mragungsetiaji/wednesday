@@ -61,13 +61,36 @@ export interface TimeframeScan {
 export type Risk = "on" | "off" | "no_trade" | null;
 
 /** An order block limit setup: distance is from price to the entry. */
-export type Setup = Level & { timeframe: string; distance: number; risk: Risk };
+/** Lot size for a setup's stop (Settings > Risk); `below_min` when even the minimum lot risks too much. */
+export interface SetupSize {
+  lots: number;
+  risk: number;
+  reward_2r: number;
+  budget: number; // after the RISK OFF multiplier
+  below_min: boolean;
+  min_lot_risk: number;
+}
+
+export type Setup = Level & { timeframe: string; distance: number; risk: Risk; size?: SetupSize | null };
+
+export interface Sizing {
+  balance: number | null;
+  currency: string;
+  budget: number;
+  per_point: number;
+  min_lot: number;
+  lot_step: number;
+  max_lot: number | null;
+  off_multiplier: number;
+  source: "mt5" | "settings";
+}
 
 export interface Scan {
   time: string;
   price: number;
   detectors: string[];
   setups: { sell: Setup[]; buy: Setup[] };
+  sizing?: Sizing | null; // null when Settings > Risk is off
   nearest: Record<string, { above: NearestLevel | null; below: NearestLevel | null }>;
   timeframes: TimeframeScan[];
 }
@@ -427,6 +450,41 @@ export interface CalendarResponse {
 
 export const fetchCalendar = () => getJson<CalendarResponse>("/api/calendar");
 export const saveCalendar = (s: CalendarSettings) => send<CalendarResponse>("PUT", "/api/calendar", s);
+
+// ---- Risk: position size per setup ----
+
+export interface RiskSettings {
+  enabled: boolean;
+  mode: "percent" | "amount";
+  value: number;
+  use_mt5: boolean;
+  balance: number | null;
+  currency: string;
+  contract_size: number;
+  min_lot: number;
+  lot_step: number;
+  risk_off_multiplier: number;
+}
+
+export interface Mt5Spec {
+  balance: number;
+  currency: string;
+  per_point: number;
+  contract_size: number;
+  min_lot: number;
+  lot_step: number;
+  max_lot: number | null;
+}
+
+export interface RiskResponse {
+  editable: boolean;
+  settings: RiskSettings | null;
+  mt5: Mt5Spec | null; // what the terminal reports, when MT5 is the source
+  sizer: Sizing | null;
+}
+
+export const fetchRisk = () => getJson<RiskResponse>("/api/risk");
+export const saveRisk = (s: RiskSettings) => send<RiskResponse>("PUT", "/api/risk", s);
 
 // ---- Lab: labels, training, models, reviews ----
 

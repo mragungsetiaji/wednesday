@@ -89,6 +89,8 @@ def test_quarters_endpoint(tmp_path):
     runtime = Runtime(cfg, DataSettings(source="synthetic"), None)
     api = TestClient(create_app(runtime, ui_dir=tmp_path))
     assert api.get("/api/quarters").status_code == 503
+    # A fixed weekday: on a weekend the last hours of bars hold no trading session.
+    runtime.engine.feed = runtime.engine.buffer.feed = SyntheticFeed(end=pd.Timestamp("2026-03-04 12:00"))
     runtime.engine.feed.connect()
     runtime.engine.step()
     body = api.get("/api/quarters").json()

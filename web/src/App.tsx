@@ -332,7 +332,7 @@ export default function App() {
             </section>
 
             {scan ? (
-              <Rail items={rail} price={scan.price} status={status} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf}
+              <Rail items={rail} sizing={scan.sizing} price={scan.price} status={status} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf}
                 bias={tradeBias} onBiasChanged={refreshScan} onOpenSettings={openSettings} />
             ) : (
               <aside className="rail" aria-busy="true">

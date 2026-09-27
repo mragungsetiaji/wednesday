@@ -65,3 +65,9 @@ export function fmtSpan(fromIso: string, toIso: string): string {
 
 /** Unix seconds on the feed clock, shown as-is: "2026-03-02 09:35". */
 export const fmtUnix = (t: number) => new Date(t * 1000).toISOString().slice(0, 16).replace("T", " ");
+
+/** Money in the account currency: "$105.00" for USD, "105.00 EUR" otherwise. */
+export const fmtMoney = (v: number, currency: string) => {
+  const n = v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return currency === "USD" ? `$${n}` : `${n} ${currency}`;
+};

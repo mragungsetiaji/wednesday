@@ -7,6 +7,7 @@ import { useDesktopApi } from "../desktop";
 import { fmtFeedTime } from "../format";
 import { usePlugins } from "../plugins";
 import { AccountSettings } from "./AccountSettings";
+import { RiskSettingsForm } from "./RiskSettingsForm";
 import { AlertsSettings } from "./AlertsSettings";
 import { BriefSettingsForm } from "./BriefSettingsForm";
 import { CalendarSettingsForm } from "./CalendarSettingsForm";
@@ -26,9 +27,10 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-type Section = "data" | "alerts" | "calendar" | "brief" | "plan" | "plugins";
+type Section = "data" | "risk" | "alerts" | "calendar" | "brief" | "plan" | "plugins";
 const SECTIONS: { id: Section; title: string }[] = [
   { id: "data", title: "Data source" },
+  { id: "risk", title: "Risk" },
   { id: "alerts", title: "Telegram alerts" },
   { id: "calendar", title: "News calendar" },
   { id: "brief", title: "News brief" },
@@ -72,6 +74,7 @@ export function SettingsPage() {
       </nav>
       <div className="settings-content">
         <div hidden={section !== "data"}><DataSourceSettings /></div>
+        <div hidden={section !== "risk"}><RiskSettingsForm /></div>
         <div hidden={section !== "alerts"}><AlertsSettings /></div>
         <div hidden={section !== "calendar"}><CalendarSettingsForm /></div>
         <div hidden={section !== "brief"}><BriefSettingsForm /></div>

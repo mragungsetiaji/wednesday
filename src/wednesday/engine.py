@@ -21,6 +21,7 @@ from .plugins import Hooks
 from .scanner import ScanConfig, ScanResult, scan
 from . import secret_store
 from .settings import MT5_SERVICE, DataSettings, mt5_account
+from .sizing import RISK_KEY, RiskSettings, Sizer, resolve
 from .storage import Store
 
 log = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ class EngineState:
     # connecting -> connected; reconnecting while a lost connection is retried; failed once it gave up.
     conn: str = "connecting"
     attempt: int = 0  # reconnect attempts so far
+    spec: dict | None = None  # balance and contract spec from the feed (MT5), for position sizing
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
 
@@ -79,10 +81,16 @@ class Engine:
         except Exception as exc:
             self._record_error(exc)
             raise
+        try:
+            spec = self.feed.trading_spec()
+        except Exception:  # sizing falls back to Settings > Risk; never fail a scan over it
+            log.debug("no trading spec", exc_info=True)
+            spec = None
         with self.state.lock:
             self.state.version += 1
             self.state.result = result
             self.state.m1 = m1
+            self.state.spec = spec
             self.state.scanned_at = datetime.now(timezone.utc)
             self.state.error = None
             self.state.error_at = None
@@ -181,6 +189,15 @@ class Engine:
             self._thread.join(timeout)
 
 
+def load_risk(store: Store | None) -> RiskSettings:
+    """Saved Settings > Risk; the defaults (sizing off) when none or unreadable."""
+    try:
+        return RiskSettings.from_dict(store.get_setting(RISK_KEY) if store else None)
+    except (TypeError, ValueError):
+        log.warning("ignoring invalid risk settings")
+        return RiskSettings()
+
+
 class Runtime:
     """Owns the running engine so the dashboard can switch data sources live."""
 
@@ -199,6 +216,7 @@ class Runtime:
         self.journals = journals  # journal.service.Journals or None (needs a database)
         self.hooks = Hooks()  # filled by plugins (see plugins.py)
         self.bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
+        self.risk = load_risk(store)
         self._lock = threading.Lock()
         self.settings = settings
         self.engine = self._build(settings)
@@ -235,11 +253,23 @@ class Runtime:
             else:
                 self.store.delete_setting(BIAS_KEY)
 
+    def sizer(self) -> Sizer | None:
+        """Position sizing from Settings > Risk and the terminal's balance and spec; None when off."""
+        with self.engine.state.lock:
+            spec = self.engine.state.spec
+        return resolve(self.risk, spec)
+
+    def set_risk(self, risk: RiskSettings) -> None:
+        self.risk = risk
+        if self.store:
+            self.store.set_setting(RISK_KEY, risk.to_dict())
+
     def _after_scan(self, result) -> None:
         engine = self.engine
         if self.alerts is not None:
             try:
-                sent = self.alerts.check(self.settings.source, engine.symbol, result, engine.state.m1, self.active_bias())
+                sent = self.alerts.check(self.settings.source, engine.symbol, result, engine.state.m1, self.active_bias(),
+                                         sizer=self.sizer())
             except Exception:  # an alert problem must never stop scanning
                 log.exception("alert check failed")
             else:

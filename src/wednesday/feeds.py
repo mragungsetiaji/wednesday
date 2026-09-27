@@ -51,6 +51,10 @@ class DataFeed(ABC):
         """Live price if the feed has one; otherwise the scanner uses the last M1 close."""
         return None
 
+    def trading_spec(self) -> dict | None:
+        """Account balance and the symbol's contract spec, for position sizing; None when the feed has none."""
+        return None
+
     def fetch_history(self, tf: Timeframe, before: pd.Timestamp, count: int) -> pd.DataFrame:
         """Up to ``count`` closed ``tf`` candles opening before ``before`` (oldest first).
 
@@ -139,6 +143,20 @@ class MT5Feed(DataFeed):
         df.index = pd.to_datetime(df["time"], unit="s")  # broker server time
         df = df.rename(columns={"tick_volume": "volume"})
         return normalize_ohlcv(df)
+
+    def trading_spec(self) -> dict | None:
+        """Balance and lot rules from the terminal, and the money one lot makes per 1.00 move."""
+        mt5 = self._mt5
+        acc = mt5.account_info() if mt5 else None
+        sym = mt5.symbol_info(self.symbol) if mt5 else None
+        if not acc or not sym:
+            return None
+        tick = sym.trade_tick_size or sym.point
+        # Tick value is in the account currency; some brokers report 0 while the market is closed.
+        per_point = sym.trade_tick_value / tick if tick and sym.trade_tick_value > 0 else sym.trade_contract_size
+        return {"balance": float(acc.balance), "currency": acc.currency, "per_point": float(per_point),
+                "contract_size": float(sym.trade_contract_size), "min_lot": float(sym.volume_min),
+                "lot_step": float(sym.volume_step), "max_lot": float(sym.volume_max) or None}
 
     def fetch_history(self, tf: Timeframe, before: pd.Timestamp, count: int) -> pd.DataFrame:
         """The terminal's own ``tf`` candles, so scrolling back needs no M1 history."""
