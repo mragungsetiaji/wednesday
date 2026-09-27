@@ -2438,6 +2438,55 @@ fieldset:disabled .switch {
   min-width: 200px;
   max-width: 360px;
 }
+.journal-manage {
+  display: grid;
+  gap: var(--s4);
+}
+.journal-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.journal-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2) var(--s4);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+}
+.journal-list-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.journal-list-main b {
+  overflow-wrap: anywhere;
+}
+.journal-list-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+.journal-new {
+  display: grid;
+  gap: var(--s2);
+}
+.journal-new h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.journal-new-form {
+  display: grid;
+  gap: var(--s3);
+  max-width: 640px;
+}
+.journal-terminal {
+  margin: 0;
+}
 .journal-notice {
   font-size: var(--text-sm);
   color: var(--text-2);

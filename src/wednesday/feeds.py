@@ -193,6 +193,16 @@ class MT5Feed(DataFeed):
         tick = self._mt5.symbol_info_tick(self.symbol) if self._mt5 else None
         return float(tick.bid) if tick else None
 
+    def account_summary(self) -> dict:
+        """The logged-in account's number, server and company (no history). Runs on the scan thread."""
+        mt5 = self._mt5
+        if mt5 is None:
+            raise RuntimeError("The MT5 terminal isn't connected yet")
+        acc = mt5.account_info()
+        if acc is None:
+            raise RuntimeError(f"MT5 has no account logged in: {mt5.last_error()}")
+        return {"login": str(acc.login), "server": acc.server, "company": acc.company}
+
     def account_history(self) -> dict:
         """The logged-in account, every deal in its history and the open positions (for the journal).
 

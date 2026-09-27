@@ -11,6 +11,7 @@ from .service import MULTI_FEATURE, JournalError, Journals
 
 MAX_REPORT_BYTES = 50 * 1024 * 1024
 SYNC_TIMEOUT = 90  # seconds to wait for the scan thread to read the terminal
+TERMINAL_TIMEOUT = 15  # the same, for the logged-in account alone
 
 
 def journal_router(get_journals: Callable[[], Journals | None], get_engine: Callable,
@@ -39,11 +40,25 @@ def journal_router(get_journals: Callable[[], Journals | None], get_engine: Call
     @r.post("")
     def create(body: dict = Body(...)) -> dict:
         try:
-            return svc().create(str(body.get("name") or ""), get_features())
+            return svc().create(str(body.get("name") or ""), get_features(), body.get("login"))
         except PermissionError as exc:
             raise HTTPException(402, str(exc)) from exc
         except JournalError as exc:
             raise HTTPException(422, str(exc)) from exc
+
+    @r.get("/terminal")
+    def terminal() -> dict:
+        """The account the MT5 terminal is logged in to, so a new journal can be tied to it."""
+        engine = get_engine()
+        if not hasattr(engine.feed, "account_summary"):
+            return {"connected": False, "detail": "The data source isn't MT5, so there's no terminal to sync from"}
+        try:
+            acc = engine.call(lambda feed: feed.account_summary(), timeout=TERMINAL_TIMEOUT)
+        except TimeoutError:
+            return {"connected": False, "detail": "The terminal didn't answer in time"}
+        except RuntimeError as exc:
+            return {"connected": False, "detail": str(exc)}
+        return {"connected": True, **acc}
 
     @r.patch("/{journal_id}")
     def update(journal_id: str, body: dict = Body(...)) -> dict:

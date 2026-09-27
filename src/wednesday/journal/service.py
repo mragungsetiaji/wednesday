@@ -57,13 +57,21 @@ class Journals:
         off = j.get("time_offset")
         return {**j, "time_offset": None if off is None else off / 3600}
 
-    def create(self, name: str, features: list[str]) -> dict:
+    def create(self, name: str, features: list[str], login: str | None = None) -> dict:
+        """A new journal, tied to its MT5 account number from the start when one is given."""
         name = (name or "").strip()[:120]
         if not name:
             raise JournalError("Give the journal a name")
-        if self.store.journals() and MULTI_FEATURE not in features:
+        login = str(login or "").strip() or None
+        if login is not None and not login.isdigit():
+            raise JournalError("The account number is the digits MT5 shows for the login, e.g. 51234567")
+        existing = self.store.journals()
+        if existing and MULTI_FEATURE not in features:
             raise PermissionError("One journal is free. More than one needs a plan with multiple journals")
-        row = {"id": uuid.uuid4().hex[:12], "name": name, "login": None, "server": None, "company": None,
+        taken = next((j for j in existing if login and str(j.get("login") or "") == login), None)
+        if taken:
+            raise JournalError(f"{taken['name']} already follows account {login}. Open it instead, or use another account")
+        row = {"id": uuid.uuid4().hex[:12], "name": name, "login": login, "server": None, "company": None,
                "currency": None, "source": None, "account": None, "time_offset": None, "created_at": _now(),
                "synced_at": None}
         self.store.journal_put(row)
@@ -94,8 +102,12 @@ class Journals:
         return self.store.journal_delete(journal_id)
 
     # ---- imports ----
-    def _check_account(self, j: dict, login: str | None) -> None:
+    def _check_account(self, j: dict, login: str | None, terminal: bool = False) -> None:
         if j.get("login") and login and str(login) != str(j["login"]):
+            if terminal:
+                raise JournalError(f"The MT5 terminal is logged in to account {login}, but this journal follows account "
+                                   f"{j['login']}. Log in to {j['login']} in the terminal and sync again, "
+                                   "or import that account's history report")
             raise JournalError(f"This journal is account {j['login']}, but that history is account {login}. "
                                "Make a journal per account")
 
@@ -103,7 +115,7 @@ class Journals:
         """Replace the journal's trades with the terminal's full history (see ``MT5Feed.account_history``)."""
         j = self.get(journal_id)
         acc = history.get("account") or {}
-        self._check_account(j, acc.get("login"))
+        self._check_account(j, acc.get("login"), terminal=True)
         trades, cash = from_deals(history.get("deals") or [], history.get("positions") or [])
         self.store.journal_fill(journal_id, trades, cash, replace=True)
         j.update(login=str(acc.get("login") or j.get("login") or "") or None, server=acc.get("server") or j.get("server"),

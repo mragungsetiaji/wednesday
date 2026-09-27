@@ -872,7 +872,13 @@ export interface JournalStats {
 
 export const fetchJournals = () => getJson<JournalsResponse>("/api/journals");
 export const fetchJournal = (id: string) => getJson<JournalStats>(`/api/journals/${encodeURIComponent(id)}`);
-export const createJournal = (name: string) => send<Journal>("POST", "/api/journals", { name });
+export const createJournal = (name: string, login: string | null) => send<Journal>("POST", "/api/journals", { name, login });
+
+/** The account the MT5 terminal is logged in to; `connected: false` with why when there's none to read. */
+export type TerminalAccount =
+  | { connected: true; login: string; server: string | null; company: string | null }
+  | { connected: false; detail: string };
+export const fetchTerminalAccount = () => getJson<TerminalAccount>("/api/journals/terminal");
 export const updateJournal = (id: string, patch: { name?: string; time_offset?: number | null }) =>
   send<Journal>("PATCH", `/api/journals/${encodeURIComponent(id)}`, patch);
 export const deleteJournal = (id: string) => send<{ deleted: boolean }>("DELETE", `/api/journals/${encodeURIComponent(id)}`);

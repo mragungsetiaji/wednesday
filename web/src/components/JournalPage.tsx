@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  createJournal, deleteJournal, fetchJournal, fetchJournals, importReport, journalCsvUrl, saveTradeNote, syncJournal,
-  updateJournal, type Journal, type JournalStats, type JournalTrade, type JournalsResponse,
+  createJournal, deleteJournal, fetchJournal, fetchJournals, fetchTerminalAccount, importReport, journalCsvUrl, saveTradeNote,
+  syncJournal, updateJournal, type Journal, type JournalStats, type JournalTrade, type JournalsResponse, type TerminalAccount,
 } from "../api";
 import { fmtPrice, fmtUnix } from "../format";
 import { CheckIcon, CrossIcon } from "../icons";
@@ -17,6 +17,9 @@ const VIEWS: { id: JournalView; title: string }[] = [
   { id: "balance", title: "Balance" },
   { id: "drawdown", title: "Drawdown" },
 ];
+
+/** What the new-journal form hands up: sync right away only when the terminal is on that account. */
+type NewDraft = { name: string; login: string; sync: boolean };
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}%`);
@@ -80,15 +83,17 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
     return () => clearInterval(id);
   }, [selected?.id, loadStats]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const run = async (fn: () => Promise<string | void>) => {
+  const run = async (fn: () => Promise<string | void>): Promise<boolean> => {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const msg = await fn();
       if (msg) setNotice(msg);
+      return true;
     } catch (e) {
       setError(errText(e));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -98,6 +103,25 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
     await loadList();
     await loadStats(id);
   };
+
+  // Create, then sync at once when the terminal is logged in to that account. If the sync fails the journal
+  // stays, empty, and the banner says why.
+  const create = (draft: NewDraft) => run(async () => {
+    const j = await createJournal(draft.name, draft.login);
+    setCurrent(j.id);
+    await loadList();
+    if (!draft.sync) return `Created ${j.name} for account ${j.login}. Sync it when the terminal is on that account, or import its history report.`;
+    const r = await syncJournal(j.id);
+    await refresh(j.id);
+    return `Created ${j.name} and synced ${r.trades} trades and ${r.cash} deposits or withdrawals from account ${r.journal.login}.`;
+  });
+
+  const remove = (j: Journal) => run(async () => {
+    await deleteJournal(j.id);
+    if (j.id === selected?.id) setCurrent(null);
+    await loadList();
+    return `Removed ${j.name}.`;
+  });
 
   if (!list) {
     return <main className="lab-page"><p className="empty">{error ? `Can't load the journal: ${error}` : "Loading the journal…"}</p></main>;
@@ -115,12 +139,17 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
   if (!selected) {
     return (
       <main className="lab-page">
-        <NewJournal first busy={busy} error={error}
-          onCreate={(name) => run(async () => {
-            const j = await createJournal(name);
-            setCurrent(j.id);
-            await loadList();
-          })} />
+        <div className="settings-form journal-start">
+          <div className="settings-intro">
+            <h2>Start a journal</h2>
+            <p>
+              A journal follows one MT5 account: gain, drawdown, deposits and every trade. The drawdown is rebuilt from M1
+              prices, so a trade that sat deep in loss before closing green still shows.
+            </p>
+          </div>
+          <NewJournal journals={journals} busy={busy} onCreate={create} />
+          {(error || notice) && <p className={error ? "text-error" : "journal-notice"} role={error ? "alert" : "status"}>{error ?? notice}</p>}
+        </div>
       </main>
     );
   }
@@ -129,11 +158,8 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
     <main className="lab-page journal-page">
       <JournalHead journal={selected} journals={journals} multi={list.multi} busy={busy}
         onPick={setCurrent}
-        onCreate={(name) => run(async () => {
-          const j = await createJournal(name);
-          setCurrent(j.id);
-          await loadList();
-        })}
+        onCreate={create}
+        onRemove={remove}
         onSync={() => run(async () => {
           const r = await syncJournal(selected.id);
           await refresh(selected.id);
@@ -147,11 +173,6 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
         onUpdate={(patch) => run(async () => {
           await updateJournal(selected.id, patch);
           await refresh(selected.id);
-        })}
-        onDelete={() => run(async () => {
-          await deleteJournal(selected.id);
-          setCurrent(null);
-          await loadList();
         })} />
       {(error || notice) && (
         <p className={error ? "banner" : "journal-notice"} role={error ? "alert" : "status"}>{error ?? notice}</p>
@@ -187,24 +208,22 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
   );
 }
 
-// ---- head: pick, create, sync, import, settings ----------------------------------------------
+// ---- head: pick, sync, import, settings, the list of journals -------------------------------
 
-function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onSync, onImport, onUpdate, onDelete }: {
+function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onRemove, onSync, onImport, onUpdate }: {
   journal: Journal; journals: Journal[]; multi: boolean; busy: boolean;
-  onPick: (id: string) => void; onCreate: (name: string) => void; onSync: () => void; onImport: (f: File) => void;
-  onUpdate: (patch: { name?: string; time_offset?: number | null }) => void; onDelete: () => void;
+  onPick: (id: string) => void; onCreate: (d: NewDraft) => Promise<boolean>; onRemove: (j: Journal) => Promise<boolean>;
+  onSync: () => void; onImport: (f: File) => void; onUpdate: (patch: { name?: string; time_offset?: number | null }) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState("");
+  const [panel, setPanel] = useState<"journals" | "settings" | null>(null);
   const [rename, setRename] = useState(journal.name);
   const [offset, setOffset] = useState(journal.time_offset === null ? "" : String(journal.time_offset));
   useEffect(() => {
     setRename(journal.name);
     setOffset(journal.time_offset === null ? "" : String(journal.time_offset));
   }, [journal]);
-  const locked = !multi && journals.length >= 1;
+  const toggle = (p: "journals" | "settings") => setPanel(panel === p ? null : p);
 
   return (
     <div className="journal-head">
@@ -218,12 +237,12 @@ function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onSync,
         )}
         <p className="meta">
           {journal.login ? <span className="num">#{journal.login}{journal.server ? ` · ${journal.server}` : ""}</span> : <span>No account yet</span>}
-          {journal.synced_at && <span>{journal.source === "mt5" ? "synced" : "imported"} {new Date(journal.synced_at).toLocaleString()}</span>}
+          <span>{syncedText(journal)}</span>
         </p>
       </div>
       <div className="journal-actions">
         <button type="button" className="button primary" disabled={busy} onClick={onSync}
-          title="Read every deal from the MT5 terminal the scanner is connected to">
+          title={journal.login ? `Read every deal of account ${journal.login} from the MT5 terminal` : "Read every deal from the MT5 terminal the scanner is connected to"}>
           {busy ? "Working…" : "Sync from MT5"}
         </button>
         <input ref={fileRef} type="file" accept=".html,.htm,text/html" hidden
@@ -237,35 +256,40 @@ function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onSync,
           Import report
         </button>
         <a className="button quiet" href={journalCsvUrl(journal.id)} download>Export CSV</a>
-        <button type="button" className="button quiet" aria-expanded={editing} onClick={() => setEditing(!editing)}>Settings</button>
-        <button type="button" className="button quiet" aria-expanded={adding} onClick={() => setAdding(!adding)}>
-          New journal{locked && <span className="badge journal-lock">Paid</span>}
+        <button type="button" className="button quiet" aria-expanded={panel === "settings"} aria-controls="journal-panel"
+          onClick={() => toggle("settings")}>Settings</button>
+        <button type="button" className="button quiet" aria-expanded={panel === "journals"} aria-controls="journal-panel"
+          onClick={() => toggle("journals")}>
+          Journals <span className="num muted">{journals.length}</span>
         </button>
       </div>
-      {adding && (
-        locked ? (
-          <p className="journal-panel field-note">
-            One journal is free. More than one, say one per MT5 account, comes with a plan that includes{" "}
-            <strong>Multiple journals</strong> (Settings, Plan).
-          </p>
-        ) : (
-          <form className="journal-panel journal-inline" onSubmit={(e) => {
-            e.preventDefault();
-            if (!name.trim()) return;
-            onCreate(name);
-            setName("");
-            setAdding(false);
-          }}>
-            <input type="text" aria-label="Name of the new journal" placeholder="Name, e.g. Prop firm 100k" value={name} onChange={(e) => setName(e.target.value)} />
-            <button type="submit" className="button secondary" disabled={busy || !name.trim()}>Create</button>
-          </form>
-        )
+      {panel === "journals" && (
+        <div id="journal-panel" className="journal-panel journal-manage">
+          <JournalList journals={journals} current={journal.id} busy={busy}
+            onOpen={(id) => { onPick(id); setPanel(null); }} onRemove={onRemove} />
+          <section className="journal-new" aria-labelledby="journal-new-h">
+            <h3 id="journal-new-h">New journal</h3>
+            {!multi && journals.length >= 1 ? (
+              <p className="field-note">
+                One journal is free. More than one, say one per MT5 account, comes with a plan that includes{" "}
+                <strong>Multiple journals</strong> (Settings, Plan).
+              </p>
+            ) : (
+              <NewJournal journals={journals} busy={busy}
+                onCreate={async (d) => {
+                  const ok = await onCreate(d);
+                  if (ok) setPanel(null);
+                  return ok;
+                }} />
+            )}
+          </section>
+        </div>
       )}
-      {editing && (
-        <form className="journal-panel fields-grid" onSubmit={(e) => {
+      {panel === "settings" && (
+        <form id="journal-panel" className="journal-panel fields-grid" onSubmit={(e) => {
           e.preventDefault();
           onUpdate({ name: rename, time_offset: offset.trim() === "" ? null : Number(offset) });
-          setEditing(false);
+          setPanel(null);
         }}>
           <label className="field">
             <span className="field-label">Name</span>
@@ -278,10 +302,7 @@ function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onSync,
           </label>
           <div className="form-actions field-span">
             <button type="submit" className="button secondary" disabled={busy}>Save</button>
-            <button type="button" className="link link-danger" disabled={busy}
-              onClick={() => window.confirm(`Delete ${journal.name} and its trades and notes?`) && onDelete()}>
-              Delete journal
-            </button>
+            <span className="field-note">To remove this journal, open Journals.</span>
           </div>
         </form>
       )}
@@ -289,28 +310,112 @@ function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onSync,
   );
 }
 
-function NewJournal({ first, busy, error, onCreate }: { first: boolean; busy: boolean; error: string | null; onCreate: (name: string) => void }) {
-  const [name, setName] = useState("");
+function syncedText(j: Journal) {
+  if (!j.synced_at) return "not synced yet";
+  return `${j.source === "mt5" ? "synced" : "imported"} ${new Date(j.synced_at).toLocaleString()}`;
+}
+
+/** Every journal with its account: open one, or remove it (its trades and notes go with it). */
+function JournalList({ journals, current, busy, onOpen, onRemove }: {
+  journals: Journal[]; current: string; busy: boolean; onOpen: (id: string) => void; onRemove: (j: Journal) => Promise<boolean>;
+}) {
   return (
-    <form className="settings-form journal-start" onSubmit={(e) => {
+    <ul className="journal-list" aria-label="Journals">
+      {journals.map((j) => (
+        <li key={j.id} aria-current={j.id === current ? "true" : undefined}>
+          <div className="journal-list-main">
+            <b>{j.name}</b>
+            <span className="meta">
+              {j.login ? <span className="num">#{j.login}{j.server ? ` · ${j.server}` : ""}</span> : <span>No account yet</span>}
+              <span>{syncedText(j)}</span>
+            </span>
+          </div>
+          <div className="journal-list-actions">
+            {j.id === current
+              ? <span className="badge">Open</span>
+              : <button type="button" className="button quiet" onClick={() => onOpen(j.id)}>Open</button>}
+            <button type="button" className="link link-danger" disabled={busy}
+              onClick={() => window.confirm(`Remove ${j.name}? Its trades and notes are deleted from Wednesday. Nothing changes in MT5.`) && onRemove(j)}>
+              Remove<span className="sr-only"> {j.name}</span>
+            </button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Name and MT5 account number, prefilled from the account the terminal is logged in to. When the terminal is on
+ * that account the journal syncs as it's created; otherwise it starts empty and the form says why.
+ */
+function NewJournal({ journals, busy, onCreate }: { journals: Journal[]; busy: boolean; onCreate: (d: NewDraft) => Promise<boolean> }) {
+  const [name, setName] = useState("");
+  const [login, setLogin] = useState("");
+  const [terminal, setTerminal] = useState<TerminalAccount | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchTerminalAccount()
+      .then((t) => {
+        if (!live) return;
+        setTerminal(t);
+        if (t.connected && !journals.some((j) => j.login === t.login)) setLogin((cur) => cur || t.login);
+      })
+      .catch((e) => live && setTerminal({ connected: false, detail: errText(e) }));
+    return () => { live = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const account = login.trim();
+  const valid = /^\d+$/.test(account);
+  const taken = journals.find((j) => j.login === account);
+  const onTerminal = terminal?.connected === true && terminal.login === account;
+  const ready = !busy && name.trim() !== "" && valid && !taken;
+
+  return (
+    <form className="journal-new-form" onSubmit={async (e) => {
       e.preventDefault();
-      if (name.trim()) onCreate(name);
+      if (!ready) return;
+      if (await onCreate({ name: name.trim(), login: account, sync: onTerminal })) {
+        setName("");
+        setLogin("");
+      }
     }}>
-      <div className="settings-intro">
-        <h2>{first ? "Start a journal" : "New journal"}</h2>
-        <p>
-          A journal follows one MT5 account: gain, drawdown, deposits and every trade. Sync it from the terminal the scanner
-          is connected to, or import the terminal's history report. The drawdown is rebuilt from M1 prices, so a trade that
-          sat deep in loss before closing green still shows.
-        </p>
+      <p className="journal-terminal field-note" role="status">
+        {terminal === null ? "Checking the MT5 terminal…"
+          : terminal.connected ? (
+            <>
+              MT5 terminal is logged in to <span className="num">#{terminal.login}</span>{terminal.server ? ` · ${terminal.server}` : ""}.
+              {account !== terminal.login && (
+                <> <button type="button" className="link-button" onClick={() => setLogin(terminal.login)}>Use this account</button></>
+              )}
+            </>
+          ) : <>{terminal.detail}. You can still create the journal and import the terminal's history report.</>}
+      </p>
+      <div className="fields-grid">
+        <label className="field">
+          <span className="field-label">Name</span>
+          <input type="text" value={name} maxLength={120} placeholder="e.g. Prop firm 100k" onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="field-label">MT5 account number</span>
+          <input type="text" inputMode="numeric" autoComplete="off" value={login} placeholder="e.g. 51234567"
+            aria-invalid={account !== "" && (!valid || !!taken)} aria-describedby="journal-login-note"
+            onChange={(e) => setLogin(e.target.value)} />
+          <span id="journal-login-note" className={account !== "" && (!valid || taken) ? "field-note text-error" : "field-note"}>
+            {account === "" ? "The login number shown in MT5, under Navigator, Accounts."
+              : !valid ? "Digits only, as MT5 shows the login."
+                : taken ? `${taken.name} already follows this account.`
+                  : onTerminal ? "The terminal is on this account, so the journal syncs as it's created."
+                    : terminal?.connected
+                      ? `The terminal is on #${terminal.login}, so this journal starts empty. Log in to #${account} in MT5 and sync, or import its report.`
+                      : "Starts empty. Sync once the terminal is on this account, or import its report."}
+          </span>
+        </label>
       </div>
-      <label className="field field-narrow">
-        <span className="field-label">Name</span>
-        <input type="text" value={name} placeholder="e.g. Main account" onChange={(e) => setName(e.target.value)} />
-      </label>
       <div className="form-actions">
-        <button type="submit" className="button primary" disabled={busy || !name.trim()}>Create journal</button>
-        {error && <span className="text-error">{error}</span>}
+        <button type="submit" className="button primary" disabled={!ready}>
+          {busy ? "Working…" : onTerminal ? "Create and sync" : "Create journal"}
+        </button>
       </div>
     </form>
   );

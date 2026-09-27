@@ -10,6 +10,19 @@ Open **Journal** in the top bar. It needs a database (the default SQLite one is 
 One journal is free; more than one (say, one per account) needs the **Multiple
 journals** feature in your plan (Settings, Plan).
 
+## Journals
+
+A new journal takes a name and the MT5 account number (the login under
+*Navigator*, *Accounts*). When the data source is MT5, the form fills in the
+account the terminal is logged in to and **Create and sync** reads its history
+straight away. For another account the journal starts empty: log in to that
+account in the terminal and press **Sync from MT5**, or import its report. One
+account has one journal; a second journal for the same number is refused.
+
+**Journals** in the header lists every journal with its account and last sync.
+Open one from there, or **Remove** it: that deletes its trades and notes from
+Wednesday and changes nothing in MT5.
+
 ## Filling it
 
 - **Sync from MT5** reads every deal from the terminal the scanner is connected
@@ -28,8 +41,8 @@ file you upload. Wednesday never logs in to the broker itself and never sees an
 investor password.
 
 Either replaces the journal's trades, so sync or import the full history. A
-journal belongs to one account: syncing another account's history into it is
-refused.
+journal belongs to one account: syncing while the terminal is logged in to a
+different account, or importing another account's report, is refused.
 
 From the terminal, a position closed in parts becomes one trade per closing
 deal (with the average entry and the entry commission shared by volume); a

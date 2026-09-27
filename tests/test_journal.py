@@ -237,6 +237,8 @@ def test_journal_api_flow(journal_api):
 
     r = api.post(f"/api/journals/{j['id']}/sync")
     assert r.status_code == 409 and "isn't MT5" in r.json()["detail"]
+    t = api.get("/api/journals/terminal").json()
+    assert t["connected"] is False and "isn't MT5" in t["detail"]
     assert api.delete(f"/api/journals/{j['id']}").json() == {"deleted": True}
     assert api.get(f"/api/journals/{j['id']}").status_code == 404
 
@@ -252,6 +254,22 @@ def test_sync_refuses_another_account(tmp_path):
     assert st["verification"]["balance_matches"] is True
     with pytest.raises(ValueError, match="account 1"):
         js.sync(j["id"], {**history, "account": {"login": "2"}})
+
+
+def test_create_ties_the_journal_to_its_account(tmp_path):
+    js = Journals(Store(f"sqlite:///{tmp_path / 'j.db'}"))
+    main = js.create("Main", ["journal.multi"], login=" 51234567 ")
+    assert main["login"] == "51234567"
+    with pytest.raises(ValueError, match="Main already follows account 51234567"):
+        js.create("Again", ["journal.multi"], login="51234567")
+    with pytest.raises(ValueError, match="digits"):
+        js.create("Typo", ["journal.multi"], login="5123abc")
+    prop = js.create("Prop", ["journal.multi"], login="777")
+    history = {"account": {"login": "51234567"}, "deals": [], "positions": []}
+    with pytest.raises(ValueError, match="logged in to account 51234567, but this journal follows account 777"):
+        js.sync(prop["id"], history)
+    assert js.sync(main["id"], history)["journal"]["login"] == "51234567"
+    assert len(js.list()) == 2
 
 
 def test_a_close_while_another_trade_floats_is_not_a_new_high():
