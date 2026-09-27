@@ -1,3 +1,4 @@
+import os
 import sys
 import types
 
@@ -150,3 +151,18 @@ def test_check_mode_with_fake_mt5(fake_mt5, capsys, monkeypatch, tmp_path):
     out = capsys.readouterr().out
     assert "123 @ Broker-Demo" in out
     assert "OK: feed is working" in out
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-8-sig", "utf-16"])
+def test_env_file_in_the_encodings_windows_writes(tmp_path, monkeypatch, encoding):
+    """Notepad adds a BOM, PowerShell 5 writes UTF-16: the first variable must still be read."""
+    monkeypatch.setenv("WEDNESDAY_LICENCE_SERVER", "")  # set but empty counts as unset
+    monkeypatch.setenv("XAU_SYMBOL", "")
+    env = tmp_path / ".env"
+    env.write_bytes("WEDNESDAY_LICENCE_SERVER=http://192.168.1.5:8790\r\nXAU_SYMBOL='GOLD'\r\n".encode(encoding))
+    cli.load_env_file(env)
+    assert os.environ["WEDNESDAY_LICENCE_SERVER"] == "http://192.168.1.5:8790"
+    assert os.environ["XAU_SYMBOL"] == "GOLD"
+    monkeypatch.setenv("XAU_SYMBOL", "XAUUSD")
+    cli.load_env_file(env)
+    assert os.environ["XAU_SYMBOL"] == "XAUUSD"  # a variable already set wins

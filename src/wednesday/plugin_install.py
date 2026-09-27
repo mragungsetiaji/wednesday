@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -29,8 +30,10 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
+log = logging.getLogger(__name__)
+
 PREFIX = "WEDPKG1"
-DEFAULT_SERVER = "http://127.0.0.1:8790"
+DEFAULT_SERVER = "http://192.168.100.87:8790"  # TEMP: Mac on the LAN, for a quick test; revert to 127.0.0.1
 SERVER_ENV = "WEDNESDAY_LICENCE_SERVER"
 PLUGINS_DIR_ENV = "WEDNESDAY_PLUGINS_DIR"
 DEVICE_SETTING = "ee_device"  # shared with Wednesday EE's licence, which binds tokens to it
@@ -72,6 +75,7 @@ def _b64d(text: str) -> bytes:
 
 def fetch(key: str, device: str, url: str | None = None, timeout: float = 60) -> dict:
     url = url or server_url()
+    log.info("downloading Wednesday EE from %s (set %s to change)", url, SERVER_ENV)
     body = json.dumps({"key": key, "device_id": device}).encode()
     req = urllib.request.Request(f"{url}/v1/download", data=body, method="POST",
                                  headers={"Content-Type": "application/json"})

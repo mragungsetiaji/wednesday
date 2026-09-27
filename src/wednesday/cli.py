@@ -27,16 +27,23 @@ log = logging.getLogger("wednesday")
 
 
 def load_env_file(path: str | Path) -> None:
-    """Load KEY=VALUE lines into os.environ (existing variables win). Missing file is fine."""
+    """Load KEY=VALUE lines into os.environ (variables already set win). Missing file is fine.
+
+    Reads the encodings Windows editors write: UTF-8 with or without a BOM (Notepad),
+    and UTF-16 (PowerShell 5's ``echo ... > .env``).
+    """
     path = Path(path)
     if not path.is_file():
         return
-    for line in path.read_text(encoding="utf-8").splitlines():
+    raw = path.read_bytes()
+    text = raw.decode("utf-16") if raw.startswith((b"\xff\xfe", b"\xfe\xff")) else raw.decode("utf-8-sig")
+    for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+        if not os.environ.get(key.strip()):
+            os.environ[key.strip()] = value.strip().strip("'\"")
 
 
 def _env(name: str, cast=str):
