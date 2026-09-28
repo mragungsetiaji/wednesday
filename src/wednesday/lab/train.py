@@ -440,6 +440,32 @@ def predict_blocks(bundle: ModelBundle, m1: pd.DataFrame, tf: Timeframe, limit: 
     return out
 
 
+# ---- review queue: where the model is least sure --------------------------------------
+
+def queue_scores(bundle: ModelBundle, m1: pd.DataFrame, tf: Timeframe) -> pd.DataFrame:
+    """Every candle of the history on ``tf`` scored by every tag of the model: one row per
+    (candle, tag) with the probability, the tag's cut and ``distance`` = |prob - cut|, the
+    smallest first. Labels near the cut teach the model the most."""
+    p = bundle.manifest["params"]
+    fp = FeatureParams(lookback=int(p["lookback"]), confirm=int(p["confirm"]))
+    fr = frames_for(m1, tf, fp)
+    feats = fr.feats
+    cols = ["time_unix", "tag", "prob", "cut", "distance"]
+    if feats.empty:
+        return pd.DataFrame(columns=cols)
+    times = np.array([unix(t) for t in feats.index], dtype=np.int64)
+    parts = []
+    for tag, model in bundle.models.items():
+        if tag not in TAGS:
+            continue
+        cut = float(bundle.manifest["tags"].get(tag, {}).get("threshold", 0.5))
+        pr = model.predict_proba(feats[bundle.features])[:, 1]
+        parts.append(pd.DataFrame({"time_unix": times, "tag": tag, "prob": pr, "cut": cut, "distance": np.abs(pr - cut)}))
+    if not parts:
+        return pd.DataFrame(columns=cols)
+    return pd.concat(parts, ignore_index=True).sort_values(["distance", "time_unix"], kind="stable", ignore_index=True)
+
+
 # ---- comparing models on one window ------------------------------------------------
 
 def _scores(y: np.ndarray, p: np.ndarray, cut: float, r: np.ndarray | None = None) -> dict:

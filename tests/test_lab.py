@@ -293,7 +293,30 @@ def test_lab_api_flow(lab_api):
     assert st["runs"][0]["status"] == "done" and st["runs"][0]["model_id"] == model["id"]
     assert api.delete("/api/lab/train").status_code == 409  # nothing to stop
 
+    assert api.get("/api/lab/queue", params={"tf": "15M"}).status_code == 409  # no active model yet
     assert api.put("/api/lab/active", json={"id": model["id"]}).json()["active"] == model["id"]
+
+    # Review queue: least sure first, labelled (candle, tag) pairs left out, and they drop out once tagged.
+    q = api.get("/api/lab/queue", params={"tf": "15M", "limit": 20}).json()
+    assert q["model_id"] == model["id"] and q["total"] > 20 and len(q["items"]) == 20
+    dist = [i["distance"] for i in q["items"]]
+    assert dist == sorted(dist) and all(abs(i["prob"] - i["cut"]) == pytest.approx(i["distance"]) for i in q["items"])
+    done = {(lb["tag"], lb["start"]) for lb in runtime.lab.labels(runtime.engine.symbol, "15M")}
+    assert not [i for i in q["items"] if (i["tag"], i["time_unix"]) in done]
+    top = q["items"][0]
+    api.post("/api/lab/labels", json={"timeframe": "15M", "tag": top["tag"], "start": top["time_unix"], "value": 0})
+    q2 = api.get("/api/lab/queue", params={"tf": "15M", "limit": 20}).json()
+    assert top["id"] not in {i["id"] for i in q2["items"]} and q2["total"] == q["total"] - 1
+    only = api.get("/api/lab/queue", params={"tf": "15M", "tag": "bsl", "limit": 50}).json()
+    assert only["items"] and {i["tag"] for i in only["items"]} == {"bsl"}
+    span = (reviewed["start"], reviewed["end"])
+    inside = api.get("/api/lab/queue", params={"tf": "15M", "scope": "inside", "limit": 1000}).json()
+    outside = api.get("/api/lab/queue", params={"tf": "15M", "scope": "outside", "limit": 1000}).json()
+    assert inside["total"] + outside["total"] == q2["total"]
+    assert all(span[0] <= i["time_unix"] <= span[1] for i in inside["items"])
+    assert not [i for i in outside["items"] if span[0] <= i["time_unix"] <= span[1]]
+    assert api.get("/api/lab/queue", params={"tf": "15M", "scope": "nope"}).status_code == 422
+    assert api.get("/api/lab/queue", params={"tf": "5M"}).json()["note"]  # not trained on 5M
     card = api.get("/api/lab/scorecard").json()["scorecard"]
     assert card["model_id"] == model["id"] and card["since_unix"] and card["reviews"]["n"] == 0
     assert card["warnings"] == [] and card["inputs"] is not None

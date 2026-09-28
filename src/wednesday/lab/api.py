@@ -209,6 +209,21 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
             "history": history_bounds(m1),
         }
 
+    @r.get("/queue")
+    def queue(tf: str = Query("5M"), tag: str | None = Query(None), scope: str = Query("all"),
+              limit: int = Query(200, ge=1, le=1000)) -> dict:
+        """Review queue: candles across the history where the active model is least sure (a tag's
+        probability closest to its cut), without the ones a label already covers."""
+        need_ml()
+        tfo = timeframe(tf)
+        m1 = history()
+        if m1 is None:
+            raise HTTPException(503, "no data yet")
+        try:
+            return lab().queue(symbol(), m1, tfo.name, tag or None, scope, limit)
+        except ValueError as exc:
+            raise HTTPException(409 if "active" in str(exc) else 422, str(exc)) from exc
+
     @r.post("/labels")
     def add_label(body: dict = Body(...)) -> dict:
         origin = body.get("origin") if body.get("origin") in ("manual", "detector") else "manual"

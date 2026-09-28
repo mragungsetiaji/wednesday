@@ -30,6 +30,19 @@ The detector's levels show as dotted suggestions; `A` accepts the ones on the
 selection. That's quicker than tagging from scratch, but a model trained only on
 accepted suggestions just learns the detector back. Fix what it gets wrong.
 
+**Review queue.** With a model active, **Queue** (or `Q`) lists the candles
+across the whole history where the model is least sure: a tag's probability
+closest to that tag's cut, the closest first. Labels there teach it the most, so
+this beats paging through candles it already gets right. `J` / `K` jump to the
+next / previous one: the chart stays on its timeframe, selects the candle and only
+moves the page when the candle isn't on it. The side panel shows the model's call
+(its chance against the cut) and whether the detector found it; tag it with the
+usual keys and it leaves the queue. Filter by tag, and by candles inside or
+outside reviewed ranges (a range counts for the tags it was reviewed for). The
+counter shows how many are left and how many you've done this session. The
+scores are computed once per model, timeframe and history (`GET
+/api/lab/queue?tf=&tag=&scope=&limit=`), and labels are applied on every call.
+
 **Undo and bulk edits.** `Ctrl+Z` undoes the last tag, *not*, accept, delete or
 reviewed range, and `Ctrl+Shift+Z` (or `Ctrl+Y`) redoes it; Cmd on a Mac. An undo
 puts rows back exactly as they were, ids included. Under **On the selection**,

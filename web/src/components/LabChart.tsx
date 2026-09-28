@@ -24,12 +24,13 @@ interface Props {
   highlight: string | null;
   palette: ChartPalette;
   resetKey: string; // refit when this changes (timeframe or page of history)
+  focus?: number | null; // scroll this candle into view (only when it's off screen)
   loading: boolean;
   onPick: (time: number, extend: boolean) => void; // click a candle; shift-click extends the selection
 }
 
 /** The Lab's chart: candles you click to select, with labels, suggestions and model output drawn on them. */
-export function LabChart({ candles, marks, reviewed, selection, highlight, palette, resetKey, loading, onPick }: Props) {
+export function LabChart({ candles, marks, reviewed, selection, highlight, palette, resetKey, focus = null, loading, onPick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -97,6 +98,18 @@ export function LabChart({ candles, marks, reviewed, selection, highlight, palet
       fittedKey.current = resetKey;
     }
   }, [candles, resetKey]);
+
+  // Bring the focused candle into view, keeping the zoom; leave the view alone when it's already visible.
+  useEffect(() => {
+    const scale = chartRef.current?.timeScale();
+    const i = focus === null ? -1 : candles.findIndex((c) => c.time === focus);
+    const shown = scale?.getVisibleLogicalRange();
+    if (!scale || i < 0 || !shown) return;
+    const margin = 3;
+    if (i >= shown.from + margin && i <= shown.to - margin) return;
+    const half = (shown.to - shown.from) / 2;
+    scale.setVisibleLogicalRange({ from: i - half, to: i + half });
+  }, [focus, candles]);
 
   useEffect(() => {
     labRef.current?.update({ marks, reviewed, selection, highlight });

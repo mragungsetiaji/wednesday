@@ -16,6 +16,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from ..detectors.base import DetectorParams
@@ -27,7 +28,7 @@ from .model import ModelBundle, ModelFileError, load, load_bytes, read_manifest
 from .outcome import TradePlan, plan_levels, simulate
 from .tags import OB_TAGS, TAGS
 from . import drift, signing
-from .train import TrainingCancelled, TrainParams, frames_for, score_window, train_bundle
+from .train import TrainingCancelled, TrainParams, frames_for, queue_scores, score_window, train_bundle
 
 log = logging.getLogger(__name__)
 
@@ -119,6 +120,7 @@ class Lab:
         self._cancel = threading.Event()
         self._scorecard: tuple | None = None
         self._signatures: dict[str, tuple] = {}
+        self._queue: dict[tuple, pd.DataFrame] = {}
         self.backfill = Backfill()
         self._staged_bars: dict[str, ParsedBars] = {}
         self._staged_labels: dict[str, dict] = {}
@@ -462,6 +464,47 @@ class Lab:
             raise ModelFileError("Only models signed by a trusted key load (turn that off in Settings > Lab)")
         if not trust_file:
             raise ModelFileError("This file isn't signed by a trusted key; confirm that you trust it to load it")
+
+    # ---- review queue ---------------------------------------------------------------
+    def queue(self, symbol: str, m1: pd.DataFrame, tf: str, tag: str | None = None, scope: str = "all",
+              limit: int = 200) -> dict:
+        """The candles the active model is least sure about on ``tf``, closest to a tag's cut first,
+        leaving out every (candle, tag) a label already covers. ``scope`` keeps only candles inside
+        reviewed ranges ("inside"), outside them ("outside") or both ("all"). The scoring is done
+        once per model, timeframe and history and cached; labels are applied on each call."""
+        if scope not in ("all", "inside", "outside"):
+            raise ValueError("scope is all, inside or outside")
+        if tag and tag not in TAGS:
+            raise ValueError(f"Unknown tag {tag}")
+        bundle = self.active()
+        if bundle is None:
+            raise ValueError("Set a model active in Models to use the queue")
+        tfo = TIMEFRAMES_BY_NAME[tf]
+        if tfo.name not in bundle.manifest.get("timeframes", []):
+            return {"model_id": bundle.id, "timeframe": tfo.name, "total": 0, "items": [],
+                    "note": f"The active model wasn't trained on {tfo.name}"}
+        key = (bundle.id, tfo.name, len(m1), m1.index[-1])
+        scores = self._queue.get(key)
+        if scores is None:
+            scores = queue_scores(bundle, m1, tfo)
+            self._queue = {k: v for k, v in self._queue.items() if k[:2] != key[:2]}  # one history per model and tf
+            self._queue[key] = scores
+        df = scores if not tag else scores[scores["tag"] == tag]
+        t, tags = df["time_unix"].to_numpy(), df["tag"].to_numpy()
+        keep = np.ones(len(df), dtype=bool)
+        for lab in self.labels(symbol, tfo.name):
+            keep &= ~((tags == lab["tag"]) & (t >= lab["start"]) & (t <= lab["end"]))
+        if scope != "all":
+            # A reviewed range covers the tags it was reviewed for.
+            inside = np.zeros(len(df), dtype=bool)
+            for r in self.reviewed(symbol, tfo.name):
+                inside |= np.isin(tags, r["tags"]) & (t >= r["start"]) & (t <= r["end"])
+            keep &= inside if scope == "inside" else ~inside
+        df = df[keep]
+        items = [{"id": f"{tfo.name}:{row.tag}:{row.time_unix}", "tag": row.tag, "title": TAGS[row.tag]["title"],
+                  "time_unix": int(row.time_unix), "prob": float(row.prob), "cut": float(row.cut),
+                  "distance": float(row.distance)} for row in df.head(limit).itertuples(index=False)]
+        return {"model_id": bundle.id, "timeframe": tfo.name, "total": int(len(df)), "items": items, "note": None}
 
     @property
     def active_id(self) -> str | None:

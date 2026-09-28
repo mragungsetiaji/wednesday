@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  fetchLabWindow, labBatch, reviewBlock,
-  type LabBatch, type LabBatchResult, type LabStatus, type LabSuggestion, type LabWindow, type MlBlock,
+  fetchLabQueue, fetchLabWindow, labBatch, reviewBlock,
+  type LabBatch, type LabBatchResult, type LabQueue, type LabStatus, type LabSuggestion, type LabWindow, type MlBlock,
+  type QueueScope,
 } from "../api";
 import { fmtPrice, fmtUnix, fmtWhy } from "../format";
 import { CheckIcon, CrossIcon } from "../icons";
@@ -18,6 +19,13 @@ const LIMIT = 300;
 type Selection = { anchor: number; start: number; end: number };
 
 const UNDO_DEPTH = 100;
+const QUEUE_LEAD = 100; // candles shown after a queue candle when the page has to move to it
+
+const SCOPES: { id: QueueScope; title: string }[] = [
+  { id: "all", title: "All candles" },
+  { id: "outside", title: "Outside reviewed ranges" },
+  { id: "inside", title: "Inside reviewed ranges" },
+];
 
 /** One labelling step as the batch that takes it back and the batch that does it again. */
 type Step = { undo: LabBatch; redo: LabBatch };
@@ -31,6 +39,9 @@ function stepOf(res: LabBatchResult): Step {
       delete_labels: res.deleted_labels.map((l) => l.id), delete_reviewed: res.deleted_reviewed.map((r) => r.id) },
   };
 }
+
+/** Queue candles sit near the cut, so their chances need a decimal to tell apart. */
+const pct1 = (p: number) => `${(p * 100).toFixed(1)}%`;
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -63,6 +74,16 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
   const future = useRef<Step[]>([]);
   const [depth, setDepth] = useState({ undo: 0, redo: 0 });
   const syncDepth = () => setDepth({ undo: past.current.length, redo: future.current.length });
+  // Review queue: candles the active model is least sure about.
+  const [queueOn, setQueueOn] = usePref("wed.labQueue", false);
+  const [qTag, setQTag] = usePref("wed.labQueueTag", "");
+  const [qScope, setQScope] = usePref<QueueScope>("wed.labQueueScope", "all");
+  const [queue, setQueue] = useState<LabQueue | null>(null);
+  const [qId, setQId] = useState<string | null>(null); // the queue candle being looked at
+  const [qPos, setQPos] = useState(0); // its place in the list, for when it leaves after tagging
+  const [focus, setFocus] = useState<number | null>(null);
+  const qStart = useRef<{ key: string; total: number } | null>(null);
+  const queueActive = queueOn && hasModel;
 
   useEffect(() => {
     let alive = true;
@@ -79,6 +100,25 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
       alive = false;
     };
   }, [tf, end, showModel, hasModel, reload]);
+
+  useEffect(() => {
+    if (!queueActive) {
+      setQueue(null);
+      return;
+    }
+    let alive = true;
+    fetchLabQueue(tf, qTag, qScope)
+      .then((q) => {
+        if (!alive) return;
+        const key = `${q.model_id}:${tf}:${qTag}:${qScope}`;
+        if (qStart.current?.key !== key) qStart.current = { key, total: q.total };
+        setQueue(q);
+      })
+      .catch((e) => alive && setError(e instanceof Error ? e.message : String(e)));
+    return () => {
+      alive = false;
+    };
+  }, [queueActive, tf, qTag, qScope, reload, status.active]);
 
   const candles = useMemo(() => win?.candles ?? [], [win]);
   const times = useMemo(() => candles.map((c) => c.time), [candles]);
@@ -180,6 +220,33 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
     change({ add_reviewed: [{ timeframe: tf, start: r.start, end: r.end, tags: tags.map((t) => t.id) }] });
   }, [tf, tags, change]);
 
+  const first = candles[0]?.time;
+  const last = candles[candles.length - 1]?.time;
+
+  /** Select a queue candle; the page only moves when the candle isn't on it. */
+  const goTo = useCallback((i: number) => {
+    const items = queue?.items ?? [];
+    if (!items.length) return;
+    const item = items[Math.max(0, Math.min(items.length - 1, i))];
+    const t = item.time_unix;
+    setQId(item.id);
+    setQPos(items.indexOf(item));
+    setSel({ anchor: t, start: t, end: t });
+    setFocus(t);
+    if (!(first !== undefined && last !== undefined && t >= first && t <= last)) {
+      const next = t + QUEUE_LEAD * TF_SECONDS[tf];
+      setEnd(win?.history && next >= win.history.last_unix ? null : next);
+    }
+  }, [queue, first, last, tf, win]);
+
+  const step = useCallback((dir: 1 | -1) => {
+    const items = queue?.items ?? [];
+    const at = qId ? items.findIndex((x) => x.id === qId) : -1;
+    if (at >= 0) goTo(at + dir);
+    else if (qId) goTo(dir > 0 ? qPos : qPos - 1); // it left the queue: the next one slid into its place
+    else goTo(0);
+  }, [queue, qId, qPos, goTo]);
+
   // Keyboard: numbers tag, N flips to "not", A accepts, V / X review, arrows move, Delete removes, Esc clears,
   // Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y; Cmd on a Mac) undo and redo.
   useEffect(() => {
@@ -196,6 +263,9 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= tags.length) tag(tags[n - 1].id);
+      else if ((e.key === "j" || e.key === "J") && queueActive) step(1);
+      else if ((e.key === "k" || e.key === "K") && queueActive) step(-1);
+      else if ((e.key === "q" || e.key === "Q") && hasModel) setQueueOn(!queueOn);
       else if (e.key === "n" || e.key === "N") setNegative((v) => !v);
       else if (e.key === "a" || e.key === "A") accept(suggestionsAt);
       else if (e.key === "v" || e.key === "V") review(predictionsAt, "valid");
@@ -214,10 +284,10 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tags, tag, accept, review, markReviewed, remove, undo, redo, pick, sel, range, times, suggestionsAt, predictionsAt, labelsAt]);
+  }, [tags, tag, accept, review, markReviewed, remove, undo, redo, pick, sel, range, times, suggestionsAt, predictionsAt, labelsAt,
+    queueActive, step, hasModel, queueOn, setQueueOn]);
 
-  const first = candles[0]?.time;
-  const last = candles[candles.length - 1]?.time;
+
   const older = () => first && setEnd(first - 1);
   const newer = () => {
     if (!last) return;
@@ -231,7 +301,12 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
   const setTimeframe = (name: string) => {
     setTf(name);
     setSel(null);
+    setQId(null);
   };
+
+  const current = queue?.items.find((x) => x.id === qId) ?? null;
+  const detectorAt = current ? (win?.suggestions ?? []).find((x) => x.tag === current.tag && x.time_unix === current.time_unix) : undefined;
+  const doneHere = queue && qStart.current ? Math.max(0, qStart.current.total - queue.total) : 0;
 
   return (
     <div className="lab-label">
@@ -260,10 +335,14 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
               <input type="checkbox" checked={showModel && hasModel} disabled={!hasModel} onChange={(e) => setShowModel(e.target.checked)} />
               Model
             </label>
+            <label className="toggle" title={hasModel ? "Candles the model is least sure about (Q)" : "Set a model active in Models"}>
+              <input type="checkbox" checked={queueActive} disabled={!hasModel} onChange={(e) => setQueueOn(e.target.checked)} />
+              Queue
+            </label>
           </div>
         </div>
         <LabChart candles={candles} marks={marks} reviewed={reviewed} selection={range} highlight={hot} palette={palette}
-          resetKey={`${tf}:${end ?? "latest"}`} loading={loading && !win} onPick={pick} />
+          resetKey={`${tf}:${end ?? "latest"}`} focus={focus} loading={loading && !win} onPick={pick} />
         <div className="chart-foot">
           <ul className="legend" aria-label="Chart legend">
             <li><span className="key key-bull" /> Your label</li>
@@ -277,6 +356,51 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
       </section>
 
       <aside className="rail lab-rail" aria-label="Label the selection">
+        {queueActive && (
+          <div className="lab-block lab-queue">
+            <div className="lab-block-head">
+              <h2>Queue</h2>
+              <span className="muted num" role="status">
+                {queue ? `${queue.total} in queue · ${doneHere} done this session` : "Scoring the history…"}
+              </span>
+            </div>
+            <div className="lab-queue-filters">
+              <select value={qTag} aria-label="Queue tag" onChange={(e) => { setQTag(e.target.value); setQId(null); }}>
+                <option value="">All tags</option>
+                {tags.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </select>
+              <select value={qScope} aria-label="Queue candles" onChange={(e) => { setQScope(e.target.value as QueueScope); setQId(null); }}>
+                {SCOPES.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
+              </select>
+            </div>
+            {queue?.note && <p className="lab-hint">{queue.note}</p>}
+            {current ? (
+              <dl className="lab-queue-call">
+                <dt>Candle</dt><dd className="num">{current.title} · {fmtUnix(current.time_unix)}</dd>
+                <dt>Model</dt>
+                <dd>
+                  {pct1(current.prob)} against a cut of {pct1(current.cut)}:{" "}
+                  <strong>{current.prob >= current.cut ? "tags it" : "doesn't tag it"}</strong>
+                </dd>
+                <dt>Detector</dt>
+                <dd>{detectorAt ? <>found it{detectorAt.priority === "middle" ? " (mid)" : ""}</> : "didn't find it"}</dd>
+              </dl>
+            ) : (
+              queue && queue.total > 0 && <p className="lab-hint">Press <Kbd>J</Kbd> for the candle the model is least sure about.</p>
+            )}
+            {queue && queue.total === 0 && !queue.note && <p className="lab-hint">Nothing left: every candle here is labelled.</p>}
+            <div className="lab-actions">
+              <button type="button" className="button quiet" disabled={!queue?.items.length} onClick={() => step(-1)}>
+                Previous <Kbd>K</Kbd>
+              </button>
+              <button type="button" className="button secondary" disabled={!queue?.items.length} onClick={() => step(1)}>
+                Next <Kbd>J</Kbd>
+              </button>
+            </div>
+            <p className="lab-hint">Tag it with the number keys (<Kbd>N</Kbd> first for “not”); tagged candles leave the queue.</p>
+          </div>
+        )}
+
         <div className="lab-block">
           <h2>Selection</h2>
           {range ? (
@@ -420,6 +544,8 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
             <dt><Kbd>V</Kbd> <Kbd>X</Kbd></dt><dd>Model block valid / invalid</dd>
             <dt><Kbd>←</Kbd> <Kbd>→</Kbd></dt><dd>Move; with Shift, grow the range</dd>
             <dt><Kbd>R</Kbd></dt><dd>Selection reviewed</dd>
+            <dt><Kbd>Q</Kbd></dt><dd>Review queue on / off</dd>
+            <dt><Kbd>J</Kbd> <Kbd>K</Kbd></dt><dd>Next / previous candle in the queue</dd>
             <dt><Kbd>Del</Kbd></dt><dd>Remove labels on the selection</dd>
             <dt><Kbd>Ctrl</Kbd> <Kbd>Z</Kbd></dt><dd>Undo; with Shift (or <Kbd>Ctrl</Kbd> <Kbd>Y</Kbd>), redo. Cmd on a Mac</dd>
             <dt><Kbd>Esc</Kbd></dt><dd>Clear the selection</dd>

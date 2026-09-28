@@ -3467,3 +3467,24 @@ fieldset:disabled .switch {
 .token-new {
   margin-top: var(--s3);
 }
+
+/* Lab review queue. */
+.lab-queue-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+.lab-queue-call {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--s1) var(--s3);
+  margin: 0 0 var(--s2);
+  font-size: var(--text-sm);
+}
+.lab-queue-call dt {
+  color: var(--text-3);
+}
+.lab-queue-call dd {
+  margin: 0;
+}

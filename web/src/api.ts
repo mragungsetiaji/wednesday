@@ -716,6 +716,13 @@ export interface LabStatus {
 }
 
 export const fetchLab = () => getJson<LabStatus>("/api/lab");
+/** Review queue: candles where the active model is least sure, closest to a tag's cut first. */
+export interface LabQueueItem { id: string; tag: string; title: string; time_unix: number; prob: number; cut: number; distance: number }
+export interface LabQueue { model_id: string; timeframe: string; total: number; items: LabQueueItem[]; note: string | null }
+export type QueueScope = "all" | "inside" | "outside";
+export const fetchLabQueue = (tf: string, tag: string, scope: QueueScope, limit = 200) =>
+  getJson<LabQueue>(`/api/lab/queue?tf=${encodeURIComponent(tf)}&scope=${scope}&limit=${limit}${tag ? `&tag=${encodeURIComponent(tag)}` : ""}`);
+
 export const fetchLabWindow = (tf: string, end: number | null, limit: number, model: boolean) =>
   getJson<LabWindow>(`/api/lab/candles?tf=${encodeURIComponent(tf)}&limit=${limit}&model=${model}${end ? `&end=${end}` : ""}`);
 export const addLabel = (l: { timeframe: string; tag: string; start: number; end: number; value: 0 | 1; top?: number | null; bottom?: number | null; origin?: string }) =>
