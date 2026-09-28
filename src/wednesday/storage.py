@@ -139,6 +139,22 @@ lab_runs_table = Table(
 )
 
 
+# ---- Dashboard login: sessions and API tokens -----------------------------------------------
+# Only SHA-256 hashes of the secrets are kept; the login password is never stored here.
+
+auth_tokens_table = Table(
+    "auth_tokens",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("kind", String(16), nullable=False),  # "session" (browser cookie) or "api" (scripts)
+    Column("name", String(120), nullable=True),  # API tokens: what the user called it
+    Column("hash", String(64), nullable=False, unique=True),  # sha256 hex of the secret
+    Column("created_at", String(40), nullable=False),
+    Column("last_used_at", String(40), nullable=True),
+    Column("expires_at", String(40), nullable=True),  # sessions only; API tokens last until revoked
+)
+
+
 # ---- Journal: trading accounts imported from MT5--------------------------------------------
 # Deal times are unix seconds of the broker's server clock, as MT5 reports them.
 
@@ -280,6 +296,39 @@ class Store:
     def delete_setting(self, key: str) -> None:
         with self.engine.begin() as conn:
             conn.execute(settings_table.delete().where(settings_table.c.key == key))
+
+    # ---- login tokens ---------------------------------------------------
+    def auth_token_add(self, row: dict) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(auth_tokens_table.insert().values(**row))
+
+    def auth_token_find(self, hashed: str) -> dict | None:
+        with self.engine.connect() as conn:
+            row = conn.execute(select(auth_tokens_table).where(auth_tokens_table.c.hash == hashed)).mappings().first()
+        return dict(row) if row else None
+
+    def auth_token_touch(self, token_id: str, when: str) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(auth_tokens_table.update().where(auth_tokens_table.c.id == token_id).values(last_used_at=when))
+
+    def auth_tokens(self, kind: str) -> list[dict]:
+        t = auth_tokens_table
+        with self.engine.connect() as conn:
+            rows = conn.execute(select(t).where(t.c.kind == kind).order_by(t.c.created_at)).mappings().all()
+        return [dict(r) for r in rows]
+
+    def auth_token_delete(self, token_id: str | None = None, kind: str | None = None, expired_before: str | None = None) -> int:
+        """Delete one token, or every token of a kind, or sessions that expired before a time."""
+        t = auth_tokens_table
+        q = t.delete()
+        if token_id is not None:
+            q = q.where(t.c.id == token_id)
+        if kind is not None:
+            q = q.where(t.c.kind == kind)
+        if expired_before is not None:
+            q = q.where(t.c.expires_at.is_not(None), t.c.expires_at < expired_before)
+        with self.engine.begin() as conn:
+            return conn.execute(q).rowcount
 
     # ---- bars -----------------------------------------------------------
     def save_bars(self, source: str, symbol: str, df: pd.DataFrame) -> int:

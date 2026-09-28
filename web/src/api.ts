@@ -153,8 +153,17 @@ export interface CandlesResponse {
   swings: SwingPoint[];
 }
 
+/** Fired when the server wants a login (the session ended or was never there); the login screen listens. */
+export const LOGGED_OUT_EVENT = "wednesday:logged-out";
+
+async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(url, init);
+  if (res.status === 401 && !url.startsWith("/api/auth/")) window.dispatchEvent(new Event(LOGGED_OUT_EVENT));
+  return res;
+}
+
 async function getJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await apiFetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }
@@ -327,7 +336,7 @@ export interface AlertsResponse {
 }
 
 async function send<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     method,
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -736,7 +745,7 @@ export const fetchTrust = () => getJson<TrustSettings>("/api/lab/trust");
 export const saveTrust = (t: TrustSettings) => send<TrustSettings>("PUT", "/api/lab/trust", t);
 
 async function upload<T>(url: string, file: File): Promise<T> {
-  const res = await fetch(url, { method: "POST", body: file });
+  const res = await apiFetch(url, { method: "POST", body: file });
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
     try {
@@ -857,7 +866,7 @@ export const stopBackfill = () => send<LabData>("DELETE", "/api/lab/data/backfil
 export const confirmBars = (token: string, clock: string) =>
   send<LabData & { imported: BarsImported }>("POST", `/api/lab/data/import/${token}`, { clock });
 export async function stageBars(file: File): Promise<BarsPreview> {
-  const res = await fetch("/api/lab/data/import", { method: "POST", body: file });
+  const res = await apiFetch("/api/lab/data/import", { method: "POST", body: file });
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
     try {
@@ -1049,7 +1058,7 @@ export const saveTradeNote = (id: string, tradeId: string, note: string, tags: s
   send<{ note: string; tags: string[] }>("PUT", `/api/journals/${encodeURIComponent(id)}/trades/${encodeURIComponent(tradeId)}/note`, { note, tags });
 export const journalCsvUrl = (id: string) => `/api/journals/${encodeURIComponent(id)}/trades.csv`;
 export async function importReport(id: string, file: File): Promise<{ trades: number; cash: number; journal: Journal }> {
-  const res = await fetch(`/api/journals/${encodeURIComponent(id)}/import`, { method: "POST", body: file });
+  const res = await apiFetch(`/api/journals/${encodeURIComponent(id)}/import`, { method: "POST", body: file });
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
     try {
@@ -1061,3 +1070,14 @@ export async function importReport(id: string, file: File): Promise<{ trades: nu
   }
   return res.json();
 }
+
+/** Optional dashboard login (XAU_AUTH_PASSWORD) and the API tokens scripts use with it. */
+export interface AuthStatus { enabled: boolean; logged_in: boolean }
+export interface ApiToken { id: string; name: string; created_at: string; last_used_at: string | null }
+export const fetchAuthStatus = () => getJson<AuthStatus>("/api/auth/status");
+export const logIn = (password: string) => send<AuthStatus>("POST", "/api/auth/login", { password });
+export const logOut = () => send<AuthStatus>("POST", "/api/auth/logout");
+export const fetchApiTokens = () => getJson<{ tokens: ApiToken[] }>("/api/auth/tokens");
+/** The secret (`token`) is in this response only. */
+export const createApiToken = (name: string) => send<ApiToken & { token: string }>("POST", "/api/auth/tokens", { name });
+export const revokeApiToken = (id: string) => send<{ tokens: ApiToken[] }>("DELETE", `/api/auth/tokens/${encodeURIComponent(id)}`);

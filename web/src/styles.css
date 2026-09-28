@@ -3452,3 +3452,18 @@ fieldset:disabled .switch {
   border-color: var(--error);
   color: var(--error);
 }
+
+/* Login screen and the API token shown once. */
+.login-card {
+  max-width: 360px;
+}
+.login-card .field input {
+  width: 100%;
+}
+.token-once input {
+  width: 100%;
+  margin-top: var(--s1);
+}
+.token-new {
+  margin-top: var(--s3);
+}

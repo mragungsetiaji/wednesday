@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
+from .auth import Auth, install as install_auth
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
 from .brief import BRIEF_KEY, BriefError, BriefSettings
@@ -59,11 +60,18 @@ def _iso(dt) -> str | None:
 
 
 def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | None = None,
-               clock: str = "UTC") -> FastAPI:
-    """Serve a fixed :class:`Engine`, or a :class:`Runtime` whose data source the dashboard can change."""
+               clock: str = "UTC", auth: Auth | None = None) -> FastAPI:
+    """Serve a fixed :class:`Engine`, or a :class:`Runtime` whose data source the dashboard can change.
+    ``auth`` turns on the login (see :mod:`wednesday.auth`); without it the dashboard is open."""
     app = FastAPI(title="Wednesday", docs_url="/api/docs", openapi_url="/api/openapi.json")
     runtime = target if isinstance(target, Runtime) else None
     cfg = target.cfg
+    install_auth(app, auth or Auth())
+
+    @app.get("/api/health")
+    def health() -> dict:
+        """Liveness for proxies and monitors; the only route open without a login."""
+        return {"ok": True, "version": __version__}
 
     def current() -> Engine:
         # Looked up per request: applying new settings swaps the engine.
