@@ -669,6 +669,7 @@ export interface ModelManifest {
   };
   data: { first: string; last: string; m1_bars: number; labels: number };
   feed?: { source: string; clock: string }; // missing in files from before 0.1.7
+  signature?: Signature; // in the Models list only
   sklearn: string;
   sha256: string;
 }
@@ -719,7 +720,20 @@ export const cancelTraining = () => send<LabStatus>("DELETE", "/api/lab/train");
 export const setActiveModel = (id: string | null) => send<LabStatus>("PUT", "/api/lab/active", { id });
 export const deleteModel = (id: string) => send<LabStatus>("DELETE", `/api/lab/models/${encodeURIComponent(id)}`);
 export const modelFileUrl = (id: string) => `/api/lab/models/${encodeURIComponent(id)}/file`;
-export const confirmImport = (token: string) => send<LabStatus & { imported: ModelManifest }>("POST", `/api/lab/models/import/${token}`);
+export const confirmImport = (token: string, trust: boolean) =>
+  send<LabStatus & { imported: ModelManifest }>("POST", `/api/lab/models/import/${token}`, { trust });
+
+/** Who signed a model file: a trusted key, an unknown one, nobody, or a signature that doesn't match. */
+export interface Signature {
+  state: "trusted" | "unknown" | "unsigned" | "invalid";
+  key_id: string | null;
+  signer: string | null;
+  reason: string | null;
+}
+export interface TrustedKey { name: string; public_key: string; key_id?: string; builtin?: boolean }
+export interface TrustSettings { keys: TrustedKey[]; only_signed: boolean }
+export const fetchTrust = () => getJson<TrustSettings>("/api/lab/trust");
+export const saveTrust = (t: TrustSettings) => send<TrustSettings>("PUT", "/api/lab/trust", t);
 
 async function upload<T>(url: string, file: File): Promise<T> {
   const res = await fetch(url, { method: "POST", body: file });
@@ -739,6 +753,8 @@ export interface StagedModel {
   token: string;
   manifest: ModelManifest;
   exists: boolean;
+  signature: Signature;
+  only_signed: boolean; // only models signed by a trusted key may load
   warnings: string[]; // how the model's training feed differs from this one
 }
 export const stageImport = (file: File) => upload<StagedModel>("/api/lab/models/import", file);

@@ -369,13 +369,27 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
             raise HTTPException(422, str(exc)) from exc
 
     @r.post("/models/import/{token}")
-    def confirm_import(token: str) -> dict:
+    def confirm_import(token: str, body: dict = Body(default={})) -> dict:
+        """Load a staged model file; ``trust`` is the user's "I trust this file" for one that
+        isn't signed by a trusted key."""
         need_ml()
         try:
-            manifest = lab().confirm_import(token)
+            manifest = lab().confirm_import(token, bool(body.get("trust")))
         except ModelFileError as exc:
             raise HTTPException(422, str(exc)) from exc
         return {"imported": manifest, **status()}
+
+    @r.get("/trust")
+    def get_trust() -> dict:
+        """Public keys whose signatures are trusted, and whether only signed models load."""
+        return lab().trust()
+
+    @r.put("/trust")
+    def put_trust(body: dict = Body(...)) -> dict:
+        try:
+            return lab().set_trust(body)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     @r.get("/predictions")
     def predictions(tf: str = Query("5M"), limit: int = Query(200, ge=10, le=2000),

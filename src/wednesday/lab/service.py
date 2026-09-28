@@ -3,9 +3,11 @@ one training run at a time on a background thread."""
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import logging
+import os
 import secrets
 import threading
 import time
@@ -24,7 +26,7 @@ from .dataset import ts, unix
 from .model import ModelBundle, ModelFileError, load, load_bytes, read_manifest
 from .outcome import TradePlan, plan_levels, simulate
 from .tags import OB_TAGS, TAGS
-from . import drift
+from . import drift, signing
 from .train import TrainingCancelled, TrainParams, frames_for, score_window, train_bundle
 
 log = logging.getLogger(__name__)
@@ -116,6 +118,7 @@ class Lab:
                          "cancelled": False}
         self._cancel = threading.Event()
         self._scorecard: tuple | None = None
+        self._signatures: dict[str, tuple] = {}
         self.backfill = Backfill()
         self._staged_bars: dict[str, ParsedBars] = {}
         self._staged_labels: dict[str, dict] = {}
@@ -358,7 +361,16 @@ class Lab:
             self._progress("Saving")  # the last chance to stop before a file exists
             if feed:
                 bundle.manifest["feed"] = feed
-            bundle.save(self._path(bundle.id))
+            key_path = os.environ.get("XAU_SIGNING_KEY")
+            if key_path:  # the trainer's own key: every model it makes goes out signed
+                path = self._path(bundle.id)
+                data = signing.sign(bundle.to_bytes(), signing.load_private_key(key_path))
+                path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(".tmp")
+                tmp.write_bytes(data)
+                tmp.replace(path)
+            else:
+                bundle.save(self._path(bundle.id))
             self.training["last"] = bundle.manifest
             run.update(status="done", model_id=bundle.id)
         except TrainingCancelled:
@@ -393,10 +405,63 @@ class Lab:
         out = []
         for path in sorted(self.models_dir.glob("*.zip"), reverse=True):
             try:
-                out.append(read_manifest(path.read_bytes()))
+                data = path.read_bytes()
+                out.append({**read_manifest(data), "signature": self._signature(path, data)})
             except (OSError, ModelFileError) as exc:
                 log.warning("skipping model file %s: %s", path, exc)
         return out
+
+    # ---- signatures -----------------------------------------------------------------
+    def trust(self) -> dict:
+        """The user's trusted public keys and whether only models signed by a trusted key load."""
+        saved = self.store.get_setting(signing.TRUST_KEY) or {}
+        builtin = [{"name": signing.BUILTIN_NAMES.get(k, k), "public_key": v, "builtin": True}
+                   for k, v in signing.BUILTIN_KEYS.items()]
+        keys = [{**k, "key_id": signing.key_id(signing.parse_public_key(k["public_key"])), "builtin": False}
+                for k in saved.get("keys") or []]
+        for k in builtin:
+            k["key_id"] = signing.key_id(signing.parse_public_key(k["public_key"]))
+        return {"keys": builtin + keys, "only_signed": bool(saved.get("only_signed"))}
+
+    def set_trust(self, body: dict) -> dict:
+        keys = []
+        for k in body.get("keys") or []:
+            if k.get("builtin"):
+                continue
+            name = str(k.get("name") or "").strip()[:60]
+            if not name:
+                raise ValueError("Give each trusted key a name")
+            raw = signing.parse_public_key(str(k.get("public_key") or ""))  # SigningError is a ValueError
+            keys.append({"name": name, "public_key": base64.b64encode(raw).decode()})
+        self.store.set_setting(signing.TRUST_KEY, {"keys": keys, "only_signed": bool(body.get("only_signed"))})
+        self._signatures.clear()
+        return self.trust()
+
+    def _trusted(self) -> dict[bytes, str]:
+        return signing.trusted_keys((self.store.get_setting(signing.TRUST_KEY) or {}).get("keys"))
+
+    def _signature(self, path: Path, data: bytes | None = None) -> dict:
+        """Signature state of a model file, cached until the file changes."""
+        st = path.stat()
+        stamp = (st.st_mtime_ns, st.st_size)
+        hit = self._signatures.get(str(path))
+        if hit and hit[0] == stamp:
+            return hit[1]
+        state = signing.verify(data if data is not None else path.read_bytes(), self._trusted())
+        self._signatures[str(path)] = (stamp, state)
+        return state
+
+    def _check_signature(self, state: dict, trust_file: bool) -> None:
+        """Refuse what may not load: a broken signature always, anything not signed by a trusted
+        key with "only signed" on, and an unsigned or unknown file the user didn't vouch for."""
+        if state["state"] == "invalid":
+            raise ModelFileError(f"Not loading it: {state['reason']}")
+        if state["state"] == "trusted":
+            return
+        if self.trust()["only_signed"]:
+            raise ModelFileError("Only models signed by a trusted key load (turn that off in Settings > Lab)")
+        if not trust_file:
+            raise ModelFileError("This file isn't signed by a trusted key; confirm that you trust it to load it")
 
     @property
     def active_id(self) -> str | None:
@@ -422,7 +487,11 @@ class Lab:
             return
         if not self._path(model_id).is_file():
             raise ModelFileError("No such model")
-        self._active = load(self._path(model_id))  # proves it loads before it becomes active
+        path = self._path(model_id)
+        # The file on disk could have changed since it was imported: check it again.
+        self._signatures.pop(str(path), None)
+        self._check_signature(self._signature(path), trust_file=True)
+        self._active = load(path)  # proves it loads before it becomes active
         self.store.set_setting(ACTIVE_KEY, {"id": model_id, "since": _now(), "since_unix": since_unix})
 
     def scorecard(self, symbol: str, m1: pd.DataFrame | None) -> dict | None:
@@ -480,13 +549,21 @@ class Lab:
             self._staged.pop(next(iter(self._staged)))
         self._staged[token] = data
         exists = self._path(manifest["id"]).is_file()
-        return {"token": token, "manifest": manifest, "exists": exists,
-                "warnings": feed_warnings(manifest, symbol, clock)}
+        try:
+            sig = signing.verify(data, self._trusted())
+        except signing.SigningError as exc:
+            raise ModelFileError(str(exc)) from exc
+        return {"token": token, "manifest": manifest, "exists": exists, "signature": sig,
+                "only_signed": self.trust()["only_signed"], "warnings": feed_warnings(manifest, symbol, clock)}
 
-    def confirm_import(self, token: str) -> dict:
-        data = self._staged.pop(token, None)
+    def confirm_import(self, token: str, trust_file: bool = False) -> dict:
+        """Load a staged file. One not signed by a trusted key needs ``trust_file`` (the user's
+        "I trust this file"), and none loads when "only signed" is on."""
+        data = self._staged.get(token)
         if data is None:
             raise ModelFileError("That upload expired; choose the file again")
+        self._check_signature(signing.verify(data, self._trusted()), trust_file)
+        del self._staged[token]
         bundle = load_bytes(data)  # safe unpickler + hash check
         path = self._path(bundle.id)
         path.parent.mkdir(parents=True, exist_ok=True)

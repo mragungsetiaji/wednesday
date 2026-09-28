@@ -321,9 +321,13 @@ def test_lab_api_flow(lab_api):
     assert staged["manifest"]["name"] == "first" and not staged["exists"]
     assert staged["manifest"]["feed"]["clock"] and staged["warnings"] == []  # same feed it was trained on
     assert api.get("/api/lab").json()["models"] == []  # nothing loaded yet
-    done = api.post(f"/api/lab/models/import/{staged['token']}").json()
+    assert staged["signature"]["state"] == "unsigned"
+    refused = api.post(f"/api/lab/models/import/{staged['token']}", json={})
+    assert refused.status_code == 422 and "trust" in refused.json()["detail"]  # needs "I trust this file"
+    done = api.post(f"/api/lab/models/import/{staged['token']}", json={"trust": True}).json()
     assert done["imported"]["id"] == model["id"] and len(done["models"]) == 1
-    assert api.post(f"/api/lab/models/import/{staged['token']}").status_code == 422  # used up
+    assert done["models"][0]["signature"]["state"] == "unsigned"
+    assert api.post(f"/api/lab/models/import/{staged['token']}", json={"trust": True}).status_code == 422  # used up
     assert api.post("/api/lab/models/import", content=b"not a zip").status_code == 422
 
     assert api.delete(f"/api/lab/reviewed/{reviewed['id']}").json()["deleted"]
@@ -591,6 +595,104 @@ def test_drift_scorecard():
     assert any("ATR is" in w for w in card["warnings"])
     bundle.manifest.pop("inputs")  # a file from before 0.1.7: reviews and market only
     assert drift.input_shift(bundle, m1) is None
+
+
+def small_model_file(model_id="m1") -> bytes:
+    from sklearn.ensemble import HistGradientBoostingClassifier
+
+    X = pd.DataFrame({"a": np.linspace(0, 1, 40)})
+    model = HistGradientBoostingClassifier(max_iter=5).fit(X, (X["a"] > 0.5).astype(int))
+    return ModelBundle({"id": model_id, "name": "test", "tags": {}, "params": {"lookback": 2, "confirm": 1}},
+                       {"ob_bull": model}, None, ["a"]).to_bytes()
+
+
+def rezip(data: bytes, name: str, change) -> bytes:
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        files = {n: zf.read(n) for n in zf.namelist()}
+    files[name] = change(files[name])
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as zf:
+        for n, content in files.items():
+            zf.writestr(n, content)
+    return out.getvalue()
+
+
+def test_sign_and_verify_model_files(tmp_path):
+    from wednesday.lab import signing
+
+    public = signing.new_key(tmp_path / "me.pem")
+    with pytest.raises(signing.SigningError, match="already exists"):
+        signing.new_key(tmp_path / "me.pem")
+    assert (tmp_path / "me.pem").stat().st_mode & 0o077 == 0  # owner only
+    key = signing.load_private_key(tmp_path / "me.pem")
+    data = small_model_file()
+    signed = signing.sign(data, key)
+
+    assert signing.verify(data)["state"] == "unsigned"
+    unknown = signing.verify(signed)
+    assert unknown["state"] == "unknown" and unknown["key_id"] == signing.key_id(signing.parse_public_key(public))
+    mine = signing.trusted_keys([{"name": "Me", "public_key": public}])
+    assert signing.verify(signed, mine) == {"state": "trusted", "key_id": unknown["key_id"], "signer": "Me", "reason": None}
+    assert load_bytes(signed).id == "m1"  # a signed file still loads the same way
+
+    # One byte changed in the manifest or the pickle, and it no longer verifies.
+    manifest_edit = rezip(signed, "manifest.json", lambda b: b.replace(b'"test"', b'"tesT"'))
+    assert signing.verify(manifest_edit, mine)["state"] == "invalid"
+    pickle_edit = rezip(signed, "model.pkl", lambda b: b[:-1] + bytes([b[-1] ^ 1]))
+    assert signing.verify(pickle_edit, mine)["state"] == "invalid"
+    # A new pickle with a matching hash in a re-signed manifest needs the private key: re-signing with
+    # another key makes it "unknown", never "trusted".
+    signing.new_key(tmp_path / "other.pem")
+    other = signing.load_private_key(tmp_path / "other.pem")
+    assert signing.verify(signing.sign(data, other), mine)["state"] == "unknown"
+    with pytest.raises(signing.SigningError):
+        signing.parse_public_key("not base64!")
+
+
+def test_only_signed_models_load(lab_api, tmp_path):
+    from wednesday.lab import signing
+
+    api, runtime = lab_api
+    public = signing.new_key(tmp_path / "me.pem")
+    key = signing.load_private_key(tmp_path / "me.pem")
+    unsigned = small_model_file("u1")
+    signed = signing.sign(small_model_file("s1"), key)
+
+    st = api.get("/api/lab/trust").json()
+    assert st["only_signed"] is False and st["keys"][0]["name"] == "momentum.id" and st["keys"][0]["builtin"]
+    assert api.put("/api/lab/trust", json={"keys": [{"name": "Me", "public_key": "nope"}]}).status_code == 422
+    st = api.put("/api/lab/trust", json={"keys": [*st["keys"], {"name": "Me", "public_key": public}],
+                                         "only_signed": True}).json()
+    assert [k["name"] for k in st["keys"]] == ["momentum.id", "Me"] and st["only_signed"]
+
+    staged = api.post("/api/lab/models/import", content=signed).json()
+    assert staged["signature"]["state"] == "trusted" and staged["signature"]["signer"] == "Me"
+    assert api.post(f"/api/lab/models/import/{staged['token']}", json={}).status_code == 200  # no checkbox needed
+    staged = api.post("/api/lab/models/import", content=unsigned).json()
+    blocked = api.post(f"/api/lab/models/import/{staged['token']}", json={"trust": True})
+    assert blocked.status_code == 422 and "Only models signed" in blocked.json()["detail"]  # enforced by the API
+
+    # The file on disk is checked again when it's set active.
+    path = runtime.lab.models_dir / "s1.zip"
+    assert api.put("/api/lab/active", json={"id": "s1"}).status_code == 200
+    path.write_bytes(rezip(path.read_bytes(), "manifest.json", lambda b: b.replace(b'"test"', b'"tesT"')))
+    assert api.put("/api/lab/active", json={"id": None}).status_code == 200
+    refused = api.put("/api/lab/active", json={"id": "s1"})
+    assert refused.status_code == 422 and "signature" in refused.json()["detail"]
+    assert next(m for m in api.get("/api/lab").json()["models"] if m["id"] == "s1")["signature"]["state"] == "invalid"
+
+
+def test_signing_cli(tmp_path, capsys):
+    from wednesday import cli
+    from wednesday.lab import signing
+
+    key = tmp_path / "k.pem"
+    cli.run(cli.parse_args(["--new-signing-key", str(key), "--db", "none"]))
+    public = capsys.readouterr().out.split("Public key")[1].split(": ")[1].strip()
+    model = tmp_path / "m.zip"
+    model.write_bytes(small_model_file())
+    cli.run(cli.parse_args(["--sign-model", str(model), "--key", str(key), "--db", "none"]))
+    assert signing.verify(model.read_bytes(), signing.trusted_keys([{"name": "k", "public_key": public}]))["state"] == "trusted"
 
 
 def test_lab_without_database(tmp_path):

@@ -105,6 +105,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--telegram-chats", action="store_true",
                    help="list chats that messaged your bot (to find TELEGRAM_CHAT_ID) and exit")
     p.add_argument("--telegram-test", action="store_true", help="send a Telegram test message and exit")
+    p.add_argument("--sign-model", metavar="FILE", help="sign a Lab model file (.zip) with --key and exit")
+    p.add_argument("--key", default=_env("XAU_SIGNING_KEY"),
+                   help="Ed25519 private key (PEM) for --sign-model (XAU_SIGNING_KEY); never commit it")
+    p.add_argument("--new-signing-key", metavar="PATH", help="write a new Ed25519 private key to PATH, print its public key, exit")
     p.add_argument("-v", "--verbose", action="store_true")
     return p.parse_args(argv)
 
@@ -136,6 +140,26 @@ def telegram_command(args: argparse.Namespace, client: TelegramClient | None, sy
         raise SystemExit(str(exc)) from exc
 
 
+def signing_command(args: argparse.Namespace) -> None:
+    """--new-signing-key and --sign-model: the trainer's side of signed model files."""
+    from .lab import signing
+
+    try:
+        if args.new_signing_key:
+            public = signing.new_key(args.new_signing_key)
+            print(f"Private key written to {args.new_signing_key}. Keep it secret and out of git.")
+            print(f"Public key (share it; users add it in Settings > Lab): {public}")
+            return
+        if not args.key:
+            raise SystemExit("Pass --key with your private key file (or set XAU_SIGNING_KEY)")
+        path = Path(args.sign_model)
+        signed = signing.sign(path.read_bytes(), signing.load_private_key(args.key))
+        path.write_bytes(signed)
+        print(f"Signed {path} (key {signing.verify(signed, {})['key_id']})")
+    except (OSError, signing.SigningError) as exc:
+        raise SystemExit(str(exc)) from exc
+
+
 def serve_forever(app, host: str, port: int) -> None:
     """Default dashboard server: uvicorn on this thread until Ctrl+C."""
     import uvicorn
@@ -145,6 +169,9 @@ def serve_forever(app, host: str, port: int) -> None:
 
 def run(args: argparse.Namespace, serve=serve_forever) -> None:
     """Run the scan loop. ``serve(app, host, port)`` hosts the dashboard with --serve (the desktop app swaps it)."""
+    if args.new_signing_key or args.sign_model:
+        signing_command(args)
+        return
     cfg = ScanConfig(
         timeframes=tuple(parse_timeframes(args.timeframes)),
         lookback=args.lookback,

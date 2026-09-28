@@ -3433,3 +3433,22 @@ fieldset:disabled .switch {
 .focus .news-card {
   bottom: var(--s4);
 }
+
+/* Model signature state: a signed file reads calm, anything else draws the eye. */
+.sig-badge {
+  margin-inline-start: var(--s1);
+}
+.sig-badge.sig-trusted {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.sig-badge.sig-unknown,
+.sig-badge.sig-unsigned,
+.sig-unknown {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.sig-badge.sig-invalid {
+  border-color: var(--error);
+  color: var(--error);
+}

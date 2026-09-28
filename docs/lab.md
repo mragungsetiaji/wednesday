@@ -239,3 +239,28 @@ The Lab is the same for everyone: anyone can label and train their own model. A
 model file carries everything needed to run it, so you can train one and hand it
 to others, who import it and turn it on without labelling anything. The manifest
 names the author and the fingerprint lets them check they got the file you made.
+
+The fingerprint only proves the model matches its own manifest: anyone can rebuild
+a file with a new model, a matching fingerprint and any author name. A signature
+says who made it. Sign your models like this:
+
+1. Make a key once: `wednesday --new-signing-key ~/.wednesday/signing.pem`. It
+   writes the private key (readable only by you; never commit it) and prints the
+   public key to share.
+2. Sign every model you train: set `XAU_SIGNING_KEY=~/.wednesday/signing.pem`
+   in `.env`. Or sign an existing file: `wednesday --sign-model model.zip --key
+   ~/.wednesday/signing.pem` (`--key` defaults to `XAU_SIGNING_KEY`).
+3. People who get your files add your public key in Settings > Lab.
+
+The signature is Ed25519 over the manifest (which carries the model's SHA-256), in
+`signature.json` inside the zip. On import the file shows one of:
+
+- **Signed by NAME**: a key you trust (momentum.id's is built in). Loads.
+- **Signed by an unknown key** (with its key id): correctly signed, but not by a
+  key you trust. Loads only after you tick "I trust this file".
+- **Not signed**: the same, tick to load.
+- **Signature broken**: the signature or the model doesn't match. Never loads.
+
+"Only load models signed by a trusted key" in Settings > Lab refuses the unknown
+and unsigned cases outright. The Models table shows each file's state, and turning
+a model on checks its signature again.

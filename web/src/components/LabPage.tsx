@@ -4,7 +4,7 @@ import {
   cancelTraining, confirmImport, confirmLabels, deleteModel, fetchLab, fetchScorecard, labelsExportUrl, modelFileUrl,
   scoreOnSameWindow, setActiveModel, stageImport, stageLabels, startTraining,
   type Importance, type LabStatus, type MergeCounts, type ModelManifest, type Scorecard, type StagedLabels,
-  type StagedModel, type TagMetrics, type TrainingRun, type TrainParams, type WindowScores,
+  type Signature, type StagedModel, type TagMetrics, type TrainingRun, type TrainParams, type WindowScores,
 } from "../api";
 import { fmtUnix } from "../format";
 import { usePref } from "../prefs";
@@ -604,6 +604,7 @@ const fmtDrop = (v: number) => `${v >= 0 ? "−" : "+"}${Math.abs(v).toFixed(3)}
 function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabStatus) => void }) {
   const models = status.models ?? [];
   const [staged, setStaged] = useState<StagedModel | null>(null);
+  const [trustFile, setTrustFile] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -639,7 +640,10 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
 
   const choose = (file: File | undefined) => {
     if (!file) return;
-    run(async () => setStaged(await stageImport(file)));
+    run(async () => {
+      setStaged(await stageImport(file));
+      setTrustFile(false);
+    });
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -668,6 +672,7 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
               <dt>Timeframes</dt><dd>{staged.manifest.timeframes.join(", ")}</dd>
               <dt>Bar clock</dt><dd>{staged.manifest.feed?.clock ?? "not given"}</dd>
               <dt>Tags</dt><dd>{Object.values(staged.manifest.tags).filter((t) => t.trained).map((t) => t.title).join(", ") || "none"}</dd>
+              <dt>Signature</dt><dd><SignatureText sig={staged.signature} /></dd>
               <dt>Fingerprint</dt><dd className="num">{staged.manifest.sha256.slice(0, 16)}…</dd>
               {staged.manifest.note && <><dt>Note</dt><dd>{staged.manifest.note}</dd></>}
             </dl>
@@ -681,10 +686,29 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
                 {staged.warnings.map((w) => <li key={w}>{w}</li>)}
               </ul>
             )}
+            {(() => {
+              const state = staged.signature.state;
+              if (state === "trusted") return null;
+              if (state === "invalid") return <p className="text-error field-note">Not loading it: {staged.signature.reason}</p>;
+              if (staged.only_signed) {
+                return <p className="text-error field-note">Only models signed by a trusted key load (Settings &gt; Lab).</p>;
+              }
+              return (
+                <label className="field field-check">
+                  <input type="checkbox" checked={trustFile} onChange={(e) => setTrustFile(e.target.checked)} />
+                  <span>
+                    {state === "unknown" ? `Signed by a key you haven't trusted (${staged.signature.key_id}).` : "Nobody signed this file."}{" "}
+                    I trust this file
+                  </span>
+                </label>
+              );
+            })()}
             <div className="form-actions">
-              <button type="button" className="button primary" disabled={busy}
+              <button type="button" className="button primary"
+                disabled={busy || staged.signature.state === "invalid"
+                  || (staged.signature.state !== "trusted" && (staged.only_signed || !trustFile))}
                 onClick={() => run(async () => {
-                  const s = await confirmImport(staged.token);
+                  const s = await confirmImport(staged.token, trustFile);
                   setStaged(null);
                   return s;
                 })}>
@@ -724,6 +748,7 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
                         {m.name}
                       </button>
                       {m.author && <span className="muted"> · {m.author}</span>}
+                      {m.signature && <SignatureBadge sig={m.signature} />}
                     </td>
                     <td className="num">{fmtDate(m.created_at)}</td>
                     <td>{m.timeframes.join(", ")}</td>
@@ -767,6 +792,22 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
       {compared.length >= 2 && <Compare models={compared} />}
     </div>
   );
+}
+
+const SIGNATURE_TEXT: Record<Signature["state"], string> = {
+  trusted: "Signed", unknown: "Signed by an unknown key", unsigned: "Not signed", invalid: "Signature broken",
+};
+
+function SignatureText({ sig }: { sig: Signature }) {
+  if (sig.state === "trusted") return <strong className="sig-trusted">Signed by {sig.signer}</strong>;
+  if (sig.state === "unknown") return <span className="sig-unknown">Signed by an unknown key <span className="num">{sig.key_id}</span></span>;
+  if (sig.state === "invalid") return <span className="text-error">{sig.reason}</span>;
+  return <span className="sig-unknown">Not signed</span>;
+}
+
+function SignatureBadge({ sig }: { sig: Signature }) {
+  const title = sig.state === "trusted" ? `Signed by ${sig.signer}` : sig.state === "unknown" ? `Key ${sig.key_id}` : sig.reason ?? undefined;
+  return <span className={`badge sig-badge sig-${sig.state}`} title={title}>{SIGNATURE_TEXT[sig.state]}</span>;
 }
 
 function ActiveScorecard({ name, card }: { name: string; card: Scorecard }) {
