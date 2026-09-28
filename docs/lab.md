@@ -69,9 +69,21 @@ confirming candles, where its high and low sit in that window, the hour and
 weekday, and the last closed candles of the next two timeframes up. Nothing later.
 Each sample records `available_at`, the moment a model could have known.
 
-**Scores.** Everything is split by time, never at random. The oldest part trains,
-the next part tunes the probability cut (best F1), the latest part (20% by
-default) is held out for the scores. Then the saved model is refit on everything.
+**Scores.** Everything is split by time, never at random, by the moment each
+sample became known. With a few hundred labels one test window is noisy (a calm
+or wild week flatters a model), so by default training runs **4 walk-forward
+folds**: the history is cut into five slices in time, and fold *j* trains on
+everything before slice *j* and is scored on it (an expanding window). Each
+fold tunes its probability cut (best F1) on the latest 20% of its training part.
+Between a fold's training part and its test part, `confirm` candles of the
+largest timeframe are left out (a purge), so candle windows that overlap can't
+leak the answer. The scores show the mean ± spread over the folds, and **Scores
+per fold** lists each fold, with the average R per fold for the outcome model.
+The saved cut is the latest fold's, the one nearest live data, and the saved
+model is refit on everything. **Scored on: One split** gives the older single
+split (the latest 20% held out). The folds share the feature tables, so only the
+fits repeat.
+
 Precision is how many of the model's calls you had tagged; recall is how many of
 your tags it found; both at the cut. AUC doesn't depend on the cut.
 

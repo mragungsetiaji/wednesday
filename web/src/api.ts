@@ -626,6 +626,12 @@ export interface TagMetrics {
   from_labels?: number;
   from_detector?: number;
   importance?: Importance | null;
+  test_to?: string;
+  train_samples?: number;
+  // Walk-forward: the scores above are means over these folds (files from before 0.1.7 have none).
+  folds?: TagMetrics[];
+  folds_asked?: number;
+  spread?: Partial<Record<"precision" | "recall" | "auc" | "avg_r_all" | "avg_r_picked", number>>;
 }
 
 /** Held-out AUC lost when a feature family, or one feature, is shuffled. */
@@ -657,7 +663,10 @@ export interface ModelManifest {
   timeframes: string[];
   tags: Record<string, TagMetrics>;
   outcome: TagMetrics | null;
-  params: { lookback: number; confirm: number; rr: number; horizon_hours: number; max_sl: number };
+  params: {
+    lookback: number; confirm: number; rr: number; horizon_hours: number; max_sl: number;
+    folds?: number; gap_minutes?: number;
+  };
   data: { first: string; last: string; m1_bars: number; labels: number };
   feed?: { source: string; clock: string }; // missing in files from before 0.1.7
   sklearn: string;
@@ -673,6 +682,7 @@ export interface TrainParams {
   horizon_hours: number;
   outcome_from_detector: boolean;
   test_fraction: number;
+  folds: number;
   name: string;
   author: string;
   note: string;

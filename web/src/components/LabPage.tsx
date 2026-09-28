@@ -114,7 +114,7 @@ export function LabPage({ palette }: { palette: ChartPalette }) {
 
 const DEFAULTS: TrainParams = {
   timeframes: ["5M", "15M"], tags: [], lookback: 10, confirm: 3, rr: 2, horizon_hours: 72,
-  outcome_from_detector: true, test_fraction: 0.2, name: "", author: "", note: "",
+  outcome_from_detector: true, test_fraction: 0.2, folds: 4, name: "", author: "", note: "",
 };
 
 function LabTrain({ status, onStatus }: { status: LabStatus; onStatus: (s: LabStatus) => void }) {
@@ -160,9 +160,13 @@ function LabTrain({ status, onStatus }: { status: LabStatus; onStatus: (s: LabSt
           <h2 id="train-h">Train a model</h2>
           <p>
             One classifier per tag learns from your labels on the timeframes you pick, and an outcome model learns
-            whether order blocks traded with the limit plan reach the target first. Everything is split by time: the
-            probability cut is tuned on the part before the latest {Math.round(form.test_fraction * 100)}%, the scores
-            come from that latest part, then the saved model is refit on everything.
+            whether order blocks traded with the limit plan reach the target first. Everything is split by time:{" "}
+            {form.folds > 1
+              ? <>the history is cut into {form.folds + 1} slices and each of {form.folds} folds is scored on one slice after
+                  training on everything before it, so you see how stable the model is, not one lucky week.</>
+              : <>the scores come from the latest {Math.round(form.test_fraction * 100)}%, trained on what came before.</>}{" "}
+            The probability cut is tuned on the latest {Math.round(form.test_fraction * 100)}% of each training part, then
+            the saved model is refit on everything.
           </p>
         </div>
 
@@ -222,7 +226,14 @@ function LabTrain({ status, onStatus }: { status: LabStatus; onStatus: (s: LabSt
             <input type="number" min={1} max={720} value={form.horizon_hours} onChange={(e) => set({ horizon_hours: Number(e.target.value) })} />
           </label>
           <label className="field">
-            <span className="field-label">Held out for scores</span>
+            <span className="field-label">Scored on</span>
+            <select value={form.folds} onChange={(e) => set({ folds: Number(e.target.value) })}>
+              <option value={1}>One split (latest part)</option>
+              {[2, 3, 4, 5, 6].map((v) => <option key={v} value={v}>{v} walk-forward folds</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span className="field-label">{form.folds > 1 ? "Tuning share" : "Held out for scores"}</span>
             <select value={form.test_fraction} onChange={(e) => set({ test_fraction: Number(e.target.value) })}>
               {[0.1, 0.2, 0.3].map((v) => <option key={v} value={v}>Latest {v * 100}%</option>)}
             </select>
@@ -435,6 +446,7 @@ function LabelsFile({ symbol, onStatus }: { symbol: string; onStatus: (s: LabSta
 function ModelScores({ manifest }: { manifest: ModelManifest }) {
   const rows = Object.entries(manifest.tags);
   const o = manifest.outcome;
+  const folds = Math.max(0, ...rows.map(([, m]) => m.folds?.length ?? 0), o?.folds?.length ?? 0);
   return (
     <>
       <table className="data compact">
@@ -455,9 +467,9 @@ function ModelScores({ manifest }: { manifest: ModelManifest }) {
               {m.trained ? (
                 <>
                   <td className="end num">{m.positives} / {m.samples}</td>
-                  <td className="end num">{pctOf(m.precision)}</td>
-                  <td className="end num">{pctOf(m.recall)}</td>
-                  <td className="end num">{m.auc?.toFixed(2) ?? "—"}</td>
+                  <td className="end num">{pctOf(m.precision)}<Spread v={m.spread?.precision} pct /></td>
+                  <td className="end num">{pctOf(m.recall)}<Spread v={m.spread?.recall} pct /></td>
+                  <td className="end num">{m.auc?.toFixed(2) ?? "—"}<Spread v={m.spread?.auc} /></td>
                   <td className="end num">{pctOf(m.threshold)}</td>
                 </>
               ) : (
@@ -468,8 +480,12 @@ function ModelScores({ manifest }: { manifest: ModelManifest }) {
         </tbody>
       </table>
       <p className="field-hint">
-        Held-out part only. Precision: of the candles the model called, how many you had tagged. Recall: of your tags, how
-        many it found. Both at the cut, the probability tuned before the held-out part.
+        {folds
+          ? <>Mean ± spread over {folds} walk-forward folds, each scored on data after what it trained on, with a gap of{" "}
+              {manifest.params.gap_minutes ?? 0} minutes between. The cut is the latest fold's.</>
+          : <>Held-out part only.</>}{" "}
+        Precision: of the candles the model called, how many you had tagged. Recall: of your tags, how many it found.
+        Both at the cut, the probability tuned before the held-out part.
       </p>
       {o && (
         <p className="field-note">
@@ -477,15 +493,67 @@ function ModelScores({ manifest }: { manifest: ModelManifest }) {
             <>
               <strong>Outcome</strong> ({o.samples} trades: {o.from_labels ?? 0} from labels, {o.from_detector ?? 0} from the detector):
               held-out AUC {o.auc?.toFixed(2) ?? "—"}, {pctOf(o.base_rate)} of held-out trades won; taking all of them averaged{" "}
-              {fmtR(o.avg_r_all)}, taking the {o.picked ?? 0} the model liked averaged {fmtR(o.avg_r_picked)}.
+              {fmtR(o.avg_r_all)}, taking the {o.picked ?? 0} the model liked averaged {fmtR(o.avg_r_picked)}
+              {o.folds && <> (per fold: {o.folds.map((f) => fmtR(f.avg_r_picked)).join(", ")})</>}.
             </>
           ) : (
             <><strong>Outcome</strong>: {o.skipped}</>
           )}
         </p>
       )}
+      {folds > 0 && <PerFold manifest={manifest} />}
       <Explained manifest={manifest} />
     </>
+  );
+}
+
+function Spread({ v, pct }: { v?: number; pct?: boolean }) {
+  if (v === undefined) return null;
+  return <span className="muted lab-spread"> ± {pct ? Math.round(v * 100) : v.toFixed(2)}</span>;
+}
+
+/** Each fold's own scores, so a model that only shone in one window shows it. */
+function PerFold({ manifest }: { manifest: ModelManifest }) {
+  const parts = [
+    ...Object.entries(manifest.tags).filter(([, m]) => m.folds?.length).map(([id, m]) => [m.title ?? id, m] as const),
+    ...(manifest.outcome?.folds?.length ? [["Outcome", manifest.outcome] as const] : []),
+  ];
+  return (
+    <details className="lab-explain">
+      <summary>Scores per fold</summary>
+      <div className="lab-explain-grid lab-folds">
+        {parts.map(([title, m]) => {
+          const outcome = title === "Outcome";
+          return (
+            <section key={title} aria-label={title}>
+              <h4>{title}</h4>
+              <table className="data compact">
+                <thead>
+                  <tr>
+                    <th scope="col">Tested from</th>
+                    <th scope="col" className="end">Yes / all</th>
+                    <th scope="col" className="end">{outcome ? "Avg R" : "Prec."}</th>
+                    <th scope="col" className="end">{outcome ? "Liked" : "Recall"}</th>
+                    <th scope="col" className="end">AUC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {m.folds!.map((f) => (
+                    <tr key={f.test_from ?? ""}>
+                      <td className="num">{f.test_from?.slice(0, 10)}</td>
+                      <td className="end num">{f.test_positives} / {f.test_samples}</td>
+                      <td className="end num">{outcome ? fmtR(f.avg_r_all) : pctOf(f.precision)}</td>
+                      <td className="end num">{outcome ? fmtR(f.avg_r_picked) : pctOf(f.recall)}</td>
+                      <td className="end num">{f.auc?.toFixed(2) ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          );
+        })}
+      </div>
+    </details>
   );
 }
 

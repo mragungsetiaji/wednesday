@@ -10,9 +10,9 @@ Two kinds of model go into one file:
   your order block labels it also learns from every order block the detector
   found in the history.
 
-Every split is by time: the last ``test_fraction`` of samples (by the moment
-they became known) is held out for the scores and the feature importance, then
-the model is refit on all.
+Every split is by time, by the moment a sample became known: walk-forward
+folds (or one split) score the model on data after what it trained on, then
+the model is refit on all. See :func:`walk_forward_splits`.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ MIN_CLASS = 5  # samples of each class needed to train a tag
 class TrainingCancelled(Exception):
     """Raised from the progress callback when the trader stops a run."""
 
+
 ZONE_FEATURES = ["zone_dir", "zone_body", "zone_risk", "zone_capped", "zone_entry"]
 
 
@@ -53,6 +54,7 @@ class TrainParams:
     horizon_hours: int = 72
     outcome_from_detector: bool = True
     test_fraction: float = 0.2
+    folds: int = 4  # walk-forward folds; 1 = a single time split
     name: str = ""
     author: str = ""
     note: str = ""
@@ -74,6 +76,8 @@ class TrainParams:
             errors.append("Horizon must be 1 hour to 30 days")
         if not 0.05 <= self.test_fraction <= 0.5:
             errors.append("Test share must be 5% to 50%")
+        if not 1 <= self.folds <= 8:
+            errors.append("Folds must be 1 to 8")
         return errors
 
     @classmethod
@@ -85,6 +89,12 @@ class TrainParams:
     @property
     def features(self) -> FeatureParams:
         return FeatureParams(lookback=self.lookback, confirm=self.confirm)
+
+    @property
+    def gap(self) -> pd.Timedelta:
+        """Purge between a fold's training and test parts: ``confirm`` candles of the largest
+        timeframe, the most a sample's window reaches past the moment it is known."""
+        return self.confirm * max(TIMEFRAMES_BY_NAME[t].delta for t in self.timeframes)
 
 
 def _classifier():
@@ -110,41 +120,98 @@ def best_threshold(y: np.ndarray, p: np.ndarray) -> float:
     return min(max(cut, 0.05), 0.95)
 
 
-def fit_eval(X: pd.DataFrame, y: np.ndarray, when: np.ndarray, test_fraction: float,
-             r: np.ndarray | None = None) -> tuple[object | None, dict]:
-    """Split by time into train / tune / test. Fit on train, pick the probability cut on the
-    tune part (best F1), score the test part at that cut, then refit on everything."""
+def walk_forward_splits(when: np.ndarray, folds: int, test_fraction: float,
+                        gap: pd.Timedelta = pd.Timedelta(0)) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """(fit, tune, test) index arrays, by the moment each sample became known.
+
+    One fold is a single split: the latest ``test_fraction`` is tested. With more, the samples
+    are cut into ``folds + 1`` equal slices in time and fold ``j`` tests slice ``j`` after
+    training on everything before it (an expanding window). Each training part keeps its latest
+    ``test_fraction`` to tune the probability cut. Test samples known less than ``gap`` after
+    the training part's last one are dropped (a purge), so overlapping candle windows can't leak.
+    """
+    n = len(when)
+    order = np.argsort(when, kind="stable")
+    t = np.asarray(when)[order]
+    if folds <= 1:
+        bounds, ends = [int(round(n * (1 - test_fraction)))], [n]
+    else:
+        size = n / (folds + 1)
+        bounds = [int(round(size * j)) for j in range(1, folds + 1)]
+        ends = bounds[1:] + [n]
+    purge = np.timedelta64(int(gap.total_seconds()), "s")
+    out = []
+    for b, e in zip(bounds, ends):
+        if b <= 0 or e <= b:
+            continue
+        cut_tune = int(round(b * (1 - test_fraction)))
+        test = order[b:e][t[b:e] >= t[b - 1] + purge]
+        out.append((order[:cut_tune], order[cut_tune:b], test))
+    return out
+
+
+FOLD_KEYS = ("precision", "recall", "auc", "avg_precision", "base_rate", "avg_r_all", "avg_r_picked")
+SPREAD_KEYS = ("precision", "recall", "auc", "avg_r_all", "avg_r_picked")
+
+
+def _fold(X: pd.DataFrame, y: np.ndarray, when: np.ndarray, fit, tune, te, r: np.ndarray | None):
+    """Fit on one fold's training part, tune the cut, score its test part. None when it can't."""
     from sklearn.metrics import average_precision_score, precision_score, recall_score, roc_auc_score
 
+    if len(np.unique(y[fit])) < 2 or not len(te):
+        return None
+    model = _classifier().fit(X.iloc[fit], y[fit])
+    threshold = best_threshold(y[tune], model.predict_proba(X.iloc[tune])[:, 1]) if len(tune) else 0.5
+    p = model.predict_proba(X.iloc[te])[:, 1]
+    pred = p >= threshold
+    s = {"threshold": threshold, "test_samples": int(len(te)), "test_positives": int(y[te].sum()),
+         "test_from": pd.Timestamp(when[te].min()).isoformat(), "test_to": pd.Timestamp(when[te].max()).isoformat(),
+         "train_samples": int(len(fit) + len(tune)),
+         "precision": float(precision_score(y[te], pred, zero_division=0)),
+         "recall": float(recall_score(y[te], pred, zero_division=0)), "base_rate": float(y[te].mean())}
+    if len(np.unique(y[te])) == 2:
+        s["auc"] = float(roc_auc_score(y[te], p))
+        s["avg_precision"] = float(average_precision_score(y[te], p))
+    if r is not None:
+        s["avg_r_all"] = float(r[te].mean())
+        s["picked"] = int(pred.sum())
+        s["avg_r_picked"] = float(r[te][pred].mean()) if pred.any() else None
+    return s, model
+
+
+def fit_eval(X: pd.DataFrame, y: np.ndarray, when: np.ndarray, test_fraction: float,
+             r: np.ndarray | None = None, folds: int = 1, gap: pd.Timedelta = pd.Timedelta(0)) -> tuple[object | None, dict]:
+    """Score by time (one split, or walk-forward folds; see :func:`walk_forward_splits`), then
+    refit on everything. Each fold fits on its training part, picks the probability cut on that
+    part's latest slice (best F1) and scores its test part at that cut.
+
+    With folds, the scores are the mean over folds, ``spread`` their standard deviation and
+    ``folds`` each fold's own; the saved cut is the latest fold's, the one nearest live data."""
     n, pos = len(y), int(y.sum())
     info = {"samples": n, "positives": pos}
     if pos < MIN_CLASS or n - pos < MIN_CLASS:
         return None, {**info, "skipped": f"needs at least {MIN_CLASS} of each class (has {pos} yes, {n - pos} no)"}
-    order = np.argsort(when, kind="stable")
-    cut_test = int(round(n * (1 - test_fraction)))
-    cut_tune = int(round(cut_test * (1 - test_fraction)))
-    tr, tune, te = order[:cut_tune], order[cut_tune:cut_test], order[cut_test:]
-    if len(np.unique(y[tr])) < 2:
+    done = [f for f in (_fold(X, y, when, *split, r) for split in walk_forward_splits(when, folds, test_fraction, gap)) if f]
+    if not done:
         return None, {**info, "skipped": "the training part has only one class; label more of the earlier history"}
-    model = _classifier().fit(X.iloc[tr], y[tr])
-    threshold = best_threshold(y[tune], model.predict_proba(X.iloc[tune])[:, 1]) if len(tune) else 0.5
-    p = model.predict_proba(X.iloc[te])[:, 1] if len(te) else np.array([])
-    pred = p >= threshold
-    test = {"threshold": threshold, "test_samples": int(len(te)), "test_positives": int(y[te].sum()),
-            "test_from": pd.Timestamp(when[te].min()).isoformat() if len(te) else None}
-    if len(te):
-        test["precision"] = float(precision_score(y[te], pred, zero_division=0))
-        test["recall"] = float(recall_score(y[te], pred, zero_division=0))
-        if len(np.unique(y[te])) == 2:
-            test["auc"] = float(roc_auc_score(y[te], p))
-            test["avg_precision"] = float(average_precision_score(y[te], p))
-            # Held-out data only, and the model fit before it: the refit below has seen it.
-            test["importance"] = importance(model, X.iloc[te], y[te])
-        test["base_rate"] = float(y[te].mean())
+    scores = [s for s, _ in done]
+    last, model = done[-1]
+    test = dict(last)
+    if folds > 1:
+        for k in FOLD_KEYS:
+            vals = [s[k] for s in scores if s.get(k) is not None]
+            test[k] = float(np.mean(vals)) if vals else None
+        test["spread"] = {k: float(np.std(v)) for k in SPREAD_KEYS
+                          if len(v := [s[k] for s in scores if s.get(k) is not None]) > 1}
+        test.update(test_samples=sum(s["test_samples"] for s in scores),
+                    test_positives=sum(s["test_positives"] for s in scores), test_from=scores[0]["test_from"],
+                    folds=scores, folds_asked=folds)
         if r is not None:
-            test["avg_r_all"] = float(r[te].mean())
-            test["picked"] = int(pred.sum())
-            test["avg_r_picked"] = float(r[te][pred].mean()) if pred.any() else None
+            test["picked"] = sum(s.get("picked", 0) for s in scores)
+    te = walk_forward_splits(when, folds, test_fraction, gap)[-1][2]
+    if len(np.unique(y[te])) == 2:
+        # Held-out data only (the latest fold), with the model fit before it: the refit has seen it.
+        test["importance"] = importance(model, X.iloc[te], y[te])
     final = _classifier().fit(X, y)
     return final, {**info, **test}
 
@@ -245,7 +312,8 @@ def train_bundle(m1: pd.DataFrame, labels: dict[str, list[dict]], reviewed: dict
             tag_metrics[tag] = {"samples": 0, "positives": 0, "skipped": "no labels for this tag in reviewed ranges"}
             continue
         model, metrics = fit_eval(X.loc[known, names], Y[tag].to_numpy()[known].astype(int),
-                                  X["available_at"].to_numpy()[known], params.test_fraction)
+                                  X["available_at"].to_numpy()[known], params.test_fraction,
+                                  folds=params.folds, gap=params.gap)
         tag_metrics[tag] = metrics
         if model is not None:
             tag_models[tag] = model
@@ -259,7 +327,8 @@ def train_bundle(m1: pd.DataFrame, labels: dict[str, list[dict]], reviewed: dict
             progress("Training the outcome model")
             y = (samples["outcome"] == "win").to_numpy().astype(int)
             outcome_model, outcome_metrics = fit_eval(samples[outcome_names], y, samples["available_at"].to_numpy(),
-                                                      params.test_fraction, r=samples["r"].to_numpy())
+                                                      params.test_fraction, r=samples["r"].to_numpy(),
+                                                      folds=params.folds, gap=params.gap)
             outcome_metrics["from_labels"] = int((samples["origin"] == "label").sum())
             outcome_metrics["from_detector"] = int((samples["origin"] == "detector").sum())
         else:
@@ -281,7 +350,8 @@ def train_bundle(m1: pd.DataFrame, labels: dict[str, list[dict]], reviewed: dict
         "tags": {t: {"title": TAGS[t]["title"], **m, "trained": t in tag_models} for t, m in tag_metrics.items()},
         "outcome": outcome_metrics and {**outcome_metrics, "trained": outcome_model is not None},
         "params": {"lookback": params.lookback, "confirm": params.confirm, "rr": params.rr,
-                   "horizon_hours": params.horizon_hours, "max_sl": detector.max_sl},
+                   "horizon_hours": params.horizon_hours, "max_sl": detector.max_sl, "folds": params.folds,
+                   "gap_minutes": int(params.gap.total_seconds() // 60)},
         "data": {"first": m1.index[0].isoformat(), "last": m1.index[-1].isoformat(), "m1_bars": len(m1),
                  "labels": sum(len(v) for v in labels.values())},
         "inputs": input_quantiles(frames),

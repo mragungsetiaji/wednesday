@@ -3045,6 +3045,12 @@ fieldset:disabled .switch {
   gap: var(--s4) var(--s6);
   margin-block-start: var(--s2);
 }
+.lab-folds {
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+}
+.lab-folds td {
+  white-space: nowrap;
+}
 .lab-explain h4 {
   margin: 0 0 var(--s1);
   font-size: var(--text-sm);

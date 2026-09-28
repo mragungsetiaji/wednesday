@@ -178,6 +178,46 @@ def test_train_and_predict_on_detector_labels():
     assert ob is None or ob["top"] >= ob["bottom"]
 
 
+@pytest.mark.parametrize("folds", [1, 2, 4, 6])
+def test_walk_forward_folds_never_test_before_the_gap(folds):
+    rng = np.random.default_rng(1)
+    # Uneven times with ties, like samples pooled over timeframes.
+    when = np.sort(pd.Timestamp("2026-01-01").to_datetime64()
+                   + (rng.integers(0, 60 * 24 * 30, 900) * 60).astype("timedelta64[s]"))
+    rng.shuffle(when)
+    gap = pd.Timedelta(minutes=45)
+    splits = train_mod.walk_forward_splits(when, folds, 0.2, gap)
+    assert len(splits) == folds
+    prev_train = -1
+    for fit, tune, test in splits:
+        train = np.concatenate([fit, tune])
+        end = when[train].max()
+        assert len(test) and (when[test] >= end + gap.to_timedelta64()).all()
+        assert when[fit].max() <= when[tune].min()  # the cut is tuned on the latest slice of training
+        assert len(train) > prev_train  # expanding window
+        prev_train = len(train)
+    if folds > 1:  # the test windows follow each other without overlap
+        spans = [(when[t].min(), when[t].max()) for _, _, t in splits]
+        assert all(a[1] <= b[0] for a, b in zip(spans, spans[1:]))
+
+
+def test_training_scores_every_fold():
+    m1 = synthetic(9000)
+    tf = TIMEFRAMES_BY_NAME["15M"]
+    labels, reviewed = detector_labels(m1, tf, m1.index[-2000])
+    params = TrainParams(timeframes=["15M"], tags=["bsl", "ob_bull", "ob_bear"], folds=3)
+    m = train_bundle(m1, {"15M": labels}, {"15M": reviewed}, params, "XAU", DetectorParams()).manifest
+    bsl = m["tags"]["bsl"]
+    assert len(bsl["folds"]) == 3 and bsl["folds_asked"] == 3
+    assert bsl["precision"] == pytest.approx(np.mean([f["precision"] for f in bsl["folds"]]))
+    assert bsl["threshold"] == bsl["folds"][-1]["threshold"] and "auc" in bsl["spread"]
+    assert all("avg_r_all" in f for f in m["outcome"]["folds"])
+    assert m["params"]["folds"] == 3 and m["params"]["gap_minutes"] == 45
+    one = train_bundle(m1, {"15M": labels}, {"15M": reviewed}, TrainParams(timeframes=["15M"], tags=["bsl"], folds=1),
+                       "XAU", DetectorParams()).manifest
+    assert "folds" not in one["tags"]["bsl"] and one["tags"]["bsl"]["test_samples"] > 0  # one split, as before
+
+
 def test_nothing_to_train_says_why():
     m1 = synthetic(3000)
     with pytest.raises(ValueError, match="Nothing to train"):
@@ -187,6 +227,7 @@ def test_nothing_to_train_says_why():
 def test_train_params_validation():
     assert TrainParams(timeframes=["2H"]).validate()
     assert TrainParams(tags=["nope"]).validate()
+    assert TrainParams(folds=9).validate() and TrainParams(folds=0).validate()
     assert TrainParams.from_dict({"rr": 3, "junk": 1}).rr == 3
     assert not TrainParams().validate()
 
