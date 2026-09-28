@@ -17,9 +17,6 @@ closing the window stops both.
 The window is drawn by Microsoft Edge WebView2. Windows 11 has it; if a Windows 10
 PC lacks it, the installer offers to download it.
 
-`Wednesday-<version>-portable.zip` is the same program without an installer:
-unzip it anywhere and run `Wednesday.exe`.
-
 ## Settings and data
 
 Everything the app writes lives in `%LOCALAPPDATA%\Wednesday` (the Start menu has
@@ -91,8 +88,7 @@ uv run wednesday-desktop
 1. the dashboard (`npm ci && npm run build` in `web/`),
 2. the Python environment (`uv sync --frozen --extra desktop --extra mt5 --extra llm --extra ml`),
 3. the program with PyInstaller (`packaging/wednesday.spec`, output `dist\Wednesday\`),
-4. the installer with Inno Setup (`packaging/wednesday.iss`, output `dist\WednesdaySetup-<version>.exe`),
-5. a portable zip of `dist\Wednesday\`.
+4. the installer with Inno Setup (`packaging/wednesday.iss`, output `dist\WednesdaySetup-<version>.exe`).
 
 To publish a release, tag a commit and push the tag; the version comes from the
 tag:

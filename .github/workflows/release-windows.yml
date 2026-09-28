@@ -1,5 +1,5 @@
-# Windows desktop app: builds WednesdaySetup-<version>.exe and a portable zip.
-# Push a tag like v0.2.0 to publish them on a GitHub release; run it by hand
+# Windows desktop app: builds the WednesdaySetup-<version>.exe installer.
+# Push a tag like v0.2.0 to publish it on a GitHub release; run it by hand
 # (Actions > Release Windows > Run workflow) for a test build kept as a workflow artifact.
 name: Release Windows
 
@@ -62,20 +62,11 @@ jobs:
           & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" packaging\wednesday.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Portable zip
-        shell: pwsh
-        run: |
-          Copy-Item LICENSE dist\Wednesday\LICENSE.txt
-          Copy-Item DISCLAIMER.md dist\Wednesday\DISCLAIMER.txt
-          Copy-Item THIRD_PARTY_NOTICES.md dist\Wednesday\THIRD_PARTY_NOTICES.txt
-          Compress-Archive -Path dist\Wednesday -DestinationPath "dist\Wednesday-${{ steps.version.outputs.version }}-portable.zip"
-
       - uses: actions/upload-artifact@v4
         with:
           name: wednesday-windows-${{ steps.version.outputs.version }}
           path: |
             dist/WednesdaySetup-*.exe
-            dist/Wednesday-*-portable.zip
 
       - name: Publish release
         if: github.ref_type == 'tag'
@@ -83,5 +74,4 @@ jobs:
         with:
           files: |
             dist/WednesdaySetup-*.exe
-            dist/Wednesday-*-portable.zip
           generate_release_notes: true

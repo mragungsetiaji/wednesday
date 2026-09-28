@@ -99,7 +99,20 @@ Sync an MT5 account, or import the terminal's history report, and get the number
 
 <img src="docs/images/journal.png" alt="The journal: account numbers on the left, the growth curve on the right" width="100%">
 
-> **Why "Wednesday"?** Watching gold through quarterly theory, the Wednesday and New York blocks kept coming up green. The quarterly pane shows those blocks on the chart and its stats count how often that holds.
+## Why "Wednesday"
+
+Quarterly theory splits time into four quarters: accumulation, manipulation, distribution,
+then reversal or continuation. The third quarter, distribution, is where the true move of
+the cycle usually happens, after the manipulation has taken the liquidity.
+
+- **In the week**, that quarter is **Wednesday** (Monday accumulates, Tuesday manipulates,
+  Thursday reverses or continues).
+- **In the day**, it is the **New York** session (after Asia and London).
+
+So Wednesday in New York is the third quarter of the third quarter: the window where the
+real direction is most likely to show. It isn't always green. It is where a setup is most
+likely to follow through, up or down. The quarterly pane under the chart draws those blocks,
+and its stats count how often each one closed green or red, so you can check it on your own data.
 
 ## Quick start
 
@@ -153,4 +166,4 @@ Copyright (с) 2025 TradingView, Inc. https://www.tradingview.com/
 That notice and a link to <https://www.tradingview.com/> sit in the dashboard's status bar.
 It and the other bundled packages keep their own licenses, which Wednesday's license
 doesn't change; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The notices ship
-with the installer and the portable zip.
+with the installer.
