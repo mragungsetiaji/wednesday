@@ -57,8 +57,11 @@ package is `src/wednesday/`.
   notice and a link to tradingview.com where users see the charts; the status bar
   carries both (the charts set `attributionLogo: false`), so keep it visible,
   full screen included.
-- **The dashboard has no login.** Keep the default host `127.0.0.1`, and don't add
-  endpoints that expose secrets or files outside `data/`.
+- **The dashboard login is optional** (`auth.py`, on when `XAU_AUTH_PASSWORD` is
+  set). Keep the default host `127.0.0.1`; a non-loopback host without the login is
+  refused unless `--insecure`. New `/api` routes are guarded by the middleware
+  automatically (`tests/test_auth.py` walks them); only add to `auth.PUBLIC` what
+  must work logged out. Don't add endpoints that expose secrets or files outside `data/`.
 - **Time zones are explicit.** Bar times come in the feed's clock (`XAU_CLOCK`, often
   NY+7 on MT5 brokers); the quarterly view works in New York time. Convert with
   `quarters.to_new_york` / `utc_to_feed` rather than assuming UTC.
