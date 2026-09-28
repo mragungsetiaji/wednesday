@@ -221,6 +221,14 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
     def delete_label(label_id: str) -> dict:
         return {"deleted": lab().delete("labels", label_id)}
 
+    @r.post("/batch")
+    def batch(body: dict = Body(...)) -> dict:
+        """Add and delete labels and reviewed ranges in one call (bulk edits, undo / redo)."""
+        try:
+            return lab().batch(symbol(), body)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
     @r.get("/labels/export")
     def export_labels() -> Response:
         """Every label and reviewed range of the symbol, as a JSON file to back up or pass on."""
@@ -302,11 +310,34 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
     @r.put("/active")
     def set_active(body: dict = Body(...)) -> dict:
         need_ml()
+        m1 = live_m1()
         try:
-            lab().activate(body.get("id") or None)
+            lab().activate(body.get("id") or None, unix(m1.index[-1]) if m1 is not None and len(m1) else None)
         except ModelFileError as exc:
             raise HTTPException(422, str(exc)) from exc
         return status()
+
+    @r.get("/scorecard")
+    def scorecard() -> dict:
+        """The active model's live results since it was turned on, with quiet drift warnings."""
+        found = get_lab()
+        if found is None or not ml_available()[0]:
+            return {"scorecard": None}
+        return {"scorecard": found.scorecard(symbol(), history())}
+
+    @r.post("/compare")
+    def compare(body: dict = Body(...)) -> dict:
+        """Score two or three models on the same window: labels after the newest one's training data."""
+        need_ml()
+        m1 = history()
+        if m1 is None:
+            raise HTTPException(503, "no data yet")
+        try:
+            return lab().compare([str(i) for i in body.get("ids") or []], symbol(), m1)
+        except ModelFileError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     @r.delete("/models/{model_id}")
     def delete_model(model_id: str) -> dict:

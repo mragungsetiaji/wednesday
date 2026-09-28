@@ -3080,6 +3080,53 @@ fieldset:disabled .switch {
   color: var(--text-3);
 }
 
+/* Lab: why a block was called, bulk actions, live scorecard, comparing models */
+.lab-why {
+  display: block;
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+.lab-clear {
+  display: inline-flex;
+  gap: var(--s1);
+  align-items: center;
+}
+.ml-why,
+.ml-scorecard p {
+  margin: var(--s2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+.ml-drift {
+  color: var(--warn);
+}
+.ml-drift::before {
+  content: "⚠ ";
+}
+.lab-scorecard {
+  margin-block: var(--s4) var(--s6);
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.lab-scorecard h3,
+.lab-compare-h {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.lab-compare-h {
+  margin-block: var(--s4) var(--s2);
+}
+.lab-compare .is-best {
+  font-weight: 700;
+  color: var(--text);
+}
+.lab-compare th[scope="row"] {
+  font-weight: 400;
+  color: var(--text-2);
+}
+
 /* Journal: header, monthly bars, calendar */
 .ticker .ticker-title {
   font-size: var(--text-xl);

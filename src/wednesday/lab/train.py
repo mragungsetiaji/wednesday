@@ -29,7 +29,7 @@ from ..detectors.orderblock import OrderBlockDetector
 from ..structure import Context
 from ..timeframes import TIMEFRAMES_BY_NAME, Timeframe
 from .dataset import FeatureParams, _atr, feature_names, label_matrix, timeframe_features, ts, unix
-from .explain import importance
+from .explain import contributions, importance, medians
 from .model import ModelBundle
 from .outcome import TradePlan, plan_levels, simulate
 from .tags import OB_TAGS, TAGS
@@ -284,9 +284,34 @@ def train_bundle(m1: pd.DataFrame, labels: dict[str, list[dict]], reviewed: dict
                    "horizon_hours": params.horizon_hours, "max_sl": detector.max_sl},
         "data": {"first": m1.index[0].isoformat(), "last": m1.index[-1].isoformat(), "m1_bars": len(m1),
                  "labels": sum(len(v) for v in labels.values())},
+        "inputs": input_quantiles(frames),
         "sklearn": _sklearn_version(),
     }
-    return ModelBundle(manifest, tag_models, outcome_model, names, outcome_names)
+    med = {"tags": medians(X[names]) if len(X) else {},
+           "outcome": medians(samples[outcome_names]) if outcome_model is not None else {}}
+    return ModelBundle(manifest, tag_models, outcome_model, names, outcome_names, med)
+
+
+# Features watched for drift: volatility, and candle size relative to it.
+INPUTS = {"atr_pct": "ATR", "body_abs": "candle body"}
+QUANTILES = (0.1, 0.5, 0.9)
+
+
+def _inputs_of(feats: pd.DataFrame) -> dict[str, pd.Series]:
+    return {"atr_pct": feats["atr_pct"], "body_abs": feats["body_0"].abs()}
+
+
+def input_quantiles(frames: list[Frames]) -> dict:
+    """Per timeframe, the 10/50/90% quantiles of the drift-watched inputs over the training history."""
+    out = {}
+    for fr in frames:
+        q = {}
+        for k, v in _inputs_of(fr.feats).items():
+            v = v.dropna()
+            if len(v):
+                q[k] = [float(x) for x in v.quantile(list(QUANTILES))]
+        out[fr.tf.name] = q
+    return out
 
 
 def _sklearn_version() -> str:
@@ -300,7 +325,9 @@ def _sklearn_version() -> str:
 def predict_blocks(bundle: ModelBundle, m1: pd.DataFrame, tf: Timeframe, limit: int = 300,
                    threshold: float | None = None) -> list[dict]:
     """Candles of the last ``limit`` on ``tf`` that the model tags: probability at or above
-    ``threshold``, or each tag's own cut from training when it is None."""
+    ``threshold``, or each tag's own cut from training when it is None. Each block carries
+    ``why``: the three feature families that moved its probability most (empty for model
+    files without training medians)."""
     p = bundle.manifest["params"]
     fp = FeatureParams(lookback=int(p["lookback"]), confirm=int(p["confirm"]))
     # Enough M1 for the candles, their lookback and two higher timeframes of context.
@@ -317,7 +344,9 @@ def predict_blocks(bundle: ModelBundle, m1: pd.DataFrame, tf: Timeframe, limit: 
         if info is None:
             continue
         cut = threshold if threshold is not None else float(bundle.manifest["tags"].get(tag, {}).get("threshold", 0.5))
-        for i in np.flatnonzero(pr >= cut):
+        hits = np.flatnonzero(pr >= cut)
+        why = contributions(bundle.models[tag], feats[bundle.features].iloc[hits], bundle.medians.get("tags") or {})
+        for n, i in enumerate(hits):
             t = feats.index[i]
             row = c.iloc[i]
             if info["shape"] == "body":
@@ -328,7 +357,8 @@ def predict_blocks(bundle: ModelBundle, m1: pd.DataFrame, tf: Timeframe, limit: 
                 top = bottom = row["low"]
             block = {"id": f"{tf.name}:{tag}:{unix(t)}", "tag": tag, "title": info["title"], "timeframe": tf.name,
                      "time_unix": unix(t), "available_unix": unix(feats["available_at"].iloc[i]),
-                     "prob": float(pr[i]), "top": float(top), "bottom": float(bottom), "outcome_prob": None}
+                     "prob": float(pr[i]), "top": float(top), "bottom": float(bottom), "outcome_prob": None,
+                     "why": why[n]}
             if tag in OB_TAGS and bundle.outcome is not None:
                 zone = zone_features(feats.iloc[i], float(fr.atr.loc[t]), float(row["close"]), info["kind"], top, bottom,
                                      float(p.get("max_sl", 3.0)))
@@ -337,4 +367,84 @@ def predict_blocks(bundle: ModelBundle, m1: pd.DataFrame, tf: Timeframe, limit: 
                     block["outcome_prob"] = float(bundle.outcome.predict_proba(x)[0, 1])
             out.append(block)
     out.sort(key=lambda b: b["time_unix"])
+    return out
+
+
+# ---- comparing models on one window ------------------------------------------------
+
+def _scores(y: np.ndarray, p: np.ndarray, cut: float, r: np.ndarray | None = None) -> dict:
+    from sklearn.metrics import precision_score, recall_score, roc_auc_score
+
+    pred = p >= cut
+    out = {"samples": int(len(y)), "positives": int(y.sum()), "threshold": cut}
+    if not len(y):
+        return out
+    out["precision"] = float(precision_score(y, pred, zero_division=0))
+    out["recall"] = float(recall_score(y, pred, zero_division=0))
+    if len(np.unique(y)) == 2:
+        out["auc"] = float(roc_auc_score(y, p))
+    out["base_rate"] = float(y.mean())
+    if r is not None:
+        out["avg_r_all"] = float(r.mean())
+        out["picked"] = int(pred.sum())
+        out["avg_r_picked"] = float(r[pred].mean()) if pred.any() else None
+    return out
+
+
+def score_window(bundles: list[ModelBundle], m1: pd.DataFrame, labels: dict[str, list[dict]],
+                 reviewed: dict[str, list[dict]], detector: DetectorParams) -> dict:
+    """Score several models on the same candles: those that became known after the newest model's
+    training data ends, on the timeframes they share. Each model trained on data up to its own
+    ``data.last``, so none of them saw these candles or their labels. Scores use each model's own
+    cut, and the outcome model is scored on the order block trades that finished in the window."""
+    import dataclasses
+
+    if len(bundles) < 2:
+        raise ValueError("Pick at least two models to compare")
+    shared = [tf for tf in bundles[0].manifest["timeframes"] if all(tf in b.manifest["timeframes"] for b in bundles)]
+    if not shared:
+        raise ValueError("These models share no timeframe, so there is no common window to score them on")
+    start = max(pd.Timestamp(b.manifest["data"]["last"]) for b in bundles)
+    tags = sorted({t for b in bundles for t in b.models})
+    cache: dict = {}
+    out: dict = {"from": start.isoformat(), "to": m1.index[-1].isoformat(), "timeframes": shared, "models": {}}
+    labelled = 0
+    for b in bundles:
+        p = b.manifest["params"]
+        fp = FeatureParams(lookback=int(p["lookback"]), confirm=int(p["confirm"]))
+        frames = []
+        for name in shared:
+            key = (name, fp)
+            if key not in cache:
+                cache[key] = frames_for(m1, TIMEFRAMES_BY_NAME[name], fp)
+            frames.append(cache[key])
+        X, Y = tag_samples(frames, labels, reviewed, tags)
+        after = (X["available_at"] > start).to_numpy() if len(X) else np.array([], dtype=bool)
+        res: dict = {"tags": {}, "outcome": None}
+        for tag, model in b.models.items():
+            known = after & Y[tag].notna().to_numpy() if len(Y) else after
+            if not known.any():
+                res["tags"][tag] = {"samples": 0, "positives": 0}
+                continue
+            prob = model.predict_proba(X.loc[known, b.features])[:, 1]
+            cut = float(b.manifest["tags"].get(tag, {}).get("threshold", 0.5))
+            res["tags"][tag] = _scores(Y[tag].to_numpy()[known].astype(int), prob, cut)
+            labelled = max(labelled, int(known.sum()))
+        if b.outcome is not None:
+            plan = TrainParams(rr=float(p.get("rr", 2.0)), horizon_hours=int(p.get("horizon_hours", 72)))
+            det = dataclasses.replace(detector, max_sl=float(p.get("max_sl", detector.max_sl)))
+            samples = outcome_samples(m1, frames, labels, plan, det)
+            if len(samples):
+                samples = samples[samples["available_at"] > start]
+            if len(samples):
+                prob = b.outcome.predict_proba(samples[b.outcome_features])[:, 1]
+                cut = float((b.manifest.get("outcome") or {}).get("threshold", 0.5))
+                res["outcome"] = _scores((samples["outcome"] == "win").to_numpy().astype(int), prob, cut,
+                                         r=samples["r"].to_numpy())
+                labelled = max(labelled, len(samples))
+        out["models"][b.id] = res
+    if not labelled:
+        raise ValueError(f"Nothing to score after {start:%Y-%m-%d %H:%M}, where the newest model's training data "
+                         "ends: label and mark reviewed some candles after it (or wait for order block trades "
+                         "to finish), then score again")
     return out

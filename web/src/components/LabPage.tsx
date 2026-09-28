@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  cancelTraining, confirmImport, confirmLabels, deleteModel, fetchLab, labelsExportUrl, modelFileUrl, setActiveModel,
-  stageImport, stageLabels, startTraining,
-  type Importance, type LabStatus, type MergeCounts, type ModelManifest, type StagedLabels, type StagedModel,
-  type TrainingRun, type TrainParams,
+  cancelTraining, confirmImport, confirmLabels, deleteModel, fetchLab, fetchScorecard, labelsExportUrl, modelFileUrl,
+  scoreOnSameWindow, setActiveModel, stageImport, stageLabels, startTraining,
+  type Importance, type LabStatus, type MergeCounts, type ModelManifest, type Scorecard, type StagedLabels,
+  type StagedModel, type TagMetrics, type TrainingRun, type TrainParams, type WindowScores,
 } from "../api";
 import { fmtUnix } from "../format";
 import { usePref } from "../prefs";
 import type { ChartPalette } from "../theme";
 import { LabData } from "./LabData";
 import { LabLabel } from "./LabLabel";
+import { ScorecardLine } from "./MlPanel";
 
 type Sub = "label" | "train" | "models" | "data";
 const SUBS: { id: Sub; title: string }[] = [
@@ -538,7 +539,22 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [card, setCard] = useState<Scorecard | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const activeModel = models.find((m) => m.id === status.active);
+  const compared = picked.map((id) => models.find((m) => m.id === id)).filter((m): m is ModelManifest => !!m);
+  const togglePick = (id: string) =>
+    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : cur.length < 3 ? [...cur, id] : cur));
+
+  useEffect(() => {
+    if (!status.active || !status.available) return setCard(null);
+    let alive = true;
+    fetchScorecard().then((r) => alive && setCard(r.scorecard)).catch(() => alive && setCard(null));
+    return () => {
+      alive = false;
+    };
+  }, [status.active, status.available]);
 
   const run = async (fn: () => Promise<LabStatus | void>) => {
     setBusy(true);
@@ -618,6 +634,7 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
           <table className="data lab-models-table">
             <thead>
               <tr>
+                <th scope="col"><span className="sr-only">Compare</span></th>
                 <th scope="col">Model</th>
                 <th scope="col">Made</th>
                 <th scope="col">Timeframes</th>
@@ -630,6 +647,10 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
                 const active = status.active === m.id;
                 return [
                   <tr key={m.id} className={active ? "is-selected" : undefined}>
+                    <td>
+                      <input type="checkbox" aria-label={`Compare ${m.name}`} checked={picked.includes(m.id)}
+                        disabled={!picked.includes(m.id) && picked.length >= 3} onChange={() => togglePick(m.id)} />
+                    </td>
                     <td>
                       <button type="button" className="link" aria-expanded={open === m.id} onClick={() => setOpen(open === m.id ? null : m.id)}>
                         {m.name}
@@ -654,7 +675,7 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
                   </tr>,
                   open === m.id && (
                     <tr key={`${m.id}-scores`} className="lab-scores-row">
-                      <td colSpan={5}>
+                      <td colSpan={6}>
                         {m.note && <p className="field-note">{m.note}</p>}
                         <p className="field-note num">
                           Trained on {m.data.m1_bars.toLocaleString()} M1 bars ({m.data.first.slice(0, 10)} → {m.data.last.slice(0, 10)}),{" "}
@@ -670,7 +691,177 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
           </table>
           </div>
         )}
+        {models.length > 1 && compared.length < 2 && (
+          <p className="field-hint">Tick two or three models to compare them side by side.</p>
+        )}
+        {activeModel && card && <ActiveScorecard name={activeModel.name} card={card} />}
       </section>
+      {compared.length >= 2 && <Compare models={compared} />}
     </div>
+  );
+}
+
+function ActiveScorecard({ name, card }: { name: string; card: Scorecard }) {
+  return (
+    <div className="lab-scorecard">
+      <h3>{name} on live data</h3>
+      <ScorecardLine card={card} />
+      {card.inputs === null ? (
+        <p className="field-hint">This file has no training input ranges, so only reviews and trades are checked.</p>
+      ) : card.inputs.length > 0 && (
+        <p className="field-hint">
+          Recent candles against training (median):{" "}
+          {card.inputs.map((i) => `${i.timeframe} ${i.title} ${i.ratio.toFixed(2)}×`).join(", ")}.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---- Compare ---------------------------------------------------------------------------------
+
+type Row = { label: string; values: (number | null | undefined)[]; fmt: (v: number) => string; best?: "high" | "low" };
+
+const num2 = (v: number) => v.toFixed(2);
+const bestOf = (row: Row) => {
+  if (!row.best) return null;
+  const vals = row.values.filter((v): v is number => typeof v === "number");
+  if (vals.length < 2 || new Set(vals).size === 1) return null;
+  return row.best === "high" ? Math.max(...vals) : Math.min(...vals);
+};
+
+function scoreRows(title: string, metrics: (TagMetrics | null | undefined)[], outcome: boolean): Row[] {
+  const get = (k: keyof TagMetrics) => metrics.map((m) => (m ? (m[k] as number | null | undefined) : null));
+  const rows: Row[] = [
+    { label: `${title}: labels used`, values: get("samples"), fmt: String },
+    { label: `${title}: AUC`, values: get("auc"), fmt: num2, best: "high" },
+  ];
+  if (outcome) {
+    rows.push(
+      { label: `${title}: avg R, all trades`, values: get("avg_r_all"), fmt: (v) => fmtR(v) },
+      { label: `${title}: avg R, trades it liked`, values: get("avg_r_picked"), fmt: (v) => fmtR(v), best: "high" },
+    );
+  } else {
+    rows.push(
+      { label: `${title}: precision`, values: get("precision"), fmt: (v) => pctOf(v), best: "high" },
+      { label: `${title}: recall`, values: get("recall"), fmt: (v) => pctOf(v), best: "high" },
+      { label: `${title}: cut`, values: get("threshold"), fmt: (v) => pctOf(v) },
+    );
+  }
+  return rows;
+}
+
+function CompareTable({ models, rows, caption }: { models: ModelManifest[]; rows: Row[]; caption: string }) {
+  return (
+    <div className="table-scroll">
+      <table className="data compact lab-compare">
+        <caption className="sr-only">{caption}</caption>
+        <thead>
+          <tr>
+            <th scope="col"><span className="sr-only">Score</span></th>
+            {models.map((m) => <th key={m.id} scope="col" className="end">{m.name}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const best = bestOf(row);
+            return (
+              <tr key={row.label}>
+                <th scope="row">{row.label}</th>
+                {row.values.map((v, i) => (
+                  <td key={models[i].id} className={`end num${best !== null && v === best ? " is-best" : ""}`}>
+                    {typeof v === "number" ? row.fmt(v) : "—"}
+                    {best !== null && v === best && <span className="sr-only"> (best)</span>}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Two or three models side by side, from their manifests; optionally re-scored on one common window. */
+function Compare({ models }: { models: ModelManifest[] }) {
+  const [window_, setWindow] = useState<WindowScores | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const key = models.map((m) => m.id).join(",");
+  useEffect(() => {
+    setWindow(null);
+    setError(null);
+  }, [key]);
+
+  const tags = [...new Set(models.flatMap((m) => Object.keys(m.tags).filter((t) => m.tags[t].trained)))];
+  const titleOf = (t: string) => models.find((m) => m.tags[t])?.tags[t].title ?? t;
+  const heldOut: Row[] = [
+    ...tags.flatMap((t) => scoreRows(titleOf(t), models.map((m) => (m.tags[t]?.trained ? m.tags[t] : null)), false)),
+    ...(models.some((m) => m.outcome?.trained)
+      ? scoreRows("Outcome", models.map((m) => (m.outcome?.trained ? m.outcome : null)), true) : []),
+  ];
+  const settings: Row[] = [
+    { label: "Candles before", values: models.map((m) => m.params.lookback), fmt: String },
+    { label: "Confirming candles", values: models.map((m) => m.params.confirm), fmt: String },
+    { label: "Target (R)", values: models.map((m) => m.params.rr), fmt: String },
+    { label: "Horizon (hours)", values: models.map((m) => m.params.horizon_hours), fmt: String },
+  ];
+  const windows = new Set(models.flatMap((m) => Object.values(m.tags).map((t) => t.test_from?.slice(0, 16)).filter(Boolean)));
+
+  const score = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setWindow(await scoreOnSameWindow(models.map((m) => m.id)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sameWindow: Row[] | null = window_ && [
+    ...tags.flatMap((t) => scoreRows(titleOf(t), models.map((m) => window_.models[m.id]?.tags[t]), false)),
+    ...(models.some((m) => window_.models[m.id]?.outcome)
+      ? scoreRows("Outcome", models.map((m) => window_.models[m.id]?.outcome), true) : []),
+  ];
+
+  return (
+    <section className="settings-form" aria-labelledby="compare-h">
+      <div className="settings-intro">
+        <h2 id="compare-h">Compare</h2>
+        <p>
+          Held-out scores from each model's training, best value per row in bold. Data:{" "}
+          {models.map((m) => `${m.name} ${m.data.first.slice(0, 10)} → ${m.data.last.slice(0, 10)} (${m.timeframes.join(", ")})`).join("; ")}.
+        </p>
+      </div>
+      {windows.size > 1 && (
+        <p className="banner" role="note">
+          Their held-out windows differ, so these scores aren't strictly comparable: a calm or wild week can flatter one.
+          Score them on the same window to be sure.
+        </p>
+      )}
+      <CompareTable models={models} rows={[...heldOut, ...settings]} caption="Held-out scores and settings" />
+      <div className="form-actions">
+        <button type="button" className="button secondary" disabled={busy} onClick={score}>
+          {busy ? "Scoring…" : "Score on the same window"}
+        </button>
+        <span className="form-status">{error && <span className="text-error">{error}</span>}</span>
+      </div>
+      <p className="field-hint">
+        Scores every model on the labelled candles known after the newest one's training data ends, on the timeframes
+        they share, each at its own cut. None of them trained on those candles.
+      </p>
+      {window_ && sameWindow && (
+        <>
+          <h3 className="lab-compare-h">
+            Same window: {window_.from.slice(0, 16).replace("T", " ")} → {window_.to.slice(0, 16).replace("T", " ")}{" "}
+            ({window_.timeframes.join(", ")})
+          </h3>
+          <CompareTable models={models} rows={sameWindow} caption="Scores on the same window" />
+        </>
+      )}
+    </section>
   );
 }

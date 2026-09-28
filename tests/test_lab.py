@@ -15,6 +15,7 @@ from wednesday.feeds import SyntheticFeed
 from wednesday.lab.dataset import FeatureParams, LADDER, candle_features, label_matrix, minute_dataset, unix
 from wednesday.lab.model import ModelBundle, ModelFileError, load_bytes, read_manifest, safe_loads
 from wednesday.lab.outcome import TradePlan, plan_levels, simulate
+from wednesday.lab import explain as explain_mod
 from wednesday.lab import train as train_mod
 from wednesday.lab.explain import describe
 from wednesday.lab.service import Lab, feed_warnings
@@ -23,7 +24,7 @@ from wednesday.lab.train import TrainParams, predict_blocks, train_bundle
 from wednesday.scanner import ScanConfig
 from wednesday.server import create_app
 from wednesday.settings import DataSettings
-from wednesday.storage import Store
+from wednesday.storage import Store, lab_labels_table
 from wednesday.structure import Context
 from wednesday.timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
 
@@ -252,6 +253,12 @@ def test_lab_api_flow(lab_api):
     assert api.delete("/api/lab/train").status_code == 409  # nothing to stop
 
     assert api.put("/api/lab/active", json={"id": model["id"]}).json()["active"] == model["id"]
+    card = api.get("/api/lab/scorecard").json()["scorecard"]
+    assert card["model_id"] == model["id"] and card["since_unix"] and card["reviews"]["n"] == 0
+    assert card["warnings"] == [] and card["inputs"] is not None
+    assert api.post("/api/lab/compare", json={"ids": [model["id"]]}).status_code == 422
+    batch = api.post("/api/lab/batch", json={"add_labels": [{"timeframe": "15M", "tag": "bsl", "start": 1}]}).json()
+    assert api.post("/api/lab/batch", json={"delete_labels": [batch["labels"][0]["id"]]}).json()["deleted_labels"]
     preds = api.get("/api/lab/predictions", params={"tf": "15M", "threshold": 0.3}).json()
     assert preds["model"]["id"] == model["id"]
     assert api.get("/api/lab/candles", params={"tf": "15M", "model": True}).status_code == 200
@@ -420,6 +427,129 @@ def test_labels_export_wipe_import_gives_the_same_samples(lab_api, tmp_path):
     assert api.post("/api/lab/labels/import", content=b"nope").status_code == 422
     assert api.post("/api/lab/labels/import", content=b'{"format": "wednesday-labels", "labels": [{"tag": "x"}]}'
                     ).status_code == 422
+
+
+def test_old_database_gets_the_new_label_columns(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    con = sqlite3.connect(path)
+    con.execute('CREATE TABLE lab_labels (id VARCHAR(36) PRIMARY KEY, symbol VARCHAR(64) NOT NULL, timeframe VARCHAR(8) '
+                'NOT NULL, tag VARCHAR(32) NOT NULL, value INTEGER NOT NULL, start BIGINT NOT NULL, "end" BIGINT NOT NULL, '
+                'top FLOAT, bottom FLOAT, origin VARCHAR(16) NOT NULL, created_at VARCHAR(40) NOT NULL)')
+    con.execute("INSERT INTO lab_labels VALUES ('a', 'XAU', '5M', 'bsl', 1, 10, 10, NULL, NULL, 'manual', '2026-01-01')")
+    con.commit()
+    con.close()
+    store = Store(f"sqlite:///{path}")
+    row = store.lab_rows(lab_labels_table, "XAU")[0]
+    assert row["id"] == "a" and row["updated_at"] is None and row["changed_by"] is None
+    lab = Lab(store, tmp_path / "models", DetectorParams())
+    new = lab.add_label("XAU", {"timeframe": "5M", "tag": "ssl", "start": 20})
+    assert new["updated_at"] and new["changed_by"] == "manual"
+
+
+def test_batch_undo_restores_exactly(tmp_path):
+    store = Store(f"sqlite:///{tmp_path / 'lab.db'}")
+    lab = Lab(store, tmp_path / "models", DetectorParams())
+    a = lab.add_label("XAU", {"timeframe": "5M", "tag": "ob_bull", "start": 100, "end": 200, "top": 5.5, "bottom": 5.0},
+                      origin="detector")
+    b = lab.add_label("XAU", {"timeframe": "5M", "tag": "bsl", "start": 300, "value": 0})
+    rv = lab.add_reviewed("XAU", {"timeframe": "5M", "start": 0, "end": 400, "tags": ["ob_bull", "bsl"]})
+    other = lab.add_label("EUR", {"timeframe": "5M", "tag": "bsl", "start": 300})
+    before = (lab.labels("XAU"), lab.reviewed("XAU"))
+
+    # A bulk clear of the selection, then its undo: the deleted rows go back as they were.
+    done = lab.batch("XAU", {"delete_labels": [a["id"], b["id"], other["id"]], "delete_reviewed": [rv["id"]]})
+    assert {r["id"] for r in done["deleted_labels"]} == {a["id"], b["id"]}  # never another symbol's
+    assert lab.labels("XAU") == [] and lab.labels("EUR") == [other]
+    lab.batch("XAU", {"add_labels": done["deleted_labels"], "add_reviewed": done["deleted_reviewed"]})
+    assert (lab.labels("XAU"), lab.reviewed("XAU")) == before
+
+    # Accepting suggestions in bulk, then undoing it by deleting what was written.
+    added = lab.batch("XAU", {"add_labels": [{"timeframe": "5M", "tag": "ssl", "start": t, "origin": "detector"}
+                                             for t in (500, 600)]})
+    assert [r["origin"] for r in added["labels"]] == ["detector", "detector"]
+    lab.batch("XAU", {"delete_labels": [r["id"] for r in added["labels"]]})
+    assert (lab.labels("XAU"), lab.reviewed("XAU")) == before
+    with pytest.raises(ValueError, match="another symbol"):
+        lab.batch("XAU", {"add_labels": [{**other, "symbol": "XAU"}]})
+
+
+def test_blocks_say_why(tmp_path):
+    m1 = synthetic(9000)
+    tf = TIMEFRAMES_BY_NAME["15M"]
+    labels, reviewed = detector_labels(m1, tf, m1.index[-2000])
+    bundle = train_bundle(m1, {"15M": labels}, {"15M": reviewed}, TrainParams(timeframes=["15M"], tags=["bsl", "ssl"]),
+                          "XAU", DetectorParams())
+    assert bundle.medians["tags"] and bundle.manifest["inputs"]["15M"]["atr_pct"][0] > 0
+    loaded = load_bytes(bundle.to_bytes())
+    blocks = predict_blocks(loaded, m1, tf, limit=150)
+    assert blocks and all(1 <= len(b["why"]) <= 3 for b in blocks)
+    assert {w["title"] for b in blocks for w in b["why"]} <= set(explain_mod.FAMILIES.values())
+    loaded.medians = {}  # a file from before 0.1.7
+    assert all(b["why"] == [] for b in predict_blocks(loaded, m1, tf, limit=150))
+
+
+def test_score_models_on_the_same_window():
+    m1 = synthetic(12_000)
+    tf = TIMEFRAMES_BY_NAME["15M"]
+    labels, reviewed = detector_labels(m1, tf, m1.index[-1])
+    early, later = m1.iloc[:-3000], m1.iloc[:-2500]
+    tags = ["bsl", "ssl", "ob_bull", "ob_bear"]
+    a = train_bundle(early, {"15M": labels}, {"15M": reviewed}, TrainParams(timeframes=["15M"], tags=tags, name="a"),
+                     "XAU", DetectorParams())
+    b = train_bundle(later, {"15M": labels}, {"15M": reviewed},
+                     TrainParams(timeframes=["15M", "5M"], tags=tags, lookback=6, name="b"), "XAU", DetectorParams())
+    out = train_mod.score_window([a, b], m1, {"15M": labels}, {"15M": reviewed}, DetectorParams())
+    assert out["timeframes"] == ["15M"] and out["from"] == b.manifest["data"]["last"]
+    for res in out["models"].values():
+        assert res["tags"]["bsl"]["samples"] > 0
+    # Only candles known after the newest model's data: never what either model trained on.
+    fr = train_mod.frames_for(m1, tf, TrainParams().features)
+    X, _ = train_mod.tag_samples([fr], {"15M": labels}, {"15M": reviewed}, ["bsl"])
+    n_after = int((X["available_at"] > pd.Timestamp(out["from"])).sum())
+    assert out["models"][a.id]["tags"]["bsl"]["samples"] <= n_after
+
+    with pytest.raises(ValueError, match="Nothing to score"):
+        train_mod.score_window([a, b], later, {"15M": labels}, {"15M": reviewed}, DetectorParams())
+    c = train_bundle(early, {"5M": detector_labels(early, M5, early.index[-1])[0]},
+                     {"5M": detector_labels(early, M5, early.index[-1])[1]}, TrainParams(timeframes=["5M"], tags=["bsl"]),
+                     "XAU", DetectorParams())
+    with pytest.raises(ValueError, match="share no timeframe"):
+        train_mod.score_window([a, c], m1, {}, {}, DetectorParams())
+
+
+def test_drift_scorecard():
+    from wednesday.lab import drift
+
+    manifest = {"tags": {"bsl": {"precision": 0.8}}}
+    few = [{"tag": "bsl", "verdict": "invalid"}] * 5
+    assert not drift.review_score(manifest, few)["low"]  # no alarm on a handful
+    many = [{"tag": "bsl", "verdict": "invalid"}] * 20 + [{"tag": "bsl", "verdict": "valid"}] * 10
+    score = drift.review_score(manifest, many)
+    assert score["low"] and score["n"] == 30 and score["expected"] == pytest.approx(0.8)
+    fine = [{"tag": "bsl", "verdict": "valid"}] * 24 + [{"tag": "bsl", "verdict": "invalid"}] * 6
+    assert not drift.review_score(manifest, fine)["low"]
+
+    m1 = synthetic(9000)
+    tf = TIMEFRAMES_BY_NAME["15M"]
+    labels, reviewed = detector_labels(m1, tf, m1.index[-2000])
+    bundle = train_bundle(m1.iloc[:-2000], {"15M": labels}, {"15M": reviewed},
+                          TrainParams(timeframes=["15M"], tags=["ob_bull", "ob_bear", "bsl"]), "XAU", DetectorParams())
+    since = unix(m1.index[-2000])
+    market = drift.market_score(bundle, m1, since)
+    assert market["calls"] >= market["finished"] >= market["wins"] >= 0
+    shifts = drift.input_shift(bundle, m1)
+    assert shifts and not any(s["shifted"] for s in shifts)  # same synthetic market
+    wild = m1.copy()
+    mid = wild["close"].mean()
+    for col in ("open", "high", "low", "close"):
+        wild[col] = mid + (wild[col] - mid) * 4  # four times the moves, same price level
+    assert any(s["shifted"] and s["input"] == "atr_pct" for s in drift.input_shift(bundle, wild))
+    card = drift.scorecard(bundle, [], wild, "2026-01-01T00:00:00", since)
+    assert any("ATR is" in w for w in card["warnings"])
+    bundle.manifest.pop("inputs")  # a file from before 0.1.7: reviews and market only
+    assert drift.input_shift(bundle, m1) is None
 
 
 def test_lab_without_database(tmp_path):

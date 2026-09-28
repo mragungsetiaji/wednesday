@@ -550,6 +550,8 @@ export interface LabLabel {
   bottom: number | null;
   origin: "manual" | "detector" | "review";
   created_at: string;
+  updated_at?: string | null; // null on labels from before 0.1.7
+  changed_by?: "manual" | "review" | "import" | null;
 }
 
 export interface LabReviewed {
@@ -558,6 +560,7 @@ export interface LabReviewed {
   start: number;
   end: number;
   tags: string[];
+  created_at?: string;
 }
 
 export interface LabSuggestion {
@@ -584,7 +587,11 @@ export interface MlBlock {
   model_id?: string;
   verdict?: "valid" | "invalid" | null;
   outcome?: string | null;
+  why?: WhyPart[]; // the feature families that moved its probability most; empty for older model files
 }
+
+/** A feature family and how much it moved a block's probability (set to its training median). */
+export interface WhyPart { id: string; title: string; delta: number }
 
 export interface LabWindow {
   timeframe: string;
@@ -734,6 +741,41 @@ export interface StagedLabels {
   labels: MergeCounts;
   reviewed: MergeCounts;
 }
+/** Several label / reviewed-range changes at once (bulk edits, undo and redo). Rows with an id are put back as given. */
+export interface LabBatch {
+  add_labels?: Partial<LabLabel>[];
+  delete_labels?: string[];
+  add_reviewed?: Partial<LabReviewed>[];
+  delete_reviewed?: string[];
+}
+export interface LabBatchResult {
+  labels: LabLabel[];
+  reviewed: LabReviewed[];
+  deleted_labels: LabLabel[];
+  deleted_reviewed: LabReviewed[];
+}
+export const labBatch = (b: LabBatch) => send<LabBatchResult>("POST", "/api/lab/batch", b);
+
+/** Scores of several models on the same window (after the newest one's training data). */
+export interface WindowScores {
+  from: string;
+  to: string;
+  timeframes: string[];
+  models: Record<string, { tags: Record<string, TagMetrics>; outcome: TagMetrics | null }>;
+}
+export const scoreOnSameWindow = (ids: string[]) => send<WindowScores>("POST", "/api/lab/compare", { ids });
+
+export interface Scorecard {
+  model_id: string;
+  since: string; // UTC ISO, when the model was turned on
+  min_samples: number;
+  reviews: { n: number; valid: number; rate: number | null; expected: number | null; low: boolean };
+  market: { calls: number; finished: number; wins: number; avg_r: number | null; expected: number | null; low: boolean };
+  inputs: { timeframe: string; input: string; title: string; trained: number[]; live: number; ratio: number; shifted: boolean }[] | null;
+  warnings: string[];
+}
+export const fetchScorecard = () => getJson<{ scorecard: Scorecard | null }>("/api/lab/scorecard");
+
 export const labelsExportUrl = "/api/lab/labels/export";
 export const stageLabels = (file: File) => upload<StagedLabels>("/api/lab/labels/import", file);
 export const confirmLabels = (token: string, mapSymbol: boolean) =>

@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { reviewBlock, type MlBlock } from "../api";
-import { fmtPrice, fmtUnix } from "../format";
+import { fetchScorecard, reviewBlock, type MlBlock, type Scorecard } from "../api";
+import { fmtPrice, fmtUnix, fmtWhy } from "../format";
 import { CheckIcon, CrossIcon } from "../icons";
 import { pct } from "../labPrimitive";
 import type { MlState } from "../mlData";
@@ -23,7 +23,14 @@ export function MlPanel({ tf, ml, threshold, onThreshold, onReviewed, onHighligh
 }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const card = useScorecard(ml.model?.id ?? null, ml.blocks);
   const blocks = [...ml.blocks].reverse();
+  const hot = blocks.find((b) => b.id === hovered);
+  const hover = (id: string | null) => {
+    setHovered(id);
+    onHighlight(id);
+  };
   const unreviewed = blocks.filter((b) => !b.verdict).length;
 
   const review = async (b: MlBlock, verdict: "valid" | "invalid") => {
@@ -76,8 +83,8 @@ export function MlPanel({ tf, ml, threshold, onThreshold, onReviewed, onHighligh
             </thead>
             <tbody>
               {blocks.map((b) => (
-                <tr key={b.id} onMouseEnter={() => onHighlight(b.id)} onMouseLeave={() => onHighlight(null)}
-                  onFocus={() => onHighlight(b.id)} onBlur={() => onHighlight(null)}>
+                <tr key={b.id} onMouseEnter={() => hover(b.id)} onMouseLeave={() => hover(null)}
+                  onFocus={() => hover(b.id)} onBlur={() => hover(null)}>
                   <td className="num">{fmtUnix(b.time_unix)}</td>
                   <td>{b.title} <span className="muted num">{pct(b.prob)}</span></td>
                   <td className="end num">{b.top === b.bottom ? fmtPrice(b.top) : `${fmtPrice(b.bottom)} – ${fmtPrice(b.top)}`}</td>
@@ -100,7 +107,54 @@ export function MlPanel({ tf, ml, threshold, onThreshold, onReviewed, onHighligh
           </table>
         </div>
       )}
+      {hot?.why?.length ? (
+        <p className="ml-why" aria-live="polite">
+          <strong>{hot.title} at {fmtUnix(hot.time_unix)}</strong>, why: {fmtWhy(hot.why)}
+        </p>
+      ) : null}
+      {card && <ScorecardLine card={card} />}
       {error && <p className="text-error" role="alert">{error}</p>}
     </section>
+  );
+}
+
+/** The active model's scorecard, refetched when its blocks change (the server caches it). */
+function useScorecard(modelId: string | null, blocks: MlBlock[]) {
+  const [card, setCard] = useState<Scorecard | null>(null);
+  const reviewed = blocks.filter((b) => b.verdict).length;
+  useEffect(() => {
+    if (!modelId) return setCard(null);
+    let alive = true;
+    fetchScorecard()
+      .then((r) => alive && setCard(r.scorecard))
+      .catch(() => alive && setCard(null));
+    return () => {
+      alive = false;
+    };
+  }, [modelId, blocks.length, reviewed]);
+  return card;
+}
+
+const pctOrDash = (v: number | null) => (v === null ? "—" : pct(v));
+const signedR = (v: number | null) => (v === null ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}R`);
+
+/** One line: reviews and traded result since the model went on, then any drift warning. */
+export function ScorecardLine({ card }: { card: Scorecard }) {
+  const r = card.reviews;
+  const m = card.market;
+  return (
+    <div className="ml-scorecard">
+      <p>
+        Since {new Date(card.since).toLocaleDateString(undefined, { dateStyle: "medium" })}:{" "}
+        {r.n ? <>{r.n} reviewed, {pctOrDash(r.rate)} valid (held-out {pctOrDash(r.expected)})</> : "nothing reviewed yet"}
+        {" · "}
+        {m.finished ? <>{m.finished} finished trade{m.finished === 1 ? "" : "s"}, {signedR(m.avg_r)} (held-out {signedR(m.expected)})</>
+          : `${m.calls} order block call${m.calls === 1 ? "" : "s"}, none finished yet`}
+        {(r.n < card.min_samples || m.finished < card.min_samples) && (
+          <span className="muted"> · warnings need {card.min_samples} of each</span>
+        )}
+      </p>
+      {card.warnings.map((w) => <p key={w} className="ml-drift" role="status">{w}</p>)}
+    </div>
   );
 }

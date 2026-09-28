@@ -63,6 +63,35 @@ def describe(name: str) -> tuple[str, str]:
     return "other", name
 
 
+def medians(X: pd.DataFrame) -> dict[str, float]:
+    """Training median of every feature (NaN-free: a column that is all missing stays missing)."""
+    return {c: float(v) for c, v in X.median(numeric_only=True).items() if pd.notna(v)}
+
+
+def contributions(model, X: pd.DataFrame, med: dict[str, float], top: int = 3) -> list[list[dict]]:
+    """Per row of ``X``: the ``top`` feature families that moved its probability most, as the change
+    in probability when that family is set back to its training median (positive: it pushed the
+    call up). A cheap local explanation; one predict call per family for all rows at once."""
+    if X.empty or not med:
+        return [[] for _ in range(len(X))]
+    base = model.predict_proba(X)[:, 1]
+    by_family: dict[str, list[str]] = {}
+    for c in X.columns:
+        if c in med:
+            by_family.setdefault(describe(c)[0], []).append(c)
+    deltas = {}
+    for fam, cols in by_family.items():
+        neutral = X.copy()
+        for c in cols:
+            neutral[c] = med[c]
+        deltas[fam] = base - model.predict_proba(neutral)[:, 1]
+    out = []
+    for i in range(len(X)):
+        ranked = sorted(deltas, key=lambda f: -abs(deltas[f][i]))[:top]
+        out.append([{"id": f, "title": FAMILIES.get(f, "Other"), "delta": float(deltas[f][i])} for f in ranked])
+    return out
+
+
 def _auc(model, X: pd.DataFrame, y: np.ndarray) -> float:
     from sklearn.metrics import roc_auc_score
 

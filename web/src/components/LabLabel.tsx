@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  addLabel, addReviewed, deleteLabel, deleteReviewed, fetchLabWindow, reviewBlock,
-  type LabStatus, type LabSuggestion, type LabWindow, type MlBlock,
+  fetchLabWindow, labBatch, reviewBlock,
+  type LabBatch, type LabBatchResult, type LabStatus, type LabSuggestion, type LabWindow, type MlBlock,
 } from "../api";
-import { fmtPrice, fmtUnix } from "../format";
+import { fmtPrice, fmtUnix, fmtWhy } from "../format";
 import { CheckIcon, CrossIcon } from "../icons";
 import { labelMark, pct, predictionMark, suggestionMark, TAG_TITLE, type LabMark } from "../labPrimitive";
 import { usePref } from "../prefs";
@@ -16,6 +16,23 @@ const TF_SECONDS: Record<string, number> = { "4H": 14400, "1H": 3600, "30M": 180
 const LIMIT = 300;
 
 type Selection = { anchor: number; start: number; end: number };
+
+const UNDO_DEPTH = 100;
+
+/** One labelling step as the batch that takes it back and the batch that does it again. */
+type Step = { undo: LabBatch; redo: LabBatch };
+
+function stepOf(res: LabBatchResult): Step {
+  return {
+    // Put back what was deleted (same ids, same fields); remove what was written.
+    undo: { add_labels: res.deleted_labels, add_reviewed: res.deleted_reviewed,
+      delete_labels: res.labels.map((l) => l.id), delete_reviewed: res.reviewed.map((r) => r.id) },
+    redo: { add_labels: res.labels, add_reviewed: res.reviewed,
+      delete_labels: res.deleted_labels.map((l) => l.id), delete_reviewed: res.deleted_reviewed.map((r) => r.id) },
+  };
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 const within = (t: number, s: { start: number; end: number }) => t >= s.start && t <= s.end;
 const overlaps = (a: { start: number; end: number }, b: { start: number; end: number }) => a.start <= b.end && b.start <= a.end;
@@ -40,6 +57,12 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
   const [hot, setHot] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const refresh = useCallback(() => setReload((n) => n + 1), []);
+  const [clearTag, setClearTag] = useState("");
+  // Undo / redo: steps live in refs (the keyboard handler reads them), `depth` re-renders the buttons.
+  const past = useRef<Step[]>([]);
+  const future = useRef<Step[]>([]);
+  const [depth, setDepth] = useState({ undo: 0, redo: 0 });
+  const syncDepth = () => setDepth({ undo: past.current.length, redo: future.current.length });
 
   useEffect(() => {
     let alive = true;
@@ -98,18 +121,55 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
     }
   }, [refresh, onChanged]);
 
+  /** Apply a change and remember how to undo it. */
+  const change = useCallback((b: LabBatch) => act(async () => {
+    const res = await labBatch(b);
+    past.current = [...past.current.slice(1 - UNDO_DEPTH), stepOf(res)];
+    future.current = [];
+    syncDepth();
+  }), [act]);
+
+  const undo = useCallback(() => {
+    const step = past.current.at(-1);
+    if (!step) return;
+    act(async () => {
+      await labBatch(step.undo);
+      past.current = past.current.slice(0, -1);
+      future.current = [...future.current, step];
+      syncDepth();
+    });
+  }, [act]);
+
+  const redo = useCallback(() => {
+    const step = future.current.at(-1);
+    if (!step) return;
+    act(async () => {
+      await labBatch(step.redo);
+      future.current = future.current.slice(0, -1);
+      past.current = [...past.current, step];
+      syncDepth();
+    });
+  }, [act]);
+
   const tag = useCallback((id: string) => {
     if (!sel) return;
     const value = negative ? 0 : 1;
     setNegative(false);
-    act(() => addLabel({ timeframe: tf, tag: id, start: sel.start, end: sel.end, value }));
-  }, [sel, negative, tf, act]);
+    change({ add_labels: [{ timeframe: tf, tag: id, start: sel.start, end: sel.end, value }] });
+  }, [sel, negative, tf, change]);
 
   const accept = useCallback((list: LabSuggestion[]) => {
     if (!list.length) return;
-    act(() => Promise.all(list.map((s) => addLabel({ timeframe: tf, tag: s.tag, start: s.time_unix, end: s.time_unix, value: 1,
-      top: s.top, bottom: s.bottom, origin: "detector" }))));
-  }, [tf, act]);
+    if (list.length > 1 && !window.confirm(`Accept ${plural(list.length, "suggestion")} on the selection?`)) return;
+    change({ add_labels: list.map((s) => ({ timeframe: tf, tag: s.tag, start: s.time_unix, end: s.time_unix, value: 1 as const,
+      top: s.top, bottom: s.bottom, origin: "detector" as const })) });
+  }, [tf, change]);
+
+  const remove = useCallback((ids: string[], ask: boolean) => {
+    if (!ids.length) return;
+    if (ask && !window.confirm(`Remove ${plural(ids.length, "label")} on the selection?`)) return;
+    change({ delete_labels: ids });
+  }, [change]);
 
   const review = useCallback((list: MlBlock[], verdict: "valid" | "invalid") => {
     if (!list.length) return;
@@ -117,14 +177,23 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
   }, [act]);
 
   const markReviewed = useCallback((r: { start: number; end: number }) => {
-    act(() => addReviewed({ timeframe: tf, start: r.start, end: r.end, tags: tags.map((t) => t.id) }));
-  }, [tf, tags, act]);
+    change({ add_reviewed: [{ timeframe: tf, start: r.start, end: r.end, tags: tags.map((t) => t.id) }] });
+  }, [tf, tags, change]);
 
-  // Keyboard: numbers tag, N flips to "not", A accepts, V / X review, arrows move, Delete removes, Esc clears.
+  // Keyboard: numbers tag, N flips to "not", A accepts, V / X review, arrows move, Delete removes, Esc clears,
+  // Ctrl+Z / Ctrl+Shift+Z (or Ctrl+Y; Cmd on a Mac) undo and redo.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
-      if (el.closest("input, textarea, select, [contenteditable]") || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (el.closest("input, textarea, select, [contenteditable]")) return;
+      const key = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && (key === "z" || key === "y")) {
+        e.preventDefault();
+        if (key === "y" || e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= tags.length) tag(tags[n - 1].id);
       else if (e.key === "n" || e.key === "N") setNegative((v) => !v);
@@ -132,7 +201,7 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
       else if (e.key === "v" || e.key === "V") review(predictionsAt, "valid");
       else if (e.key === "x" || e.key === "X") review(predictionsAt, "invalid");
       else if ((e.key === "r" || e.key === "R") && range) markReviewed(range);
-      else if ((e.key === "Delete" || e.key === "Backspace") && labelsAt.length) act(() => Promise.all(labelsAt.map((l) => deleteLabel(l.id))));
+      else if ((e.key === "Delete" || e.key === "Backspace") && labelsAt.length) remove(labelsAt.map((l) => l.id), labelsAt.length > 1);
       else if (e.key === "Escape") setSel(null);
       else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && sel && times.length) {
         const dir = e.key === "ArrowLeft" ? -1 : 1;
@@ -145,7 +214,7 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [tags, tag, accept, review, markReviewed, act, pick, sel, range, times, suggestionsAt, predictionsAt, labelsAt]);
+  }, [tags, tag, accept, review, markReviewed, remove, undo, redo, pick, sel, range, times, suggestionsAt, predictionsAt, labelsAt]);
 
   const first = candles[0]?.time;
   const last = candles[candles.length - 1]?.time;
@@ -252,7 +321,7 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
                     <span className="muted"> · {l.origin === "manual" ? "yours" : l.origin === "detector" ? "accepted" : "reviewed"}</span>
                   </span>
                   <button type="button" className="icon-button" aria-label={`Remove ${TAG_TITLE[l.tag]} label`}
-                    onClick={() => act(() => deleteLabel(l.id))}>
+                    onClick={() => remove([l.id], false)}>
                     <CrossIcon size={13} />
                   </button>
                 </li>
@@ -272,6 +341,7 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
                     Model: {b.title} {pct(b.prob)}
                     {b.outcome_prob !== null && <span className="muted"> · win {pct(b.outcome_prob)}</span>}
                     {b.verdict && <span className="muted"> · marked {b.verdict}</span>}
+                    {!!b.why?.length && <span className="lab-why">Why: {fmtWhy(b.why)}</span>}
                   </span>
                   <span className="verdict">
                     <button type="button" className="verdict-btn" aria-pressed={b.verdict === "valid"} onClick={() => review([b], "valid")}
@@ -282,8 +352,34 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
                 </li>
               ))}
             </ul>
+            <div className="lab-actions">
+              {suggestionsAt.length > 1 && (
+                <button type="button" className="button secondary" onClick={() => accept(suggestionsAt)}>
+                  Accept all {suggestionsAt.length}
+                </button>
+              )}
+              {labelsAt.length > 0 && (
+                <span className="lab-clear">
+                  <select value={clearTag} aria-label="Labels to clear" onChange={(e) => setClearTag(e.target.value)}>
+                    <option value="">All tags</option>
+                    {tags.filter((t) => labelsAt.some((l) => l.tag === t.id)).map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+                  </select>
+                  <button type="button" className="button quiet"
+                    onClick={() => remove(labelsAt.filter((l) => !clearTag || l.tag === clearTag).map((l) => l.id), true)}>
+                    Clear labels
+                  </button>
+                </span>
+              )}
+            </div>
           </div>
         )}
+
+        <div className="lab-block">
+          <div className="lab-actions" role="group" aria-label="History of changes">
+            <button type="button" className="button quiet" disabled={!depth.undo} onClick={undo}>Undo <Kbd>Ctrl Z</Kbd></button>
+            <button type="button" className="button quiet" disabled={!depth.redo} onClick={redo}>Redo</button>
+          </div>
+        </div>
 
         <div className="lab-block">
           <h2>Reviewed</h2>
@@ -304,7 +400,7 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
               {reviewed.map((r) => (
                 <li key={r.id}>
                   <span className="lab-item-text num">{fmtUnix(r.start)} → {fmtUnix(r.end)}</span>
-                  <button type="button" className="icon-button" aria-label="Remove reviewed range" onClick={() => act(() => deleteReviewed(r.id))}>
+                  <button type="button" className="icon-button" aria-label="Remove reviewed range" onClick={() => change({ delete_reviewed: [r.id] })}>
                     <CrossIcon size={13} />
                   </button>
                 </li>
@@ -325,6 +421,7 @@ export function LabLabel({ status, palette, onChanged }: { status: LabStatus; pa
             <dt><Kbd>←</Kbd> <Kbd>→</Kbd></dt><dd>Move; with Shift, grow the range</dd>
             <dt><Kbd>R</Kbd></dt><dd>Selection reviewed</dd>
             <dt><Kbd>Del</Kbd></dt><dd>Remove labels on the selection</dd>
+            <dt><Kbd>Ctrl</Kbd> <Kbd>Z</Kbd></dt><dd>Undo; with Shift (or <Kbd>Ctrl</Kbd> <Kbd>Y</Kbd>), redo. Cmd on a Mac</dd>
             <dt><Kbd>Esc</Kbd></dt><dd>Clear the selection</dd>
           </dl>
         </details>

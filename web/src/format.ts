@@ -69,7 +69,11 @@ export function fmtSpan(fromIso: string, toIso: string): string {
 /** Unix seconds on the feed clock, shown as-is: "2026-03-02 09:35". */
 export const fmtUnix = (t: number) => new Date(t * 1000).toISOString().slice(0, 16).replace("T", " ");
 
-const MONEY = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** A block's reasons: "confirming candles +18 pts, candles before +6 pts". */
+export const fmtWhy = (why: { title: string; delta: number }[] | undefined) =>
+  (why ?? []).map((w) => `${w.title.toLowerCase()} ${w.delta >= 0 ? "+" : "−"}${Math.round(Math.abs(w.delta) * 100)} pts`).join(", ");
+
+const MONEY =new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** Money in the account currency: "$105.00" for USD, "105.00 EUR" otherwise. */
 export const fmtMoney = (v: number, currency: string) => {

@@ -93,6 +93,8 @@ lab_labels_table = Table(
     Column("bottom", Float, nullable=True),
     Column("origin", String(16), nullable=False),  # "manual", "detector" (accepted suggestion) or "review"
     Column("created_at", String(40), nullable=False),
+    Column("updated_at", String(40), nullable=True),  # last write; null in rows from before 0.1.7
+    Column("changed_by", String(16), nullable=True),  # what made the last write: "manual", "review" or "import"
 )
 
 lab_reviewed_table = Table(
@@ -239,6 +241,24 @@ class Store:
                 cur.execute("PRAGMA synchronous=NORMAL")
                 cur.close()
         metadata.create_all(self.engine)
+        self._add_missing_columns()
+
+    def _add_missing_columns(self) -> None:
+        """create_all makes missing tables only; add nullable columns that newer versions added
+        to existing ones, so an old database keeps working."""
+        from sqlalchemy import inspect
+
+        found = inspect(self.engine)
+        existing = set(found.get_table_names())
+        with self.engine.begin() as conn:
+            for table in metadata.sorted_tables:
+                if table.name not in existing:
+                    continue
+                have = {c["name"] for c in found.get_columns(table.name)}
+                for col in table.columns:
+                    if col.name not in have and col.nullable:
+                        kind = col.type.compile(dialect=self.engine.dialect)
+                        conn.exec_driver_sql(f'ALTER TABLE {table.name} ADD COLUMN "{col.name}" {kind}')
 
     @property
     def backend(self) -> str:
@@ -379,6 +399,17 @@ class Store:
     def lab_delete(self, table: Table, row_id: str) -> bool:
         with self.engine.begin() as conn:
             return conn.execute(table.delete().where(table.c.id == row_id)).rowcount > 0
+
+    def lab_get(self, table: Table, ids: list[str]) -> list[dict]:
+        """Rows of a lab table by id (any symbol)."""
+        rows: list[dict] = []
+        with self.engine.connect() as conn:
+            for i in range(0, len(ids), 500):
+                rows += [dict(r._mapping) for r in conn.execute(select(table).where(table.c.id.in_(ids[i : i + 500])))]
+        if table is lab_reviewed_table:
+            for r in rows:
+                r["tags"] = json.loads(r["tags"])
+        return rows
 
     def lab_ids(self, table: Table, ids: list[str]) -> set[str]:
         """Which of ``ids`` already exist in a lab table, whatever their symbol."""

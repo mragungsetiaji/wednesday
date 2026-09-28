@@ -24,12 +24,14 @@ from .dataset import ts, unix
 from .model import ModelBundle, ModelFileError, load, load_bytes, read_manifest
 from .outcome import TradePlan, plan_levels, simulate
 from .tags import OB_TAGS, TAGS
-from .train import TrainingCancelled, TrainParams, frames_for, train_bundle
+from . import drift
+from .train import TrainingCancelled, TrainParams, frames_for, score_window, train_bundle
 
 log = logging.getLogger(__name__)
 
 ACTIVE_KEY = "lab_active_model"
 HISTORY_TTL = 600  # seconds before the stored history is read again
+SCORECARD_TTL = 60  # seconds a live scorecard is reused
 LABELS_FORMAT = "wednesday-labels"
 LABELS_FORMAT_VERSION = 1
 MAX_LABELS_BYTES = 50 * 1024 * 1024
@@ -113,6 +115,7 @@ class Lab:
         self.training = {"running": False, "stage": None, "error": None, "last": None, "started_at": None,
                          "cancelled": False}
         self._cancel = threading.Event()
+        self._scorecard: tuple | None = None
         self.backfill = Backfill()
         self._staged_bars: dict[str, ParsedBars] = {}
         self._staged_labels: dict[str, dict] = {}
@@ -186,12 +189,51 @@ class Lab:
         start, end = int(body["start"]), int(body.get("end", body["start"]))
         if end < start:
             start, end = end, start
+        now = _now()
         row = {"id": label_id or uuid.uuid4().hex, "symbol": symbol, "timeframe": tf, "tag": tag,
                "value": 0 if body.get("value") in (0, False, "0") else 1, "start": start, "end": end,
                "top": body.get("top"), "bottom": body.get("bottom"),
-               "origin": origin if origin in ("manual", "detector", "review") else "manual", "created_at": _now()}
+               "origin": origin if origin in ("manual", "detector", "review") else "manual", "created_at": now,
+               "updated_at": now, "changed_by": "review" if origin == "review" else "manual"}
         self.store.lab_put(lab_labels_table, row)
         return row
+
+    def batch(self, symbol: str, body: dict) -> dict:
+        """Several label and reviewed-range changes at once: bulk edits, and undo / redo.
+
+        ``add_labels`` / ``add_reviewed`` rows with an ``id`` are put back exactly as given (what an
+        undo of a delete sends); rows without one are new. ``delete_labels`` / ``delete_reviewed``
+        are ids. Returns the rows written and the full rows deleted, so the client can undo it.
+        Only rows of ``symbol`` are deleted."""
+        out: dict = {"labels": [], "reviewed": [], "deleted_labels": [], "deleted_reviewed": []}
+        for kind, table in (("labels", lab_labels_table), ("reviewed", lab_reviewed_table)):
+            ids = [str(i) for i in body.get(f"delete_{kind}") or []]
+            rows = [r for r in self.store.lab_get(table, ids) if r["symbol"] == symbol]
+            for r in rows:
+                self.store.lab_delete(table, r["id"])
+            out[f"deleted_{kind}"] = rows
+        for item in body.get("add_labels") or []:
+            if item.get("id"):
+                row = {**_clean_label(item), "symbol": symbol, "updated_at": item.get("updated_at"),
+                       "changed_by": item.get("changed_by")}
+                self._check_owner(lab_labels_table, row["id"], symbol)
+                self.store.lab_put(lab_labels_table, row)
+            else:
+                row = self.add_label(symbol, item, item.get("origin") or "manual")
+            out["labels"].append(row)
+        for item in body.get("add_reviewed") or []:
+            if item.get("id"):
+                row = {**_clean_reviewed(item), "symbol": symbol}
+                self._check_owner(lab_reviewed_table, row["id"], symbol)
+                self.store.lab_put(lab_reviewed_table, row)
+            else:
+                row = self.add_reviewed(symbol, item)
+            out["reviewed"].append(row)
+        return out
+
+    def _check_owner(self, table, row_id: str, symbol: str) -> None:
+        if any(r["symbol"] != symbol for r in self.store.lab_get(table, [row_id])):
+            raise ValueError("That id belongs to another symbol")
 
     def add_reviewed(self, symbol: str, body: dict) -> dict:
         tf = body.get("timeframe")
@@ -271,9 +313,12 @@ class Lab:
                                   "confirm that they should go to this symbol")
         del self._staged_labels[token]
         out = {}
+        now = _now()
         for name, table, key in (("labels", lab_labels_table, _label_key), ("reviewed", lab_reviewed_table, _reviewed_key)):
             rows, out[name] = self._merge(table, parsed[name], symbol, key)
             for row in rows:
+                if table is lab_labels_table:
+                    row = {**row, "updated_at": now, "changed_by": "import"}
                 self.store.lab_put(table, row)
         return out
 
@@ -370,14 +415,46 @@ class Lab:
                 return None
         return self._active
 
-    def activate(self, model_id: str | None) -> None:
+    def activate(self, model_id: str | None, since_unix: int | None = None) -> None:
+        """Set the active model. ``since_unix`` (the latest bar, feed clock) starts its live scorecard."""
         if model_id is None:
             self.store.delete_setting(ACTIVE_KEY)
             return
         if not self._path(model_id).is_file():
             raise ModelFileError("No such model")
         self._active = load(self._path(model_id))  # proves it loads before it becomes active
-        self.store.set_setting(ACTIVE_KEY, {"id": model_id})
+        self.store.set_setting(ACTIVE_KEY, {"id": model_id, "since": _now(), "since_unix": since_unix})
+
+    def scorecard(self, symbol: str, m1: pd.DataFrame | None) -> dict | None:
+        """The active model's live results since it was turned on (cached for a minute)."""
+        bundle = self.active()
+        if bundle is None:
+            return None
+        st = self.store.get_setting(ACTIVE_KEY) or {}
+        if not st.get("since"):  # turned on before Wednesday kept the time: count from now
+            last = unix(m1.index[-1]) if m1 is not None and len(m1) else None
+            st = {**st, "since": _now(), "since_unix": last}
+            self.store.set_setting(ACTIVE_KEY, st)
+        reviews = self.reviews(symbol)
+        key = (bundle.id, st["since"], len(reviews), m1.index[-1] if m1 is not None and len(m1) else None)
+        hit = self._scorecard
+        if hit and hit[0] == key and time.monotonic() - hit[1] < SCORECARD_TTL:
+            return hit[2]
+        card = drift.scorecard(bundle, reviews, m1, st["since"], st.get("since_unix"))
+        self._scorecard = (key, time.monotonic(), card)
+        return card
+
+    def compare(self, ids: list[str], symbol: str, m1: pd.DataFrame) -> dict:
+        """Score 2-3 models on the same window of labels (see :func:`train.score_window`)."""
+        if not 2 <= len(ids) <= 3:
+            raise ValueError("Pick two or three models to compare")
+        bundles = []
+        for model_id in ids:
+            if not self._path(model_id).is_file():
+                raise ModelFileError("No such model")
+            bundles.append(load(self._path(model_id)))
+        return score_window(bundles, m1, self.by_tf(self.labels(symbol)), self.by_tf(self.reviewed(symbol)),
+                            self.detector)
 
     def delete_model(self, model_id: str) -> bool:
         path = self._path(model_id)

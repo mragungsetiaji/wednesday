@@ -72,6 +72,9 @@ class ModelBundle:
     outcome: object | None = None  # order block outcome classifier
     features: list[str] = field(default_factory=list)
     outcome_features: list[str] = field(default_factory=list)
+    # Training medians per feature ({"tags": {...}, "outcome": {...}}), for explaining a single call;
+    # empty in files from before 0.1.7.
+    medians: dict = field(default_factory=dict)
 
     @property
     def id(self) -> str:
@@ -79,7 +82,7 @@ class ModelBundle:
 
     def to_bytes(self) -> bytes:
         payload = pickle.dumps({"models": self.models, "outcome": self.outcome, "features": self.features,
-                                "outcome_features": self.outcome_features}, protocol=5)
+                                "outcome_features": self.outcome_features, "medians": self.medians}, protocol=5)
         manifest = {**self.manifest, "format": FORMAT, "format_version": FORMAT_VERSION,
                     "sha256": hashlib.sha256(payload).hexdigest()}
         self.manifest = manifest
@@ -134,8 +137,9 @@ def load_bytes(data: bytes) -> ModelBundle:
         raise ModelFileError(f"Can't read the model: {type(exc).__name__}: {exc}") from exc
     if not isinstance(obj, dict) or not isinstance(obj.get("models"), dict):
         raise ModelFileError("The model file has no models in it")
+    medians = obj.get("medians")
     return ModelBundle(manifest, obj["models"], obj.get("outcome"), list(obj.get("features") or []),
-                       list(obj.get("outcome_features") or []))
+                       list(obj.get("outcome_features") or []), medians if isinstance(medians, dict) else {})
 
 
 def load(path: Path) -> ModelBundle:

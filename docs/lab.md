@@ -30,6 +30,14 @@ The detector's levels show as dotted suggestions; `A` accepts the ones on the
 selection. That's quicker than tagging from scratch, but a model trained only on
 accepted suggestions just learns the detector back. Fix what it gets wrong.
 
+**Undo and bulk edits.** `Ctrl+Z` undoes the last tag, *not*, accept, delete or
+reviewed range, and `Ctrl+Shift+Z` (or `Ctrl+Y`) redoes it; Cmd on a Mac. An undo
+puts rows back exactly as they were, ids included. Under **On the selection**,
+**Accept all** takes every suggestion in the selection and **Clear labels**
+removes its labels (all, or one tag); both ask first with the count, and both
+undo as one step. Every label keeps `updated_at` and what made the last change
+(`manual`, `review` or `import`).
+
 A label is saved with its timeframe, tag, the open times of its first and last
 candle and, for accepted suggestions, the zone's top and bottom. Labels live in
 the `lab_labels` table, reviewed ranges in `lab_reviewed`.
@@ -102,6 +110,15 @@ Models are saved as zip files in `data/models` (`XAU_MODELS_DIR`):
 **Use** sets a model active; the screener's ML layer and the Lab's **Model**
 toggle show its blocks. **Download** gives you the file to pass on.
 
+**Compare**: tick two or three models for a side-by-side table of their held-out
+scores per tag (labels used, precision, recall, AUC, cut), the outcome model's AUC
+and average R, their settings and data ranges, with the best value per row in
+bold. When their held-out windows differ the scores aren't strictly comparable,
+so **Score on the same window** re-scores them all on the labelled candles known
+after the newest model's training data ends, on the timeframes they share, each
+at its own cut. None of them trained on those candles; if there are none yet, it
+says so, and you label some newer candles first.
+
 **Import** reads only the manifest first and shows it: name, author, date,
 timeframes, tags, bar clock, fingerprint. Nothing is loaded until you click **Load model**.
 It also warns when the model was trained on another symbol, or on bar times of
@@ -119,7 +136,8 @@ you trust.
 Turn on **ML** above the chart. The active model's blocks on the chart's
 timeframe show as dashed outlines with their probability, and a **Model on 5M**
 panel lists them, newest first, with the chance of winning for order blocks.
-Hover a row to find it on the chart; ✓ and ✕ mark it valid or invalid. The
+Hover a row to find it on the chart and see why the model called it; ✓ and ✕ mark
+it valid or invalid. The
 default shows each tag from its trained cut; the menu shows everything above a
 fixed probability instead.
 
@@ -132,6 +150,27 @@ A review does two things:
   and the result in R).
 
 The same buttons are in the Lab (`V` / `X` on the selection).
+
+**Why this block.** Each block names the three feature groups that moved its
+probability most, in points: how much lower (or higher) it would be with that
+group set to its training median. "Confirming candles +18 pts" means the candles
+after it did most of the work. It is a quick local estimate, shown for model
+files from 0.1.7 on.
+
+**Live scorecard.** Under the ML panel, and for the active model in **Lab >
+Models**, a line says how the model has done since you turned it on:
+
+- **Reviews**: the share of its blocks you marked valid, against its held-out
+  precision.
+- **Trades**: its order block calls traded with the limit plan (simulated like a
+  review), finished ones only, against the held-out average R.
+- **Inputs**: volatility (ATR %) and candle bodies on the latest 300 candles of
+  each timeframe, against the training history (model files from 0.1.7 on).
+
+A warning appears only after 20 reviews or finished trades, when the result sits
+more than two standard errors below what held-out data promised, or when an
+input's median is 1.5× (or ⅔) of the training one: "5M ATR is 2.1× what the
+model was trained on". It never turns the model off; that stays your call.
 
 ## Data
 
