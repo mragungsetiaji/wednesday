@@ -317,6 +317,19 @@ def test_lab_api_flow(lab_api):
     assert not [i for i in outside["items"] if span[0] <= i["time_unix"] <= span[1]]
     assert api.get("/api/lab/queue", params={"tf": "15M", "scope": "nope"}).status_code == 422
     assert api.get("/api/lab/queue", params={"tf": "5M"}).json()["note"]  # not trained on 5M
+
+    # Backtest: every detector OB, then only those the model rates, then as CSV.
+    bt_all = api.get("/api/lab/backtest", params={"tf": "15M", "rr": 2, "horizon": 24}).json()
+    assert bt_all["summary"]["trades"] > 0 and bt_all["params"]["filter"] == "all"
+    assert set(bt_all["splits"]) >= {"priority", "swing", "session", "weekday"}
+    bt_model = api.get("/api/lab/backtest", params={"tf": "15M", "filter": "model", "min_win": 0.3}).json()
+    assert bt_model["params"]["model_id"] == model["id"]
+    assert all(t["win_prob"] >= 0.3 and t["start_unix"] > t["time_unix"] for t in bt_model["trades"])
+    assert bt_model["summary"]["trades"] <= bt_all["summary"]["trades"]
+    csv_bt = api.get("/api/lab/backtest", params={"tf": "15M", "format": "csv"})
+    assert csv_bt.headers["content-type"].startswith("text/csv") and csv_bt.text.startswith("time,start,exit")
+    assert api.get("/api/lab/backtest", params={"tf": "15M", "filter": "nope"}).status_code == 422
+    assert api.get("/api/lab/backtest", params={"tf": "15M", "rr": 50}).status_code == 422
     card = api.get("/api/lab/scorecard").json()["scorecard"]
     assert card["model_id"] == model["id"] and card["since_unix"] and card["reviews"]["n"] == 0
     assert card["warnings"] == [] and card["inputs"] is not None

@@ -3488,3 +3488,61 @@ fieldset:disabled .switch {
 .lab-queue-call dd {
   margin: 0;
 }
+
+/* Lab > Backtest. */
+.backtest-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--s3);
+}
+.backtest-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+  margin-top: var(--s6);
+}
+.backtest-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--s3);
+  margin: 0;
+}
+.backtest-stats dt {
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+.backtest-stats dd {
+  margin: 0;
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+}
+.backtest-chart {
+  position: relative;
+  height: 280px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.backtest-splits {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: var(--s5) var(--s6);
+}
+.backtest-split {
+  align-self: start;
+}
+.backtest-split caption {
+  text-align: start;
+  font-weight: 600;
+  padding-bottom: var(--s2);
+}
+@media (max-width: 520px) {
+  .backtest-splits {
+    grid-template-columns: 1fr;
+  }
+  .backtest-split {
+    display: block;
+    overflow-x: auto;
+  }
+}

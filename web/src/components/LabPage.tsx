@@ -9,20 +9,22 @@ import {
 import { fmtUnix } from "../format";
 import { usePref } from "../prefs";
 import type { ChartPalette } from "../theme";
+import { LabBacktest } from "./LabBacktest";
 import { LabData } from "./LabData";
 import { LabLabel } from "./LabLabel";
 import { ScorecardLine } from "./MlPanel";
 
-type Sub = "label" | "train" | "models" | "data";
+type Sub = "label" | "train" | "models" | "backtest" | "data";
 const SUBS: { id: Sub; title: string }[] = [
   { id: "label", title: "Label" },
   { id: "train", title: "Train" },
   { id: "models", title: "Models" },
+  { id: "backtest", title: "Backtest" },
   { id: "data", title: "Data" },
 ];
 const subFromHash = (): Sub => {
   const s = window.location.hash.split("/")[1];
-  return s === "train" || s === "models" || s === "data" ? s : "label";
+  return s === "train" || s === "models" || s === "backtest" || s === "data" ? s : "label";
 };
 
 const pctOf = (v: number | undefined | null) => (v === undefined || v === null ? "—" : `${Math.round(v * 100)}%`);
@@ -105,6 +107,7 @@ export function LabPage({ palette }: { palette: ChartPalette }) {
       {sub === "label" && <LabLabel status={status} palette={palette} onChanged={load} />}
       {sub === "train" && <LabTrain status={status} onStatus={setStatus} />}
       {sub === "models" && <LabModels status={status} onStatus={setStatus} />}
+      {sub === "backtest" && <LabBacktest status={status} palette={palette} />}
       {sub === "data" && <LabData onChanged={load} />}
     </main>
   );

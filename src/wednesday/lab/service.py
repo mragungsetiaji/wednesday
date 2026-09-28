@@ -121,6 +121,7 @@ class Lab:
         self._scorecard: tuple | None = None
         self._signatures: dict[str, tuple] = {}
         self._queue: dict[tuple, pd.DataFrame] = {}
+        self._blocks: dict[tuple, list] = {}
         self.backfill = Backfill()
         self._staged_bars: dict[str, ParsedBars] = {}
         self._staged_labels: dict[str, dict] = {}
@@ -464,6 +465,42 @@ class Lab:
             raise ModelFileError("Only models signed by a trusted key load (turn that off in Settings > Lab)")
         if not trust_file:
             raise ModelFileError("This file isn't signed by a trusted key; confirm that you trust it to load it")
+
+    # ---- backtest -------------------------------------------------------------------
+    def backtest(self, symbol: str, m1: pd.DataFrame, tf: str, clock: str, start: int | None = None,
+                 end: int | None = None, rr: float = 2.0, horizon_hours: int = 72, filter: str = "all",
+                 min_win: float = 0.5) -> dict:
+        """The OB limit plan over the history (see :mod:`backtest`). Detection is cached per
+        timeframe and history, so changing the plan or the filter is quick."""
+        from . import backtest as bt
+
+        tfo = TIMEFRAMES_BY_NAME[tf]
+        if not 0.5 <= rr <= 10:
+            raise ValueError("Target between 0.5 and 10 R")
+        if not 1 <= horizon_hours <= 24 * 30:
+            raise ValueError("Horizon between 1 hour and 30 days")
+        key = (tfo.name, len(m1), m1.index[0], m1.index[-1], self.detector)
+        blocks = self._blocks.get(key)
+        if blocks is None:
+            blocks = bt.detect_blocks(m1, tfo, self.detector)
+            self._blocks = {k: v for k, v in self._blocks.items() if k[0] != tfo.name}
+            self._blocks[key] = blocks
+        plan = TradePlan(rr=rr, horizon_minutes=horizon_hours * 60, max_sl=self.detector.max_sl)
+        bundle = None
+        if filter == "model":
+            if not ml_available()[0]:
+                raise ValueError(ml_available()[1])
+            bundle = self.active()
+            if bundle is None:
+                raise ValueError("Set a model active in Models to filter by its win chance")
+        result = bt.run(m1, tfo, blocks, plan, clock, ts(start) if start else None, ts(end) if end else None,
+                        filter, min_win, bundle, self.labels(symbol, tfo.name) if filter == "labels" else None)
+        result["params"] = {"timeframe": tfo.name, "from_unix": start, "to_unix": end, "rr": rr,
+                            "horizon_hours": horizon_hours, "max_sl": self.detector.max_sl, "filter": filter,
+                            "min_win": min_win if filter == "model" else None,
+                            "model_id": bundle.id if bundle else None, "clock": clock,
+                            "history": {"first_unix": unix(m1.index[0]), "last_unix": unix(m1.index[-1])}}
+        return result
 
     # ---- review queue ---------------------------------------------------------------
     def queue(self, symbol: str, m1: pd.DataFrame, tf: str, tag: str | None = None, scope: str = "all",

@@ -164,7 +164,16 @@ async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await apiFetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(detail);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -1088,3 +1097,35 @@ export const fetchApiTokens = () => getJson<{ tokens: ApiToken[] }>("/api/auth/t
 /** The secret (`token`) is in this response only. */
 export const createApiToken = (name: string) => send<ApiToken & { token: string }>("POST", "/api/auth/tokens", { name });
 export const revokeApiToken = (id: string) => send<{ tokens: ApiToken[] }>("DELETE", `/api/auth/tokens/${encodeURIComponent(id)}`);
+
+/** Lab > Backtest: every detector order block traded with the limit plan. */
+export type BacktestFilter = "all" | "model" | "labels";
+export interface BacktestSummary {
+  trades: number; filled: number; finished: number; wins: number;
+  fill_rate: number | null; win_rate: number | null; avg_r: number | null; total_r: number; max_dd_r: number;
+}
+export interface BacktestTrade {
+  id: string; time_unix: number; start_unix: number; exit_unix: number | null;
+  direction: "bullish" | "bearish"; priority: string; swing: string; session: string; weekday: string;
+  top: number; bottom: number; entry: number; stop: number; target: number;
+  outcome: "win" | "loss" | "open" | "untouched"; r: number | null; win_prob: number | null; equity_r?: number;
+}
+export interface BacktestParams {
+  tf: string; from: number | null; to: number | null; rr: number; horizon: number; filter: BacktestFilter; min_win: number;
+}
+export interface BacktestResult {
+  params: { timeframe: string; rr: number; horizon_hours: number; max_sl: number; filter: BacktestFilter; min_win: number | null;
+    model_id: string | null; clock: string; history: { first_unix: number; last_unix: number } };
+  summary: BacktestSummary;
+  splits: Record<string, (BacktestSummary & { key: string })[]>;
+  equity: [number, number][];
+  trades: BacktestTrade[];
+}
+export const backtestUrl = (p: BacktestParams, format: "json" | "csv" = "json") => {
+  const q = new URLSearchParams({ tf: p.tf, rr: String(p.rr), horizon: String(p.horizon), filter: p.filter,
+    min_win: String(p.min_win), format });
+  if (p.from) q.set("from", String(p.from));
+  if (p.to) q.set("to", String(p.to));
+  return `/api/lab/backtest?${q}`;
+};
+export const runBacktest = (p: BacktestParams) => getJson<BacktestResult>(backtestUrl(p));

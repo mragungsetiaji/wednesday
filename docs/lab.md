@@ -197,6 +197,38 @@ more than two standard errors below what held-out data promised, or when an
 input's median is 1.5× (or ⅔) of the training one: "5M ATR is 2.1× what the
 model was trained on". It never turns the model off; that stays your call.
 
+## Backtest
+
+**Lab > Backtest** trades every order block the detector finds on the stored
+history with the same limit plan the Lab trains on: entry on the body, stop at
+the far side capped at the max stop (`XAU_MAX_SL`), target in R, and a horizon
+after which an unfinished trade counts as open. It runs through the same
+`simulate` code as training, so the outcomes match.
+
+No look-ahead: a trade starts at the close of the candle that broke structure
+(when the order block became known), never at the order block candle itself.
+
+Choose the timeframe, an optional date range, the target and horizon, and which
+order blocks to trade:
+
+- **All the detector finds.**
+- **Model's win chance at least X**: only blocks the active model's outcome part
+  rates at or above X. The model's features for a candle are ready a few candles
+  later, so these trades start at the later of the break close and that time.
+- **Only ones I labelled**: detector blocks covered by a "yes" OB label.
+
+The result shows trades, fill rate, win rate, average R, total R and max
+drawdown in R; an equity curve in R (one point per finished trade, at its exit);
+the same numbers split by OB priority, swing tag (LH / HH / HL / LL), session and
+weekday in New York time (the trading day starts 18:00, as in the quarterly
+view) and direction; and the trades, with a running total that is the table
+view of the curve. **Download trades (CSV)** exports all of them. Detection is
+cached per timeframe and history, so a year of 5M takes a few seconds the first
+time and changing the plan or filter after that is quick. The API is `GET
+/api/lab/backtest?tf=&from=&to=&rr=&horizon=&filter=&min_win=&format=json|csv`.
+
+Past results on history say nothing certain about future trades.
+
 ## Data
 
 **Lab > Data** shows how much M1 history is stored for the running source and

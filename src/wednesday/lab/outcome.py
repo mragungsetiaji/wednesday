@@ -38,19 +38,27 @@ def plan_levels(direction: str, top: float, bottom: float, max_sl: float) -> tup
 def simulate(m1: pd.DataFrame, direction: str, entry: float, stop: float, start: pd.Timestamp,
              plan: TradePlan) -> tuple[str, float | None]:
     """(outcome, result in R): see the module docstring."""
+    outcome, r, _ = simulate_trade(m1, direction, entry, stop, start, plan)
+    return outcome, r
+
+
+def simulate_trade(m1: pd.DataFrame, direction: str, entry: float, stop: float, start: pd.Timestamp,
+                   plan: TradePlan) -> tuple[str, float | None, pd.Timestamp | None]:
+    """:func:`simulate` plus when the trade ended: the minute of the stop or target
+    (None when untouched or still open at the horizon)."""
     risk = abs(entry - stop)
     if risk <= 0:
-        return "untouched", None
+        return "untouched", None, None
     i0 = m1.index.searchsorted(start)
     i1 = m1.index.searchsorted(start + pd.Timedelta(minutes=plan.horizon_minutes))
     lows = m1["low"].to_numpy()[i0:i1]
     highs = m1["high"].to_numpy()[i0:i1]
     if not len(lows):
-        return "untouched", None
+        return "untouched", None, None
     bull = direction == "bullish"
     filled = np.flatnonzero(lows <= entry if bull else highs >= entry)
     if not len(filled):
-        return "untouched", None
+        return "untouched", None, None
     f = filled[0]
     target = entry + plan.rr * risk if bull else entry - plan.rr * risk
     stop_hit = np.flatnonzero(lows[f:] <= stop if bull else highs[f:] >= stop)
@@ -58,7 +66,7 @@ def simulate(m1: pd.DataFrame, direction: str, entry: float, stop: float, start:
     first_stop = stop_hit[0] if len(stop_hit) else None
     first_target = target_hit[0] if len(target_hit) else None
     if first_stop is None and first_target is None:
-        return "open", None
+        return "open", None, None
     if first_target is None or (first_stop is not None and first_stop <= first_target):
-        return "loss", -1.0
-    return "win", plan.rr
+        return "loss", -1.0, m1.index[i0 + f + first_stop]
+    return "win", plan.rr, m1.index[i0 + f + first_target]

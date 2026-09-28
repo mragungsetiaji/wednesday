@@ -224,6 +224,29 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
         except ValueError as exc:
             raise HTTPException(409 if "active" in str(exc) else 422, str(exc)) from exc
 
+    @r.get("/backtest")
+    def backtest(tf: str = Query("15M"), start: int | None = Query(None, alias="from"),
+                 end: int | None = Query(None, alias="to"), rr: float = Query(2.0),
+                 horizon: int = Query(72, description="hours"), filter: str = Query("all"),
+                 min_win: float = Query(0.5, ge=0, le=1), format: str = Query("json")):
+        """Every detector order block of the history traded with the limit plan: trades,
+        aggregates and splits; ``format=csv`` downloads the trades."""
+        tfo = timeframe(tf)
+        m1 = history()
+        if m1 is None:
+            raise HTTPException(503, "no data yet")
+        try:
+            result = lab().backtest(symbol(), m1, tfo.name, get_clock(), start, end, rr, horizon, filter, min_win)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if format == "csv":
+            from .backtest import trades_csv
+
+            name = f"wednesday-backtest-{symbol()}-{tfo.name}-{filter}.csv"
+            return Response(trades_csv(result["trades"]), media_type="text/csv",
+                            headers={"Content-Disposition": f'attachment; filename="{name}"'})
+        return result
+
     @r.post("/labels")
     def add_label(body: dict = Body(...)) -> dict:
         origin = body.get("origin") if body.get("origin") in ("manual", "detector") else "manual"
