@@ -13,6 +13,7 @@ import { AlertsSettings } from "./AlertsSettings";
 import { BriefSettingsForm } from "./BriefSettingsForm";
 import { CalendarSettingsForm } from "./CalendarSettingsForm";
 import { LabSettings } from "./LabSettings";
+import { LlmUsageSettings } from "./LlmUsageSettings";
 
 const EMPTY: DataSettings = { source: "yfinance", symbol: null, csv_path: null, mt5_login: null, mt5_server: null, mt5_path: null, clock: null, tick_seconds: null };
 
@@ -31,13 +32,14 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const fmtTick = (s: number) => (s === 0 || s >= 60 ? "once a minute, with each scan" : `${s}s`);
 
-type Section = "data" | "risk" | "alerts" | "calendar" | "brief" | "lab" | "access" | "plan" | "plugins";
+type Section = "data" | "risk" | "alerts" | "calendar" | "brief" | "llm" | "lab" | "access" | "plan" | "plugins";
 const SECTIONS: { id: Section; title: string }[] = [
   { id: "data", title: "Data source" },
   { id: "risk", title: "Risk" },
   { id: "alerts", title: "Telegram alerts" },
   { id: "calendar", title: "News calendar" },
   { id: "brief", title: "News brief" },
+  { id: "llm", title: "LLM usage" },
   { id: "lab", title: "Lab" },
   { id: "access", title: "Access" },
   { id: "plan", title: "Plan" },
@@ -84,6 +86,7 @@ export function SettingsPage() {
         <div hidden={section !== "alerts"}><AlertsSettings /></div>
         <div hidden={section !== "calendar"}><CalendarSettingsForm /></div>
         <div hidden={section !== "brief"}><BriefSettingsForm /></div>
+        <div hidden={section !== "llm"}><LlmUsageSettings /></div>
         <div hidden={section !== "lab"}><LabSettings /></div>
         <div hidden={section !== "access"}><AccessSettings /></div>
         <div hidden={section !== "plan"}><AccountSettings /></div>

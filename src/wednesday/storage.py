@@ -139,6 +139,27 @@ lab_runs_table = Table(
 )
 
 
+# ---- LLM usage: one row per call, for cost and the monthly budget ---------------------------
+
+llm_usage_table = Table(
+    "llm_usage",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("created_at", String(40), nullable=False),  # UTC ISO
+    Column("feature", String(40), nullable=False),  # "brief", or a plugin's ("recap", "ask", "embeddings", ...)
+    Column("provider", String(32), nullable=False),
+    Column("model", String(120), nullable=False),
+    Column("input_tokens", BigInteger, nullable=False),  # uncached input
+    Column("output_tokens", BigInteger, nullable=False),
+    Column("cache_read_tokens", BigInteger, nullable=False, default=0),
+    Column("cache_write_tokens", BigInteger, nullable=False, default=0),
+    Column("cost", Float, nullable=True),  # USD from the price table; null when the model has no price
+    Column("estimated", Boolean, nullable=False, default=False),  # tokens guessed: the reply had no usage
+    Column("scheduled", Boolean, nullable=False, default=False),
+    Index("ix_llm_usage_created", "created_at"),
+)
+
+
 # ---- Dashboard login: sessions and API tokens -----------------------------------------------
 # Only SHA-256 hashes of the secrets are kept; the login password is never stored here.
 
@@ -296,6 +317,17 @@ class Store:
     def delete_setting(self, key: str) -> None:
         with self.engine.begin() as conn:
             conn.execute(settings_table.delete().where(settings_table.c.key == key))
+
+    # ---- LLM usage ------------------------------------------------------
+    def llm_usage_add(self, row: dict) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(llm_usage_table.insert().values(**row))
+
+    def llm_usage_since(self, since: str) -> list[dict]:
+        t = llm_usage_table
+        with self.engine.connect() as conn:
+            rows = conn.execute(select(t).where(t.c.created_at >= since).order_by(t.c.created_at)).mappings().all()
+        return [dict(r) for r in rows]
 
     # ---- login tokens ---------------------------------------------------
     def auth_token_add(self, row: dict) -> None:

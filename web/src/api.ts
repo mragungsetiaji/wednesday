@@ -475,12 +475,56 @@ export interface BriefResponse {
   running?: boolean;
   error?: string | null;
   last?: Brief | null;
+  budget?: LlmBudget;
 }
 
 export const fetchBrief = () => getJson<BriefResponse>("/api/brief");
 export const saveBrief = (s: BriefSettings, secrets: SecretUpdate = {}) =>
   send<BriefResponse>("PUT", "/api/brief", { ...s, ...secrets });
-export const generateBrief = () => send<BriefResponse>("POST", "/api/brief/generate");
+export const OVER_BUDGET = "Over the monthly LLM budget";
+export const generateBrief = (confirmOverBudget = false) =>
+  send<BriefResponse>("POST", "/api/brief/generate", confirmOverBudget ? { confirm_over_budget: true } : undefined);
+/** A manual brief: over the monthly budget, ask before spending more. */
+export async function generateBriefAsking(): Promise<BriefResponse> {
+  try {
+    return await generateBrief();
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith(OVER_BUDGET) && window.confirm(`${e.message}\n\nWrite this brief anyway?`)) {
+      return generateBrief(true);
+    }
+    throw e;
+  }
+}
+
+/** LLM spend this month against the budget (Settings > LLM usage). */
+export interface LlmBudget {
+  limit: number | null;
+  spent: number;
+  share: number | null;
+  level: "none" | "ok" | "warn" | "over";
+  calls: number;
+  unpriced_calls: number;
+}
+export interface LlmPrice { input: number; output: number; cache_read: number; cache_write: number }
+export interface LlmGroup { key: string; calls: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; cost: number; unpriced: number }
+export interface LlmCall {
+  id: string; created_at: string; feature: string; provider: string; model: string;
+  input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number;
+  cost: number | null; estimated: boolean; scheduled: boolean;
+}
+export interface LlmUsage {
+  month: string;
+  budget: LlmBudget;
+  by_feature: LlmGroup[];
+  by_model: LlmGroup[];
+  daily: [string, number][];
+  top: LlmCall[];
+  prices: Record<string, LlmPrice>;
+  warn_at: number;
+}
+export const fetchLlmUsage = () => getJson<LlmUsage>("/api/llm/usage");
+export const saveLlmBudget = (monthly_usd: number | null) => send<LlmUsage>("PUT", "/api/llm/budget", { monthly_usd });
+export const saveLlmPrices = (models: Record<string, Partial<LlmPrice>>) => send<LlmUsage>("PUT", "/api/llm/prices", { models });
 
 /** An economic calendar event (times in UTC). */
 export interface CalendarEvent {

@@ -21,6 +21,7 @@ from .auth import Auth, install as install_auth
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
 from .brief import BRIEF_KEY, BriefError, BriefSettings
+from .llm_usage import BudgetExceeded
 from .news import CALENDAR_KEY, CalendarSettings
 from .drawings import clean_drawing, drawing_payload
 from .engine import RECONNECT_ATTEMPTS, Engine, Runtime
@@ -306,13 +307,46 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return {"editable": True, **brief.status()}
 
     @app.post("/api/brief/generate", status_code=202)
-    def generate_brief() -> dict:
+    def generate_brief(body: dict | None = Body(None)) -> dict:
+        """Start a brief. Over the monthly LLM budget it needs ``{"confirm_over_budget": true}``."""
         brief = need_brief()
         try:
-            brief.start(brief_context())
+            brief.start(brief_context(), confirmed=bool((body or {}).get("confirm_over_budget")))
+        except BudgetExceeded as exc:
+            raise HTTPException(409, str(exc), headers={"X-Over-Budget": "1"}) from exc
         except BriefError as exc:
             raise HTTPException(422, str(exc)) from exc
         return {"editable": True, **brief.status()}
+
+    def usage_log():
+        if not runtime:
+            raise HTTPException(409, "LLM usage is only kept when the server runs with --serve")
+        return runtime.usage
+
+    @app.get("/api/llm/usage")
+    def llm_usage() -> dict:
+        """This month's LLM spend by feature and model, the last 30 days, the costliest calls,
+        the budget and the price table."""
+        return usage_log().report()
+
+    @app.put("/api/llm/budget")
+    def put_llm_budget(body: dict = Body(...)) -> dict:
+        log = usage_log()
+        try:
+            log.set_budget(body.get("monthly_usd"))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(422, f"The budget is an amount in US dollars: {exc}") from exc
+        return log.report()
+
+    @app.put("/api/llm/prices")
+    def put_llm_prices(body: dict = Body(...)) -> dict:
+        """The price table: {model: {input, output, cache_read?, cache_write?}} in USD per million tokens."""
+        log = usage_log()
+        try:
+            log.set_prices(body.get("models") or {})
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return log.report()
 
     def with_chart_times(snap: dict) -> dict:
         """Add each event's time on the chart's (feed clock) axis, so news lines up with the candles."""

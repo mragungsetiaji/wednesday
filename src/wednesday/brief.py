@@ -11,10 +11,17 @@ API keys are entered in Settings and kept in the OS credential store
 (``secret_store``), never in the database; ``ANTHROPIC_API_KEY`` and
 ``OPENAI_API_KEY`` in the environment still work. Both SDKs are optional
 (``uv sync --extra llm``).
+
+Every call is logged with the provider's token counts and checked against the
+monthly budget first (:mod:`llm_usage`). The fixed system prompt is sent with a
+prompt-cache mark for Claude (OpenAI caches repeated prefixes on its own), and a
+news page that hasn't changed since the last brief is sent cut short, with the
+previous brief for context.
 """
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import logging
 import re
@@ -25,6 +32,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 
+from .llm_usage import UsageLog
 from .secret_store import get_secret
 from .storage import Store
 
@@ -53,6 +61,7 @@ Reply in plain text:
 - A final line, exactly one of: BIAS: BULLISH, BIAS: BEARISH, BIAS: NEUTRAL"""
 
 MAX_URLS = 12
+UNCHANGED_CHARS = 1500  # what's still sent of a news page that didn't change since the last brief
 _BIAS_LINE = re.compile(r"BIAS:\s*(BULLISH|BEARISH|NEUTRAL)", re.IGNORECASE)
 
 
@@ -164,17 +173,27 @@ def fetch_source(url: str, max_chars: int, timeout: float = 15) -> dict:
             "truncated": truncated, "text": text[:max_chars]}
 
 
-def build_input(context: dict, sources: list[dict]) -> str:
+def build_input(context: dict, sources: list[dict], previous: dict | None = None) -> str:
     lines = ["Market context (from the screener):"]
     lines += [f"- {k}: {v}" for k, v in context.items()]
     lines.append("")
     readable = [s for s in sources if s["ok"]]
     if not readable:
         lines.append("No news source could be read.")
+    if previous and any(s.get("unchanged") for s in readable):
+        lines.append(f'<previous_brief written_at="{previous.get("created_at", "")}">\n{previous.get("text", "")}\n'
+                     "</previous_brief>")
     for s in readable:
-        cut = " (cut to the first part of the page)" if s["truncated"] else ""
+        if s.get("unchanged"):
+            cut = " (unchanged since the previous brief; only its start is included)"
+        else:
+            cut = " (cut to the first part of the page)" if s["truncated"] else ""
         lines.append(f'<source url="{s["url"]}"{cut}>\n{s["text"]}\n</source>')
     return "\n".join(lines)
+
+
+def _digest(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
 def suggested_bias(text: str) -> str | None:
@@ -184,21 +203,28 @@ def suggested_bias(text: str) -> str | None:
 
 # ---- providers --------------------------------------------------------------
 
-def ask_claude(model: str, system: str, user: str) -> str:
+def _count(usage, name: str) -> int:
+    return int(getattr(usage, name, None) or 0) if usage is not None else 0
+
+
+def ask_claude(model: str, system: str, user: str) -> tuple[str, dict | None]:
+    """(text, token counts from the response's ``usage``)."""
     import anthropic
 
     # The key from Settings; without one the SDK falls back to ANTHROPIC_API_KEY.
     client = anthropic.Anthropic(api_key=get_secret("anthropic_api_key")[0])
+    # The system prompt is the same on every call: mark it for the prompt cache.
+    cached_system = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
     try:
         if model in FALLBACK_MODELS:
             # If the model declines, the API re-runs the request on a fallback model in the same call.
             response = client.beta.messages.create(
-                model=model, max_tokens=16000, system=system, messages=[{"role": "user", "content": user}],
+                model=model, max_tokens=16000, system=cached_system, messages=[{"role": "user", "content": user}],
                 betas=["server-side-fallback-2026-07-01"], fallbacks="default",
             )
         else:
             response = client.messages.create(
-                model=model, max_tokens=16000, system=system, messages=[{"role": "user", "content": user}],
+                model=model, max_tokens=16000, system=cached_system, messages=[{"role": "user", "content": user}],
             )
     except anthropic.AuthenticationError as exc:
         raise BriefError("Claude rejected the API key. Check it in Settings > News brief") from exc
@@ -215,10 +241,18 @@ def ask_claude(model: str, system: str, user: str) -> str:
     text = "\n".join(b.text for b in response.content if b.type == "text").strip()
     if not text:
         raise BriefError("Claude returned no text")
-    return text
+    u = getattr(response, "usage", None)
+    usage = None if u is None else {
+        "input_tokens": _count(u, "input_tokens"), "output_tokens": _count(u, "output_tokens"),
+        "cache_read_tokens": _count(u, "cache_read_input_tokens"),
+        "cache_write_tokens": _count(u, "cache_creation_input_tokens"),
+    }
+    return text, usage
 
 
-def ask_openai(model: str, system: str, user: str) -> str:
+def ask_openai(model: str, system: str, user: str) -> tuple[str, dict | None]:
+    """(text, token counts from the response's ``usage``). OpenAI caches repeated prompt
+    prefixes itself; the instructions go first so the fixed part is the prefix."""
     import openai
 
     client = openai.OpenAI(api_key=get_secret("openai_api_key")[0])
@@ -237,7 +271,14 @@ def ask_openai(model: str, system: str, user: str) -> str:
     text = (response.output_text or "").strip()
     if not text:
         raise BriefError("OpenAI returned no text")
-    return text
+    u = getattr(response, "usage", None)
+    usage = None
+    if u is not None:
+        cached = _count(getattr(u, "input_tokens_details", None), "cached_tokens")
+        # OpenAI's input_tokens include the cached ones; the log keeps them apart.
+        usage = {"input_tokens": max(0, _count(u, "input_tokens") - cached), "output_tokens": _count(u, "output_tokens"),
+                 "cache_read_tokens": cached, "cache_write_tokens": 0}
+    return text, usage
 
 
 ASK = {"anthropic": ask_claude, "openai": ask_openai}
@@ -248,9 +289,10 @@ ASK = {"anthropic": ask_claude, "openai": ask_openai}
 class BriefRunner:
     """Generates briefs on a background thread; the dashboard polls :meth:`status`."""
 
-    def __init__(self, store: Store | None, settings: BriefSettings | None = None):
+    def __init__(self, store: Store | None, settings: BriefSettings | None = None, usage: UsageLog | None = None):
         self.store = store
         self.settings = settings or BriefSettings()
+        self.usage = usage or UsageLog(store)
         self.last: dict | None = store.get_setting(BRIEF_LAST_KEY) if store else None
         self.error: str | None = None
         self.running = False
@@ -266,8 +308,10 @@ class BriefRunner:
         if not s.urls:
             raise BriefError("Add at least one news URL")
 
-    def start(self, context: dict) -> None:
+    def start(self, context: dict, confirmed: bool = False) -> None:
+        """Generate in the background; over the budget only when the user ``confirmed``."""
         self.check_ready()
+        self.usage.guard("brief", scheduled=False, confirmed=confirmed)
         with self._lock:
             if self.running:
                 return
@@ -281,7 +325,20 @@ class BriefRunner:
         sources = [fetch_source(u, s.max_chars_per_source) for u in s.urls]
         if not any(src["ok"] for src in sources):
             raise BriefError("None of the news URLs could be read")
-        text = ASK[s.provider](s.resolved_model, s.resolved_prompt, build_input(context, sources))
+        # A page that didn't change since the last brief is sent cut short (with that brief as context).
+        before = {src["url"]: src.get("digest") for src in (self.last or {}).get("sources", [])}
+        for src in sources:
+            if not src["ok"]:
+                continue
+            src["digest"] = _digest(src["text"])
+            if before.get(src["url"]) == src["digest"]:
+                src["unchanged"] = True
+                src["text"] = src["text"][:UNCHANGED_CHARS]
+        prompt = build_input(context, sources, self.last)
+        reply = ASK[s.provider](s.resolved_model, s.resolved_prompt, prompt)
+        text, tokens = reply if isinstance(reply, tuple) else (reply, None)
+        logged = self.usage.record("brief", s.provider, s.resolved_model, tokens,
+                                   text_in=s.resolved_prompt + prompt, text_out=text)
         return {
             "text": text,
             "suggested_bias": suggested_bias(text),
@@ -289,6 +346,8 @@ class BriefRunner:
             "provider": s.provider,
             "model": s.resolved_model,
             "sources": [{k: v for k, v in src.items() if k != "text"} for src in sources],
+            "usage": {k: logged[k] for k in ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens",
+                                             "cost", "estimated")},
         }
 
     def _run(self, context: dict, settings: BriefSettings) -> None:
@@ -314,4 +373,5 @@ class BriefRunner:
             "running": self.running,
             "error": self.error,
             "last": self.last,
+            "budget": self.usage.state(),
         }

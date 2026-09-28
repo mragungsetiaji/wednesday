@@ -71,3 +71,30 @@ their text in the HTML.
 
 With Claude Opus 5 the request opts into server-side fallbacks, so if the model
 declines, another Claude model answers in the same call.
+
+A page whose text hasn't changed since the last brief is sent cut to its first
+1,500 characters, together with that last brief, instead of in full. The fixed
+system prompt carries a prompt-cache mark for Claude; OpenAI caches repeated
+prompt starts on its own. Cached input is billed at a fraction of the normal
+price and shows in the usage log as *Cached*.
+
+### Cost and the monthly budget
+
+Every LLM call is logged with its feature (`brief`, or a plugin's, like `recap`),
+provider, model and tokens. The token counts are the ones in the provider's
+response; only a reply without them is estimated (about four characters a token)
+and marked *est.* **Settings > LLM usage** shows this month's spend by feature and
+by model, the last 30 days by day (with a table view) and the most expensive
+calls.
+
+The cost comes from the price table on the same page, in US dollars per million
+tokens (input, output, cache read, cache write). A few models come filled in;
+check them against your provider's pricing page and add the models you use. A
+model without a price is logged with no cost, and the page says the budget can't
+count it.
+
+Set a **monthly budget** (US dollars, per UTC calendar month) to bound the spend.
+At 80% the page and the bias panel warn. At 100% the server refuses scheduled LLM
+jobs, and a manual brief asks you first (`POST /api/brief/generate` answers 409
+until it's sent with `{"confirm_over_budget": true}`). The check runs on the
+server before the call, so no client can skip it.

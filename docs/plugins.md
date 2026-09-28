@@ -54,6 +54,7 @@ The entry point can name any object with `register(ctx)` and `api`; `name`,
 | `ctx.snapshot()` | `(version, scan result, M1 bars)` of the running engine |
 | `ctx.store` | The database (`storage.Store`) |
 | `ctx.runtime` | The `engine.Runtime`: settings, bias, calendar, brief, lab |
+| `ctx.llm_usage` | The shared LLM usage log and budget: call `guard(feature, scheduled=True)` before an LLM request (raises `llm_usage.BudgetExceeded` over the monthly budget) and `record(feature, provider, model, usage, scheduled=True)` after it with the response's token counts ([bias.md](bias.md#cost-and-the-monthly-budget)) |
 
 Hooks and jobs are isolated: an exception is logged and never stops the scan
 loop or other plugins. A plugin that raises in `register` is skipped and its

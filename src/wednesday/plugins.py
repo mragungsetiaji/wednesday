@@ -129,6 +129,13 @@ class PluginContext:
     def store(self):
         return self.runtime.store
 
+    @property
+    def llm_usage(self):
+        """The shared :class:`llm_usage.UsageLog`: call ``guard(feature, scheduled=...)`` before an
+        LLM request (it raises ``BudgetExceeded`` over the monthly budget) and ``record(feature,
+        provider, model, usage)`` after it, with the token counts from the provider's response."""
+        return self.runtime.usage
+
     def snapshot(self):
         """(version, scan result, M1 bars) of the running engine."""
         return self.runtime.engine.snapshot()

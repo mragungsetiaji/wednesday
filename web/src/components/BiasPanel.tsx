@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
-  fetchBrief, generateBrief, saveBias,
+  fetchBrief, generateBriefAsking, saveBias,
   type BiasDirection, type BiasExpiry, type BriefResponse, type TradeBias,
 } from "../api";
 import { ArrowDown, ArrowUp } from "../icons";
@@ -91,7 +91,7 @@ export function BiasPanel({ bias, onChanged, onOpenSettings }: {
   const refresh = async () => {
     setError(null);
     try {
-      setBrief(await generateBrief());
+      setBrief(await generateBriefAsking());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -172,6 +172,12 @@ export function BiasPanel({ bias, onChanged, onOpenSettings }: {
           </>
         )}
         {brief?.error && !running && <p className="text-error brief-error">{brief.error}</p>}
+        {(brief?.budget?.level === "warn" || brief?.budget?.level === "over") && (
+          <p className={`brief-budget${brief.budget.level === "over" ? " text-error" : ""}`}>
+            LLM spend this month: ${brief.budget.spent.toFixed(2)} of ${brief.budget.limit?.toFixed(2)}
+            {brief.budget.level === "over" ? " (over the budget; a brief asks first)" : ""}. See Settings &gt; LLM usage.
+          </p>
+        )}
       </details>
 
       {error && <p className="text-error bias-error" role="alert">{error}</p>}

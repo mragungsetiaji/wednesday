@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+from .llm_usage import UsageLog
 from .bias import BIAS_KEY, TradeBias, active
 from .feeds import DataFeed, M1Buffer, build_feed
 from .plugins import Hooks
@@ -268,6 +269,8 @@ class Runtime:
         self.on_result = on_result
         self.alerts = alerts  # AlertManager or None
         self.brief = brief  # BriefRunner or None
+        # LLM usage log and budget, shared by the brief and plugins' LLM features.
+        self.usage = brief.usage if brief is not None else UsageLog(store)
         self.calendar = calendar  # news.Calendar or None
         self.lab = lab  # lab.service.Lab or None (needs a database)
         self.journals = journals  # journal.service.Journals or None (needs a database)

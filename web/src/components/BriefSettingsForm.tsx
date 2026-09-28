@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { fetchBrief, generateBrief, saveBrief, type BriefResponse, type BriefSettings } from "../api";
+import { fetchBrief, generateBriefAsking, saveBrief, type BriefResponse, type BriefSettings } from "../api";
 import { SecretField } from "./SecretField";
 
 /** Form state: URLs edited as one per line. */
@@ -86,7 +86,7 @@ export function BriefSettingsForm() {
   const run = async () => {
     setBusy("run");
     try {
-      setData(await generateBrief());
+      setData(await generateBriefAsking());
       setMessage({ kind: "ok", text: "Writing the brief. It shows up next to the chart in a minute." });
     } catch (err) {
       setMessage({ kind: "error", text: err instanceof Error ? err.message : String(err) });

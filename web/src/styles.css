@@ -1587,6 +1587,7 @@ p {
 }
 
 .table-scroll {
+  position: relative; /* keeps absolutely placed .sr-only text inside the scroll box */
   overflow-x: auto;
 }
 .tf-table {
@@ -3545,4 +3546,69 @@ fieldset:disabled .switch {
     display: block;
     overflow-x: auto;
   }
+}
+
+/* Settings > LLM usage. */
+.llm-spent {
+  margin: 0 0 var(--s2);
+  font-size: var(--text-lg);
+}
+.llm-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+  margin-bottom: var(--s2);
+}
+.llm-meter span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.llm-meter.is-warn span {
+  background: var(--warn);
+}
+.llm-meter.is-over span {
+  background: var(--error);
+}
+.llm-groups {
+  display: grid;
+  gap: var(--s5);
+  min-width: 0;
+}
+.llm-groups caption {
+  text-align: start;
+  font-weight: 600;
+  padding-bottom: var(--s2);
+}
+.llm-groups table {
+  align-self: start;
+}
+.llm-daily {
+  margin: 0;
+}
+.llm-daily svg {
+  width: 100%;
+  height: 136px;
+  display: block;
+}
+.llm-bar {
+  fill: var(--accent);
+}
+.llm-axis {
+  stroke: var(--line);
+}
+.llm-price-fields {
+  min-inline-size: 0; /* a fieldset is as wide as its content by default; let the table scroll */
+}
+.llm-prices input {
+  width: 100%;
+  min-width: 72px;
+}
+.llm-prices td:first-child input {
+  min-width: 160px;
+}
+.brief-budget {
+  font-size: var(--text-xs);
+  color: var(--warn);
 }
