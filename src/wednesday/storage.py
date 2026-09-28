@@ -123,8 +123,21 @@ lab_reviews_table = Table(
     Column("created_at", String(40), nullable=False),
 )
 
+lab_runs_table = Table(
+    "lab_runs",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("symbol", String(64), nullable=False),
+    Column("started_at", String(40), nullable=False),
+    Column("finished_at", String(40), nullable=True),
+    Column("status", String(16), nullable=False),  # "running", "done", "error", "cancelled" or "interrupted"
+    Column("error", Text, nullable=True),
+    Column("model_id", String(64), nullable=True),
+    Column("params", Text, nullable=False),  # JSON: the TrainParams of the run
+)
 
-# ---- Journal: trading accounts imported from MT5 --------------------------------------------
+
+# ---- Journal: trading accounts imported from MT5--------------------------------------------
 # Deal times are unix seconds of the broker's server clock, as MT5 reports them.
 
 journals_table = Table(
@@ -366,6 +379,39 @@ class Store:
     def lab_delete(self, table: Table, row_id: str) -> bool:
         with self.engine.begin() as conn:
             return conn.execute(table.delete().where(table.c.id == row_id)).rowcount > 0
+
+    def lab_ids(self, table: Table, ids: list[str]) -> set[str]:
+        """Which of ``ids`` already exist in a lab table, whatever their symbol."""
+        found: set[str] = set()
+        with self.engine.connect() as conn:
+            for i in range(0, len(ids), 500):
+                found.update(r[0] for r in conn.execute(select(table.c.id).where(table.c.id.in_(ids[i : i + 500]))))
+        return found
+
+    def lab_run_put(self, row: dict, keep: int = 20) -> None:
+        """Save a training run and drop all but the ``keep`` newest."""
+        self._upsert(lab_runs_table, [{**row, "params": json.dumps(row["params"])}], ["id"])
+        t = lab_runs_table
+        with self.engine.begin() as conn:
+            old = [r[0] for r in conn.execute(select(t.c.id).order_by(t.c.started_at.desc()).offset(keep))]
+            if old:
+                conn.execute(t.delete().where(t.c.id.in_(old)))
+
+    def lab_runs(self, limit: int = 20) -> list[dict]:
+        """Training runs, newest first."""
+        t = lab_runs_table
+        with self.engine.connect() as conn:
+            rows = [dict(r._mapping) for r in conn.execute(select(t).order_by(t.c.started_at.desc()).limit(limit))]
+        for r in rows:
+            r["params"] = json.loads(r["params"])
+        return rows
+
+    def lab_runs_interrupted(self, finished_at: str) -> None:
+        """Runs still "running" from before a restart never finished; say so."""
+        t = lab_runs_table
+        with self.engine.begin() as conn:
+            conn.execute(t.update().where(t.c.status == "running").values(
+                status="interrupted", finished_at=finished_at, error="The server stopped during training"))
 
     # ---- drawings -------------------------------------------------------
     def drawings(self, source: str, symbol: str) -> list[dict]:

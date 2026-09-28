@@ -4,11 +4,13 @@ one training run at a time on a background thread."""
 from __future__ import annotations
 
 import importlib.util
+import json
 import logging
 import secrets
 import threading
 import time
 import uuid
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -22,12 +24,72 @@ from .dataset import ts, unix
 from .model import ModelBundle, ModelFileError, load, load_bytes, read_manifest
 from .outcome import TradePlan, plan_levels, simulate
 from .tags import OB_TAGS, TAGS
-from .train import TrainParams, frames_for, train_bundle
+from .train import TrainingCancelled, TrainParams, frames_for, train_bundle
 
 log = logging.getLogger(__name__)
 
 ACTIVE_KEY = "lab_active_model"
 HISTORY_TTL = 600  # seconds before the stored history is read again
+LABELS_FORMAT = "wednesday-labels"
+LABELS_FORMAT_VERSION = 1
+MAX_LABELS_BYTES = 50 * 1024 * 1024
+
+
+class LabelsFileError(ValueError):
+    pass
+
+
+def _label_key(r: dict) -> tuple:
+    return (r["timeframe"], r["tag"], r["start"], r["end"], r["value"])
+
+
+def _reviewed_key(r: dict) -> tuple:
+    return (r["timeframe"], r["start"], r["end"], tuple(sorted(r["tags"])))
+
+
+def _clean_label(r: dict) -> dict:
+    tf, tag = r.get("timeframe"), r.get("tag")
+    if tf not in TIMEFRAMES_BY_NAME or tag not in TAGS:
+        raise LabelsFileError(f"A label has an unknown timeframe or tag ({tf!r}, {tag!r})")
+    start, end = sorted((int(r["start"]), int(r.get("end", r["start"]))))
+    num = lambda v: None if v is None else float(v)  # noqa: E731
+    return {"id": str(r.get("id") or uuid.uuid4().hex)[:36], "timeframe": tf, "tag": tag,
+            "value": 1 if r.get("value") in (1, True, "1") else 0, "start": start, "end": end,
+            "top": num(r.get("top")), "bottom": num(r.get("bottom")),
+            "origin": r.get("origin") if r.get("origin") in ("manual", "detector", "review") else "manual",
+            "created_at": str(r.get("created_at") or _now())}
+
+
+def _clean_reviewed(r: dict) -> dict:
+    tf = r.get("timeframe")
+    tags = [t for t in r.get("tags") or [] if t in TAGS]
+    if tf not in TIMEFRAMES_BY_NAME or not tags:
+        raise LabelsFileError(f"A reviewed range has an unknown timeframe or no known tags ({tf!r})")
+    start, end = sorted((int(r["start"]), int(r["end"])))
+    return {"id": str(r.get("id") or uuid.uuid4().hex)[:36], "timeframe": tf, "start": start, "end": end,
+            "tags": tags, "created_at": str(r.get("created_at") or _now())}
+
+
+def parse_labels(data: bytes) -> dict:
+    """A labels file (from :meth:`Lab.export_labels`), checked row by row."""
+    if len(data) > MAX_LABELS_BYTES:
+        raise LabelsFileError("The file is larger than 50 MB")
+    try:
+        doc = json.loads(data)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise LabelsFileError("Not a Wednesday labels file (not JSON)") from exc
+    if not isinstance(doc, dict) or doc.get("format") != LABELS_FORMAT:
+        raise LabelsFileError("Not a Wednesday labels file")
+    if int(doc.get("version", 0)) > LABELS_FORMAT_VERSION:
+        raise LabelsFileError("This file was made by a newer Wednesday; update to import it")
+    try:
+        labels = [_clean_label(r) for r in doc.get("labels") or []]
+        reviewed = [_clean_reviewed(r) for r in doc.get("reviewed") or []]
+    except LabelsFileError:
+        raise
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        raise LabelsFileError(f"A row can't be read: {exc}") from exc
+    return {"symbol": str(doc.get("symbol") or ""), "labels": labels, "reviewed": reviewed}
 
 
 def ml_available() -> tuple[bool, str | None]:
@@ -48,11 +110,15 @@ class Lab:
         self._staged: dict[str, bytes] = {}
         self._active: ModelBundle | None = None
         self._lock = threading.Lock()
-        self.training = {"running": False, "stage": None, "error": None, "last": None, "started_at": None}
+        self.training = {"running": False, "stage": None, "error": None, "last": None, "started_at": None,
+                         "cancelled": False}
+        self._cancel = threading.Event()
         self.backfill = Backfill()
         self._staged_bars: dict[str, ParsedBars] = {}
+        self._staged_labels: dict[str, dict] = {}
         saved = store.get_setting(LAB_DATA_KEY) or {}
         self.history_bars = int(saved.get("history_bars") or HISTORY_BARS_DEFAULT)
+        store.lab_runs_interrupted(_now())
 
     # ---- price history ---------------------------------------------------
     def set_history_bars(self, bars: int) -> None:
@@ -155,30 +221,121 @@ class Lab:
             out.setdefault(r["timeframe"], {"tags": {}, "reviewed": 0})["reviewed"] += 1
         return out
 
+    # ---- labels file: back up, move to another machine, share ------------------------
+    def export_labels(self, symbol: str) -> dict:
+        """Every label and reviewed range of ``symbol``, as a labels file."""
+        strip = lambda rows: [{k: v for k, v in r.items() if k != "symbol"} for r in rows]  # noqa: E731
+        return {"format": LABELS_FORMAT, "version": LABELS_FORMAT_VERSION, "symbol": symbol, "exported_at": _now(),
+                "labels": strip(self.labels(symbol)), "reviewed": strip(self.reviewed(symbol))}
+
+    def _merge(self, table, incoming: list[dict], symbol: str, key) -> tuple[list[dict], dict]:
+        """Rows to write into ``symbol`` and the counts: same id updates, the same label under another
+        id is skipped. An id that belongs to another symbol gets a new one, so it stays untouched."""
+        existing = self.store.lab_rows(table, symbol)
+        ids = {r["id"] for r in existing}
+        seen = {key(r) for r in existing}
+        taken = self.store.lab_ids(table, [r["id"] for r in incoming if r["id"] not in ids])
+        rows, counts = [], {"new": 0, "updated": 0, "skipped": 0}
+        for r in incoming:
+            if r["id"] in ids:
+                counts["updated"] += 1
+            elif key(r) in seen:
+                counts["skipped"] += 1
+                continue
+            else:
+                counts["new"] += 1
+                if r["id"] in taken:
+                    r = {**r, "id": uuid.uuid4().hex}
+            seen.add(key(r))
+            rows.append({**r, "symbol": symbol})
+        return rows, counts
+
+    def stage_labels(self, data: bytes, symbol: str) -> dict:
+        """Read a labels file and keep it until :meth:`confirm_labels`; returns what would change."""
+        parsed = parse_labels(data)
+        token = secrets.token_hex(8)
+        while len(self._staged_labels) >= 3:
+            self._staged_labels.pop(next(iter(self._staged_labels)))
+        self._staged_labels[token] = parsed
+        return {"token": token, "symbol": parsed["symbol"], "matches": parsed["symbol"] == symbol,
+                "labels": self._merge(lab_labels_table, parsed["labels"], symbol, _label_key)[1],
+                "reviewed": self._merge(lab_reviewed_table, parsed["reviewed"], symbol, _reviewed_key)[1]}
+
+    def confirm_labels(self, token: str, symbol: str, map_symbol: bool = False) -> dict:
+        """Merge a staged labels file into ``symbol``. A file of another symbol needs ``map_symbol``."""
+        parsed = self._staged_labels.get(token)
+        if parsed is None:
+            raise LabelsFileError("That upload expired; choose the file again")
+        if parsed["symbol"] != symbol and not map_symbol:
+            raise LabelsFileError(f"The file holds labels of {parsed['symbol'] or 'an unnamed symbol'}, not {symbol}; "
+                                  "confirm that they should go to this symbol")
+        del self._staged_labels[token]
+        out = {}
+        for name, table, key in (("labels", lab_labels_table, _label_key), ("reviewed", lab_reviewed_table, _reviewed_key)):
+            rows, out[name] = self._merge(table, parsed[name], symbol, key)
+            for row in rows:
+                self.store.lab_put(table, row)
+        return out
+
     # ---- training -------------------------------------------------------------
-    def start_training(self, m1: pd.DataFrame, symbol: str, params: TrainParams) -> None:
+    def start_training(self, m1: pd.DataFrame, symbol: str, params: TrainParams, feed: dict | None = None) -> None:
+        """Train on a background thread. ``feed`` ({source, clock}) goes into the manifest so an
+        import elsewhere can tell whether its bar times mean the same thing."""
         with self._lock:
             if self.training["running"]:
                 raise RuntimeError("A model is already training")
-            self.training.update(running=True, stage="Starting", error=None, started_at=_now())
+            self._cancel.clear()
+            self.training.update(running=True, stage="Starting", error=None, started_at=_now(), cancelled=False)
+        run = {"id": uuid.uuid4().hex, "symbol": symbol, "started_at": self.training["started_at"], "finished_at": None,
+               "status": "running", "error": None, "model_id": None, "params": asdict(params)}
+        self.store.lab_run_put(run)
         labels = self.by_tf(self.labels(symbol))
         reviewed = self.by_tf(self.reviewed(symbol))
-        threading.Thread(target=self._train, args=(m1, labels, reviewed, params, symbol), daemon=True,
+        threading.Thread(target=self._train, args=(m1, labels, reviewed, params, symbol, feed, run), daemon=True,
                          name="lab-train").start()
 
-    def _train(self, m1, labels, reviewed, params, symbol) -> None:
+    def cancel_training(self) -> bool:
+        """Ask the running training to stop at its next stage; nothing is saved. False when idle."""
+        if not self.training["running"]:
+            return False
+        self._cancel.set()
+        self.training["stage"] = "Stopping"
+        return True
+
+    def _progress(self, stage: str) -> None:
+        if self._cancel.is_set():
+            raise TrainingCancelled
+        self.training["stage"] = stage
+
+    def _train(self, m1, labels, reviewed, params, symbol, feed, run) -> None:
         try:
-            bundle = train_bundle(m1, labels, reviewed, params, symbol, self.detector,
-                                  progress=lambda stage: self.training.update(stage=stage))
+            bundle = train_bundle(m1, labels, reviewed, params, symbol, self.detector, progress=self._progress)
+            self._progress("Saving")  # the last chance to stop before a file exists
+            if feed:
+                bundle.manifest["feed"] = feed
             bundle.save(self._path(bundle.id))
             self.training["last"] = bundle.manifest
+            run.update(status="done", model_id=bundle.id)
+        except TrainingCancelled:
+            self.training["cancelled"] = True
+            run.update(status="cancelled")
         except ValueError as exc:
             self.training["error"] = str(exc)
+            run.update(status="error", error=str(exc))
         except Exception as exc:  # noqa: BLE001 - shown in the Lab
             log.exception("training failed")
             self.training["error"] = f"{type(exc).__name__}: {exc}"
+            run.update(status="error", error=self.training["error"])
         finally:
+            run["finished_at"] = _now()
+            try:
+                self.store.lab_run_put(run)
+            except Exception:  # noqa: BLE001 - the run's outcome still shows until a restart
+                log.exception("can't save the training run")
             self.training.update(running=False, stage=None)
+
+    def runs(self) -> list[dict]:
+        return self.store.lab_runs()
 
     # ---- model files ------------------------------------------------------------
     def _path(self, model_id: str) -> Path:
@@ -237,15 +394,17 @@ class Lab:
             raise ModelFileError("No such model")
         return path.read_bytes()
 
-    def stage_import(self, data: bytes) -> dict:
-        """Read the manifest only; the pickle waits until :meth:`confirm_import`."""
+    def stage_import(self, data: bytes, symbol: str | None = None, clock: str | None = None) -> dict:
+        """Read the manifest only; the pickle waits until :meth:`confirm_import`. ``symbol`` and
+        ``clock`` (the running feed's) turn a mismatch with the model's training feed into warnings."""
         manifest = read_manifest(data)
         token = secrets.token_hex(8)
         while len(self._staged) >= 3:
             self._staged.pop(next(iter(self._staged)))
         self._staged[token] = data
         exists = self._path(manifest["id"]).is_file()
-        return {"token": token, "manifest": manifest, "exists": exists}
+        return {"token": token, "manifest": manifest, "exists": exists,
+                "warnings": feed_warnings(manifest, symbol, clock)}
 
     def confirm_import(self, token: str) -> dict:
         data = self._staged.pop(token, None)
@@ -314,8 +473,23 @@ class Lab:
         ok, reason = ml_available()
         return {"available": ok, "reason": reason, "tags": [{"id": t, "title": i["title"], "shape": i["shape"]}
                                                             for t, i in TAGS.items()],
-                "counts": self.counts(symbol), "training": dict(self.training), "models": self.models(),
-                "active": self.active_id}
+                "counts": self.counts(symbol), "training": dict(self.training), "runs": self.runs(),
+                "models": self.models(), "active": self.active_id}
+
+
+def feed_warnings(manifest: dict, symbol: str | None, clock: str | None) -> list[str]:
+    """Plain-words differences between the feed a model was trained on and the running one."""
+    out = []
+    trained_on = manifest.get("symbol")
+    if symbol and trained_on and trained_on != symbol:
+        out.append(f"It was trained on {trained_on}; this feed is {symbol}. Prices and candle shapes can differ.")
+    feed = manifest.get("feed") or {}
+    if clock and feed.get("clock") and feed["clock"] != clock:
+        out.append(f"Its bar times were on the {feed['clock']} clock; this feed's are on {clock}, so its time-of-day "
+                   "features will be shifted.")
+    elif clock and not feed.get("clock"):
+        out.append("The file doesn't say which clock its bar times were on; ask its author if time of day matters.")
+    return out
 
 
 def history_bounds(m1: pd.DataFrame | None) -> dict | None:

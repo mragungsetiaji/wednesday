@@ -11,7 +11,8 @@ Two kinds of model go into one file:
   found in the history.
 
 Every split is by time: the last ``test_fraction`` of samples (by the moment
-they became known) is held out for the scores, then the model is refit on all.
+they became known) is held out for the scores and the feature importance, then
+the model is refit on all.
 """
 
 from __future__ import annotations
@@ -28,11 +29,17 @@ from ..detectors.orderblock import OrderBlockDetector
 from ..structure import Context
 from ..timeframes import TIMEFRAMES_BY_NAME, Timeframe
 from .dataset import FeatureParams, _atr, feature_names, label_matrix, timeframe_features, ts, unix
+from .explain import importance
 from .model import ModelBundle
 from .outcome import TradePlan, plan_levels, simulate
 from .tags import OB_TAGS, TAGS
 
 MIN_CLASS = 5  # samples of each class needed to train a tag
+
+
+class TrainingCancelled(Exception):
+    """Raised from the progress callback when the trader stops a run."""
+
 ZONE_FEATURES = ["zone_dir", "zone_body", "zone_risk", "zone_capped", "zone_entry"]
 
 
@@ -131,6 +138,8 @@ def fit_eval(X: pd.DataFrame, y: np.ndarray, when: np.ndarray, test_fraction: fl
         if len(np.unique(y[te])) == 2:
             test["auc"] = float(roc_auc_score(y[te], p))
             test["avg_precision"] = float(average_precision_score(y[te], p))
+            # Held-out data only, and the model fit before it: the refit below has seen it.
+            test["importance"] = importance(model, X.iloc[te], y[te])
         test["base_rate"] = float(y[te].mean())
         if r is not None:
             test["avg_r_all"] = float(r[te].mean())

@@ -3031,6 +3031,55 @@ fieldset:disabled .switch {
   }
 }
 
+/* Lab: what a model looks at (feature importance) */
+.lab-explain {
+  margin-block-start: var(--s3);
+}
+.lab-explain summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+.lab-explain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--s4) var(--s6);
+  margin-block-start: var(--s2);
+}
+.lab-explain h4 {
+  margin: 0 0 var(--s1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.lab-bars {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+.lab-bars li {
+  display: grid;
+  grid-template-columns: 11em minmax(0, 1fr) 4.5em;
+  align-items: center;
+  gap: var(--s2);
+}
+.lab-bars li > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.lab-bar {
+  block-size: 6px;
+  border-radius: 3px;
+  background: var(--liquidity);
+}
+.lab-bars .num {
+  text-align: end;
+  color: var(--text-3);
+}
+
 /* Journal: header, monthly bars, calendar */
 .ticker .ticker-title {
   font-size: var(--text-xl);

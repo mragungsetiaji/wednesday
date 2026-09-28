@@ -618,6 +618,26 @@ export interface TagMetrics {
   picked?: number;
   from_labels?: number;
   from_detector?: number;
+  importance?: Importance | null;
+}
+
+/** Held-out AUC lost when a feature family, or one feature, is shuffled. */
+export interface Importance {
+  metric: "auc";
+  base: number;
+  families: { id: string; title: string; drop: number }[];
+  features: { name: string; label: string; drop: number }[];
+}
+
+export interface TrainingRun {
+  id: string;
+  symbol: string;
+  started_at: string;
+  finished_at: string | null;
+  status: "running" | "done" | "error" | "cancelled" | "interrupted";
+  error: string | null;
+  model_id: string | null;
+  params: Partial<TrainParams>;
 }
 
 export interface ModelManifest {
@@ -632,6 +652,7 @@ export interface ModelManifest {
   outcome: TagMetrics | null;
   params: { lookback: number; confirm: number; rr: number; horizon_hours: number; max_sl: number };
   data: { first: string; last: string; m1_bars: number; labels: number };
+  feed?: { source: string; clock: string }; // missing in files from before 0.1.7
   sklearn: string;
   sha256: string;
 }
@@ -658,7 +679,11 @@ export interface LabStatus {
   history?: { first_unix: number; last_unix: number; bars: number } | null;
   tags?: LabTag[];
   counts?: Record<string, { tags: Record<string, { yes: number; no: number }>; reviewed: number }>;
-  training?: { running: boolean; stage: string | null; error: string | null; last: ModelManifest | null; started_at: string | null };
+  training?: {
+    running: boolean; stage: string | null; error: string | null; last: ModelManifest | null; started_at: string | null;
+    cancelled: boolean;
+  };
+  runs?: TrainingRun[];
   models?: ModelManifest[];
   active?: string | null;
 }
@@ -673,12 +698,14 @@ export const addReviewed = (r: { timeframe: string; start: number; end: number; 
   send<LabReviewed>("POST", "/api/lab/reviewed", r);
 export const deleteReviewed = (id: string) => send<{ deleted: boolean }>("DELETE", `/api/lab/reviewed/${encodeURIComponent(id)}`);
 export const startTraining = (p: TrainParams) => send<LabStatus>("POST", "/api/lab/train", p);
+export const cancelTraining = () => send<LabStatus>("DELETE", "/api/lab/train");
 export const setActiveModel = (id: string | null) => send<LabStatus>("PUT", "/api/lab/active", { id });
 export const deleteModel = (id: string) => send<LabStatus>("DELETE", `/api/lab/models/${encodeURIComponent(id)}`);
 export const modelFileUrl = (id: string) => `/api/lab/models/${encodeURIComponent(id)}/file`;
 export const confirmImport = (token: string) => send<LabStatus & { imported: ModelManifest }>("POST", `/api/lab/models/import/${token}`);
-export async function stageImport(file: File): Promise<{ token: string; manifest: ModelManifest; exists: boolean }> {
-  const res = await fetch("/api/lab/models/import", { method: "POST", body: file });
+
+async function upload<T>(url: string, file: File): Promise<T> {
+  const res = await fetch(url, { method: "POST", body: file });
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
     try {
@@ -690,6 +717,28 @@ export async function stageImport(file: File): Promise<{ token: string; manifest
   }
   return res.json();
 }
+
+export interface StagedModel {
+  token: string;
+  manifest: ModelManifest;
+  exists: boolean;
+  warnings: string[]; // how the model's training feed differs from this one
+}
+export const stageImport = (file: File) => upload<StagedModel>("/api/lab/models/import", file);
+
+export interface MergeCounts { new: number; updated: number; skipped: number }
+export interface StagedLabels {
+  token: string;
+  symbol: string; // the symbol the file was exported from
+  matches: boolean;
+  labels: MergeCounts;
+  reviewed: MergeCounts;
+}
+export const labelsExportUrl = "/api/lab/labels/export";
+export const stageLabels = (file: File) => upload<StagedLabels>("/api/lab/labels/import", file);
+export const confirmLabels = (token: string, mapSymbol: boolean) =>
+  send<LabStatus & { imported: { labels: MergeCounts; reviewed: MergeCounts } }>(
+    "POST", `/api/lab/labels/import/${token}`, { map_symbol: mapSymbol });
 // ---- Lab > Data: more M1 history ----
 
 export interface BackfillState {

@@ -34,6 +34,14 @@ A label is saved with its timeframe, tag, the open times of its first and last
 candle and, for accepted suggestions, the zone's top and bottom. Labels live in
 the `lab_labels` table, reviewed ranges in `lab_reviewed`.
 
+**Labels file.** Under **Train**, **Export labels** downloads every label and
+reviewed range of the symbol as one JSON file: a backup, or labels to move to
+another machine. **Import labels** shows what the file would change (new,
+updated, already here) before anything is written, then merges it: a label with
+the same id is updated, the same label under another id is skipped. A file from
+another symbol needs a tick to go into this one, and never touches the labels of
+the symbol it came from.
+
 ## Train
 
 <img src="images/lab-train.png" alt="Train: timeframes, tags with their label counts, model settings, and the scores of the last run" width="100%">
@@ -62,6 +70,20 @@ your tags it found; both at the cut. AUC doesn't depend on the cut.
 For the outcome model the scores add what trading would have made: the average R
 of every held-out trade against the average R of the trades the model liked.
 
+**What the model looks at.** A model's scores open a list per tag of the
+feature groups it leans on (the candle, the candles before, the confirming
+candles, the window high / low, volatility, time of day, higher timeframes, and
+the zone for the outcome model), with its top features in plain words. It is
+permutation importance: how much held-out AUC drops when a group, or one feature,
+is shuffled across the held-out candles, measured on the model fit before them.
+A model that leans mostly on time of day rather than the candles is worth a
+second look. Files from before 0.1.7 don't carry it.
+
+**Stop** ends a run at its next stage (between tags); nothing is saved.
+**Recent runs** keeps the last 20 runs with how they ended, errors included, so
+a failed run's reason survives a restart (a run cut off by one shows as
+*interrupted*).
+
 The classifier is scikit-learn's `HistGradientBoostingClassifier`: quick, fine
 with a few hundred labels, and it handles missing context (4H has nothing above
 it) on its own.
@@ -72,15 +94,19 @@ it) on its own.
 
 Models are saved as zip files in `data/models` (`XAU_MODELS_DIR`):
 
-- `manifest.json`: name, author, note, when and on what it was trained, the
-  timeframes, the scores per tag, the settings, and the SHA-256 of the pickle.
+- `manifest.json`: name, author, note, when and on what it was trained (symbol,
+  data source and the clock of its bar times), the timeframes, the scores and
+  feature importance per tag, the settings, and the SHA-256 of the pickle.
 - `model.pkl`: the fitted estimators.
 
 **Use** sets a model active; the screener's ML layer and the Lab's **Model**
 toggle show its blocks. **Download** gives you the file to pass on.
 
 **Import** reads only the manifest first and shows it: name, author, date,
-timeframes, tags, fingerprint. Nothing is loaded until you click **Load model**.
+timeframes, tags, bar clock, fingerprint. Nothing is loaded until you click **Load model**.
+It also warns when the model was trained on another symbol, or on bar times of
+another clock (its time-of-day features would be shifted), or when the file
+doesn't say which clock.
 Loading a pickle can run code, so Wednesday refuses a file whose pickle doesn't
 match the manifest's fingerprint, and loads it with an unpickler that accepts
 only numpy and scikit-learn classes. Still, load model files only from people

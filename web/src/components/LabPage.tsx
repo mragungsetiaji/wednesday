@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  confirmImport, deleteModel, fetchLab, modelFileUrl, setActiveModel, stageImport, startTraining,
-  type LabStatus, type ModelManifest, type TrainParams,
+  cancelTraining, confirmImport, confirmLabels, deleteModel, fetchLab, labelsExportUrl, modelFileUrl, setActiveModel,
+  stageImport, stageLabels, startTraining,
+  type Importance, type LabStatus, type MergeCounts, type ModelManifest, type StagedLabels, type StagedModel,
+  type TrainingRun, type TrainParams,
 } from "../api";
 import { fmtUnix } from "../format";
 import { usePref } from "../prefs";
@@ -142,6 +144,14 @@ function LabTrain({ status, onStatus }: { status: LabStatus; onStatus: (s: LabSt
     }
   };
 
+  const stop = async () => {
+    try {
+      onStatus(await cancelTraining());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   return (
     <div className="lab-columns">
       <form className="settings-form" onSubmit={submit} aria-labelledby="train-h">
@@ -247,11 +257,17 @@ function LabTrain({ status, onStatus }: { status: LabStatus; onStatus: (s: LabSt
             disabled={training?.running || !status.available || !form.timeframes.length || !form.tags.length}>
             {training?.running ? "Training…" : "Train model"}
           </button>
+          {training?.running && (
+            <button type="button" className="button secondary" disabled={training.stage === "Stopping"} onClick={stop}>
+              Stop
+            </button>
+          )}
           <span className="form-status" role="status">
             {training?.running ? training.stage : error ? <span className="text-error">{error}</span> : ""}
           </span>
         </div>
         {training?.error && !training.running && <p className="text-error field-note">Training failed: {training.error}</p>}
+        {training?.cancelled && !training.running && <p className="field-note">Training stopped; nothing was saved.</p>}
       </form>
 
       <div className="lab-side">
@@ -289,8 +305,129 @@ function LabTrain({ status, onStatus }: { status: LabStatus; onStatus: (s: LabSt
             <a className="link" href="/api/lab/feedback" download>feedback.csv</a>. The start of a reinforcement learning set.
           </p>
         </section>
+        <LabelsFile symbol={status.symbol ?? ""} onStatus={onStatus} />
+        {!!status.runs?.length && <RecentRuns runs={status.runs} />}
       </div>
     </div>
+  );
+}
+
+const RUN_STATUS: Record<TrainingRun["status"], string> = {
+  running: "Training", done: "Saved", error: "Failed", cancelled: "Stopped", interrupted: "Interrupted",
+};
+
+function RecentRuns({ runs }: { runs: TrainingRun[] }) {
+  return (
+    <section className="settings-form" aria-labelledby="runs-h">
+      <div className="settings-intro">
+        <h2 id="runs-h">Recent runs</h2>
+      </div>
+      <div className="table-scroll">
+        <table className="data compact">
+          <thead>
+            <tr><th scope="col">Started</th><th scope="col">Timeframes</th><th scope="col">Result</th></tr>
+          </thead>
+          <tbody>
+            {runs.slice(0, 8).map((r) => (
+              <tr key={r.id}>
+                <td className="num">{fmtDate(r.started_at)}</td>
+                <td>{r.params.timeframes?.join(", ") ?? "—"}</td>
+                <td className={r.status === "error" || r.status === "interrupted" ? "text-error" : undefined}>
+                  {RUN_STATUS[r.status]}{r.error && `: ${r.error}`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+const fmtCounts = (c: MergeCounts) => `${c.new} new, ${c.updated} updated, ${c.skipped} already here`;
+
+/** Labels and reviewed ranges as a JSON file: a backup, or the labels of another machine or person. */
+function LabelsFile({ symbol, onStatus }: { symbol: string; onStatus: (s: LabStatus) => void }) {
+  const [staged, setStaged] = useState<StagedLabels | null>(null);
+  const [map, setMap] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const choose = async (file: File | undefined) => {
+    if (fileRef.current) fileRef.current.value = "";
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      setStaged(await stageLabels(file));
+      setMap(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const merge = async () => {
+    if (!staged) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const s = await confirmLabels(staged.token, map);
+      setStaged(null);
+      setNote(`Labels: ${fmtCounts(s.imported.labels)}. Reviewed ranges: ${fmtCounts(s.imported.reviewed)}.`);
+      onStatus(s);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="settings-form" aria-labelledby="labels-file-h">
+      <div className="settings-intro">
+        <h2 id="labels-file-h">Labels file</h2>
+        <p>
+          Every label and reviewed range of {symbol || "this symbol"} as one JSON file: a backup, or labels to move to
+          another machine. Importing merges: the same label updates, one already here is skipped.
+        </p>
+      </div>
+      <div className="form-actions">
+        <a className="button secondary" href={labelsExportUrl} download>Export labels</a>
+        <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => choose(e.target.files?.[0])} />
+        <button type="button" className="button secondary" disabled={busy} onClick={() => fileRef.current?.click()}>
+          Import labels
+        </button>
+      </div>
+      {staged && (
+        <div className="import-card" role="dialog" aria-labelledby="labels-import-h">
+          <h3 id="labels-import-h">Labels of {staged.symbol || "an unnamed symbol"}</h3>
+          <dl className="import-facts">
+            <dt>Labels</dt><dd>{fmtCounts(staged.labels)}</dd>
+            <dt>Reviewed ranges</dt><dd>{fmtCounts(staged.reviewed)}</dd>
+          </dl>
+          {!staged.matches && (
+            <label className="field field-check">
+              <input type="checkbox" checked={map} onChange={(e) => setMap(e.target.checked)} />
+              <span>The file is for {staged.symbol || "another symbol"}; add its labels to {symbol} anyway</span>
+            </label>
+          )}
+          <div className="form-actions">
+            <button type="button" className="button primary" disabled={busy || (!staged.matches && !map)} onClick={merge}>
+              Merge labels
+            </button>
+            <button type="button" className="button quiet" disabled={busy} onClick={() => setStaged(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {(note || error) && (
+        <p className={`field-note${error ? " text-error" : ""}`} role="status">{error ?? note}</p>
+      )}
+    </section>
   );
 }
 
@@ -346,15 +483,58 @@ function ModelScores({ manifest }: { manifest: ModelManifest }) {
           )}
         </p>
       )}
+      <Explained manifest={manifest} />
     </>
   );
 }
+
+/** What each model leans on: held-out AUC lost when a family or feature is shuffled. */
+function Explained({ manifest }: { manifest: ModelManifest }) {
+  const parts: [string, Importance][] = [
+    ...Object.entries(manifest.tags).flatMap(([id, m]) => (m.importance ? [[m.title ?? id, m.importance] as [string, Importance]] : [])),
+    ...(manifest.outcome?.importance ? [["Outcome", manifest.outcome.importance] as [string, Importance]] : []),
+  ];
+  if (!parts.length) return null; // files from before 0.1.7 don't carry it
+  return (
+    <details className="lab-explain">
+      <summary>What the model looks at</summary>
+      <p className="field-hint">
+        How much held-out AUC drops when a group of features, or one feature, is shuffled across the held-out candles.
+        Bigger means the model leans on it more; near zero means it barely uses it.
+      </p>
+      <div className="lab-explain-grid">
+        {parts.map(([title, imp]) => {
+          const max = Math.max(0.001, ...imp.families.map((f) => f.drop));
+          return (
+            <section key={title} aria-label={title}>
+              <h4>{title}</h4>
+              <ul className="lab-bars">
+                {imp.families.slice(0, 5).map((f) => (
+                  <li key={f.id}>
+                    <span>{f.title}</span>
+                    <span className="lab-bar" style={{ inlineSize: `${Math.max(0, f.drop / max) * 100}%` }} />
+                    <span className="num">{fmtDrop(f.drop)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="field-hint">
+                Top features: {imp.features.slice(0, 3).map((f) => `${f.label} (${fmtDrop(f.drop)})`).join(", ")}
+              </p>
+            </section>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
+const fmtDrop = (v: number) => `${v >= 0 ? "−" : "+"}${Math.abs(v).toFixed(3)}`;
 
 // ---- Models --------------------------------------------------------------------------------
 
 function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabStatus) => void }) {
   const models = status.models ?? [];
-  const [staged, setStaged] = useState<{ token: string; manifest: ModelManifest; exists: boolean } | null>(null);
+  const [staged, setStaged] = useState<StagedModel | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -402,6 +582,7 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
               <dt>Author</dt><dd>{staged.manifest.author || "not given"}</dd>
               <dt>Made</dt><dd>{fmtDate(staged.manifest.created_at)} on {staged.manifest.symbol}</dd>
               <dt>Timeframes</dt><dd>{staged.manifest.timeframes.join(", ")}</dd>
+              <dt>Bar clock</dt><dd>{staged.manifest.feed?.clock ?? "not given"}</dd>
               <dt>Tags</dt><dd>{Object.values(staged.manifest.tags).filter((t) => t.trained).map((t) => t.title).join(", ") || "none"}</dd>
               <dt>Fingerprint</dt><dd className="num">{staged.manifest.sha256.slice(0, 16)}…</dd>
               {staged.manifest.note && <><dt>Note</dt><dd>{staged.manifest.note}</dd></>}
@@ -411,6 +592,11 @@ function LabModels({ status, onStatus }: { status: LabStatus; onStatus: (s: LabS
               fingerprint, but load files only from people you trust.
               {staged.exists && " A model with this id is already here and will be replaced."}
             </p>
+            {staged.warnings.length > 0 && (
+              <ul className="import-warn" aria-label="Feed differences">
+                {staged.warnings.map((w) => <li key={w}>{w}</li>)}
+              </ul>
+            )}
             <div className="form-actions">
               <button type="button" className="button primary" disabled={busy}
                 onClick={() => run(async () => {

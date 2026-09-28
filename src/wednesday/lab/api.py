@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 from typing import Callable
 
 import pandas as pd
@@ -15,7 +16,7 @@ from ..timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
 from .dataset import LADDER, minute_dataset, ts, unix
 from .bars import HISTORY_BARS_MAX, MAX_IMPORT_BYTES, BarsFileError, import_bars
 from .model import MAX_FILE_BYTES, ModelFileError
-from .service import Lab, history_bounds, ml_available
+from .service import Lab, LabelsFileError, history_bounds, ml_available
 from .tags import TAGS, tag_of
 from .train import TrainParams, predict_blocks
 
@@ -220,6 +221,31 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
     def delete_label(label_id: str) -> dict:
         return {"deleted": lab().delete("labels", label_id)}
 
+    @r.get("/labels/export")
+    def export_labels() -> Response:
+        """Every label and reviewed range of the symbol, as a JSON file to back up or pass on."""
+        doc = lab().export_labels(symbol())
+        name = f"wednesday-labels-{symbol().replace('=', '')}-{doc['exported_at'][:10]}.json"
+        return Response(json.dumps(doc, indent=1), media_type="application/json",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+    @r.post("/labels/import")
+    async def stage_labels(request: Request) -> dict:
+        """Upload a labels file (raw body); returns what would change. Nothing is written until the confirm call."""
+        data = await request.body()
+        try:
+            return lab().stage_labels(data, symbol())
+        except LabelsFileError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @r.post("/labels/import/{token}")
+    def confirm_labels(token: str, body: dict = Body(default={})) -> dict:
+        """Merge a staged labels file into this symbol (``map_symbol`` for a file of another one)."""
+        try:
+            return {"imported": lab().confirm_labels(token, symbol(), bool(body.get("map_symbol"))), **status()}
+        except LabelsFileError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
     @r.post("/reviewed")
     def add_reviewed(body: dict = Body(...)) -> dict:
         try:
@@ -261,9 +287,16 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
         if m1 is None:
             raise HTTPException(503, "no data yet")
         try:
-            lab().start_training(m1, symbol(), params)
+            lab().start_training(m1, symbol(), params, feed={"source": get_source(), "clock": get_clock()})
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
+        return status()
+
+    @r.delete("/train")
+    def cancel_training() -> dict:
+        """Stop the running training at its next stage; nothing is saved."""
+        if not lab().cancel_training():
+            raise HTTPException(409, "Nothing is training")
         return status()
 
     @r.put("/active")
@@ -300,7 +333,7 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
         if len(data) > MAX_FILE_BYTES:
             raise HTTPException(413, "The file is larger than 200 MB")
         try:
-            return lab().stage_import(data)
+            return lab().stage_import(data, symbol(), get_clock())
         except ModelFileError as exc:
             raise HTTPException(422, str(exc)) from exc
 

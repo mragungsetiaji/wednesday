@@ -1,4 +1,5 @@
 import io
+import json
 import pickle
 import time
 import zipfile
@@ -14,7 +15,9 @@ from wednesday.feeds import SyntheticFeed
 from wednesday.lab.dataset import FeatureParams, LADDER, candle_features, label_matrix, minute_dataset, unix
 from wednesday.lab.model import ModelBundle, ModelFileError, load_bytes, read_manifest, safe_loads
 from wednesday.lab.outcome import TradePlan, plan_levels, simulate
-from wednesday.lab.service import Lab
+from wednesday.lab import train as train_mod
+from wednesday.lab.explain import describe
+from wednesday.lab.service import Lab, feed_warnings
 from wednesday.lab.tags import TAGS, tag_of
 from wednesday.lab.train import TrainParams, predict_blocks, train_bundle
 from wednesday.scanner import ScanConfig
@@ -245,6 +248,8 @@ def test_lab_api_flow(lab_api):
     assert st["training"]["error"] is None, st["training"]
     model = st["models"][0]
     assert model["name"] == "first" and st["active"] is None
+    assert st["runs"][0]["status"] == "done" and st["runs"][0]["model_id"] == model["id"]
+    assert api.delete("/api/lab/train").status_code == 409  # nothing to stop
 
     assert api.put("/api/lab/active", json={"id": model["id"]}).json()["active"] == model["id"]
     preds = api.get("/api/lab/predictions", params={"tf": "15M", "threshold": 0.3}).json()
@@ -266,6 +271,7 @@ def test_lab_api_flow(lab_api):
     assert api.delete(f"/api/lab/models/{model['id']}").json()["active"] is None
     staged = api.post("/api/lab/models/import", content=data).json()
     assert staged["manifest"]["name"] == "first" and not staged["exists"]
+    assert staged["manifest"]["feed"]["clock"] and staged["warnings"] == []  # same feed it was trained on
     assert api.get("/api/lab").json()["models"] == []  # nothing loaded yet
     done = api.post(f"/api/lab/models/import/{staged['token']}").json()
     assert done["imported"]["id"] == model["id"] and len(done["models"]) == 1
@@ -273,6 +279,147 @@ def test_lab_api_flow(lab_api):
     assert api.post("/api/lab/models/import", content=b"not a zip").status_code == 422
 
     assert api.delete(f"/api/lab/reviewed/{reviewed['id']}").json()["deleted"]
+
+
+def test_feature_names_read_plainly():
+    assert describe("body_0") == ("candle", "candle body")
+    assert describe("close_-3") == ("before", "3 candles before: close vs candle")
+    assert describe("uwick_2") == ("confirm", "confirming candle 2: upper wick")
+    assert describe("htf1_close")[0] == "htf" and describe("hour_sin")[0] == "time"
+    assert describe("zone_risk") == ("zone", "stop distance")
+
+
+def test_importance_is_computed_on_held_out_data(monkeypatch):
+    from wednesday.lab import train
+
+    seen = []
+    real = train.importance
+    monkeypatch.setattr(train, "importance", lambda model, X, y: seen.append(X.index) or real(model, X, y))
+    m1 = synthetic(9000)
+    tf = TIMEFRAMES_BY_NAME["15M"]
+    labels, reviewed = detector_labels(m1, tf, m1.index[-2000])
+    params = TrainParams(timeframes=["15M"], tags=["bsl", "ssl"])
+    bundle = train_bundle(m1, {"15M": labels}, {"15M": reviewed}, params, "XAU", DetectorParams())
+    imp = bundle.manifest["tags"]["bsl"]["importance"]
+    assert imp["metric"] == "auc" and imp["families"] and len(imp["features"]) <= 15
+    assert {f["id"] for f in imp["families"]} <= {"candle", "before", "confirm", "window", "volatility", "time",
+                                                   "timeframe", "htf"}
+    assert all(f["label"] for f in imp["features"])
+    test_from = pd.Timestamp(bundle.manifest["tags"]["bsl"]["test_from"])
+    # Every sample it was scored on is from the held-out part (by when it became known).
+    frames = train.frames_for(m1, tf, params.features)
+    assert all((frames.feats.loc[idx, "available_at"] >= test_from).all() for idx in seen)
+
+
+def slow_train(monkeypatch, steps=200):
+    """train_bundle that only reports progress, so a test can stop it midway."""
+    from wednesday.lab import service
+
+    def fake(m1, labels, reviewed, params, symbol, detector, progress):
+        for i in range(steps):
+            progress(f"step {i}")
+            time.sleep(0.01)
+        raise AssertionError("never cancelled")
+
+    monkeypatch.setattr(service, "train_bundle", fake)
+
+
+def test_cancel_training_saves_nothing(tmp_path, monkeypatch):
+    slow_train(monkeypatch)
+    store = Store(f"sqlite:///{tmp_path / 'lab.db'}")
+    lab = Lab(store, tmp_path / "models", DetectorParams())
+    assert not lab.cancel_training()
+    lab.start_training(synthetic(3000), "XAU", TrainParams())
+    with pytest.raises(RuntimeError):
+        lab.start_training(synthetic(3000), "XAU", TrainParams())
+    assert lab.cancel_training()
+    for _ in range(200):
+        if not lab.training["running"]:
+            break
+        time.sleep(0.02)
+    assert lab.training["cancelled"] and lab.training["error"] is None
+    assert not (tmp_path / "models").exists() or not any((tmp_path / "models").iterdir())
+    run = lab.runs()[0]
+    assert run["status"] == "cancelled" and run["finished_at"] and run["params"]["timeframes"] == ["5M", "15M"]
+
+
+def test_training_runs_survive_a_restart(tmp_path, monkeypatch):
+    slow_train(monkeypatch, steps=10_000)
+    store = Store(f"sqlite:///{tmp_path / 'lab.db'}")
+    lab = Lab(store, tmp_path / "models", DetectorParams())
+    lab.start_training(synthetic(3000), "XAU", TrainParams())
+    # A new Lab on the same database is what a restart looks like; the old thread is still going.
+    runs = Lab(store, tmp_path / "models", DetectorParams()).runs()
+    assert runs[0]["status"] == "interrupted" and "stopped" in runs[0]["error"]
+    lab.cancel_training()
+    for i in range(25):
+        store.lab_run_put({"id": f"r{i}", "symbol": "XAU", "started_at": f"2026-01-{i + 1:02d}", "finished_at": None,
+                           "status": "done", "error": None, "model_id": None, "params": {}})
+    assert len(store.lab_runs(limit=100)) == 20
+
+
+def test_feed_warnings():
+    m = {"symbol": "XAUUSD", "feed": {"source": "mt5", "clock": "Etc/GMT-3"}}
+    assert feed_warnings(m, "XAUUSD", "Etc/GMT-3") == []
+    both = feed_warnings(m, "GC=F", "UTC")
+    assert len(both) == 2 and "GC=F" in both[0] and "UTC" in both[1]
+    assert "doesn't say" in feed_warnings({"symbol": "XAUUSD"}, "XAUUSD", "UTC")[0]
+
+
+def test_labels_export_wipe_import_gives_the_same_samples(lab_api, tmp_path):
+    api, runtime = lab_api
+    sym = runtime.engine.symbol
+    win = api.get("/api/lab/candles", params={"tf": "15M", "limit": 300}).json()
+    for s in win["suggestions"]:
+        if s["tag"] in ("bsl", "ssl"):
+            api.post("/api/lab/labels", json={"timeframe": "15M", "tag": s["tag"], "start": s["time_unix"],
+                                              "top": s["top"], "bottom": s["bottom"], "origin": "detector"})
+    api.post("/api/lab/reviewed", json={"timeframe": "15M", "start": win["candles"][0]["time"],
+                                        "end": win["candles"][-1]["time"], "tags": ["bsl", "ssl"]})
+    other = runtime.lab.add_label("EURUSD", {"timeframe": "15M", "tag": "bsl", "start": 1, "value": 1})
+
+    exported = api.get("/api/lab/labels/export")
+    assert exported.status_code == 200 and "attachment" in exported.headers["content-disposition"]
+    doc = exported.json()
+    assert doc["symbol"] == sym and doc["labels"] and len(doc["reviewed"]) == 1
+
+    def samples(lab):
+        m1 = runtime.engine.snapshot()[2]
+        fr =train_mod.frames_for(m1, TIMEFRAMES_BY_NAME["15M"], TrainParams().features)
+        X, Y = train_mod.tag_samples([fr], lab.by_tf(lab.labels(sym)), lab.by_tf(lab.reviewed(sym)), ["bsl", "ssl"])
+        return Y.sort_index()
+
+    before = samples(runtime.lab)
+    # Wipe this symbol's labels; the other symbol's label shares the database.
+    for r in runtime.lab.labels(sym):
+        runtime.lab.delete("labels", r["id"])
+    for r in runtime.lab.reviewed(sym):
+        runtime.lab.delete("reviewed", r["id"])
+    assert samples(runtime.lab).empty
+
+    staged = api.post("/api/lab/labels/import", content=exported.content).json()
+    assert staged["matches"] and staged["labels"]["new"] == len(doc["labels"]) and staged["reviewed"]["new"] == 1
+    done = api.post(f"/api/lab/labels/import/{staged['token']}", json={}).json()
+    assert done["imported"]["labels"]["new"] == len(doc["labels"])
+    pd.testing.assert_frame_equal(samples(runtime.lab), before)
+    assert runtime.lab.labels("EURUSD") == [other]
+
+    # Again: same ids update, nothing doubles.
+    again = api.post("/api/lab/labels/import", content=exported.content).json()
+    assert again["labels"] == {"new": 0, "updated": len(doc["labels"]), "skipped": 0}
+
+    # A file of another symbol needs map_symbol, and never touches that symbol's labels.
+    foreign = json.dumps({**doc, "symbol": "EURUSD", "labels": [{**other, "start": 5, "end": 5}]}).encode()
+    staged = api.post("/api/lab/labels/import", content=foreign).json()
+    assert not staged["matches"]
+    assert api.post(f"/api/lab/labels/import/{staged['token']}", json={}).status_code == 422
+    assert api.post(f"/api/lab/labels/import/{staged['token']}", json={"map_symbol": True}).status_code == 200
+    assert runtime.lab.labels("EURUSD") == [other]
+    assert any(r["start"] == 5 and r["id"] != other["id"] for r in runtime.lab.labels(sym))
+
+    assert api.post("/api/lab/labels/import", content=b"nope").status_code == 422
+    assert api.post("/api/lab/labels/import", content=b'{"format": "wednesday-labels", "labels": [{"tag": "x"}]}'
+                    ).status_code == 422
 
 
 def test_lab_without_database(tmp_path):
