@@ -97,3 +97,23 @@ def test_quarters_endpoint(tmp_path):
     assert body["clock"] == "UTC" and api.get("/api/status").json()["clock"] == "UTC"
     assert {"week", "session", "q90"} <= body["rows"].keys()
     assert body["rows"]["session"] and body["stats"]["week"][2]["label"] == "Wed"
+
+
+def test_status_has_pip_and_clock_offset(engine, tmp_path):
+    from wednesday import server
+    from wednesday.sizing import pip_size
+
+    engine.step()
+    client = TestClient(create_app(engine, source="synthetic", ui_dir=tmp_path, clock="Etc/GMT-3"))
+    body = client.get("/api/status").json()
+    assert body["pip"] == pytest.approx(0.1)  # gold, no terminal spec
+    assert body["clock_offset"] == 3 * 3600
+    assert server.clock_offset("UTC") == 0
+    # New York in summer is UTC-4, in winter UTC-5; "NY+7" is a broker clock 7 hours ahead of it.
+    assert server.clock_offset("NY+7") in (3 * 3600, 2 * 3600)
+    # The terminal's point decides it: ten points to a pip.
+    assert pip_size("XAUUSD", 2400, {"point": 0.01}) == pytest.approx(0.1)
+    assert pip_size("XAUUSD", 2400, {"point": 0.001}) == pytest.approx(0.01)
+    assert pip_size("EURUSD", 1.1) == pytest.approx(0.0001)
+    engine.state.spec = {"point": 0.001}
+    assert client.get("/api/status").json()["pip"] == pytest.approx(0.01)

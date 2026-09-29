@@ -111,6 +111,8 @@ export interface ScanResponse {
   error_at: string | null;
   conn: FeedConn;
   tick_seconds: number; // live price interval between scans; 0 = none
+  pip?: number; // one pip in price: ten of the terminal's points, or the symbol's usual size
+  clock_offset?: number; // seconds the feed clock is ahead of UTC now
   poll?: boolean; // false: started with --no-poll, the scan never updates
   app_version: string;
   config: {
@@ -580,6 +582,8 @@ export interface Mt5Spec {
   min_lot: number;
   lot_step: number;
   max_lot: number | null;
+  point?: number;
+  digits?: number;
 }
 
 export interface RiskResponse {

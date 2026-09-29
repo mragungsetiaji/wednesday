@@ -116,6 +116,17 @@ def resolve(settings: RiskSettings, spec: dict | None) -> Sizer | None:
                  settings.risk_off_multiplier, "settings")
 
 
+def pip_size(symbol: str, price: float | None, spec: dict | None = None) -> float:
+    """One pip in price: ten of the symbol's points when the terminal reports them (0.1 on a
+    2-digit gold), otherwise the usual size for the symbol (see :func:`journal.stats.pip_size`)."""
+    point = (spec or {}).get("point")
+    if point:
+        return float(point) * 10
+    from .journal.stats import pip_size as usual
+
+    return usual(symbol, price or 0.0)
+
+
 def fmt_money(value: float, currency: str) -> str:
     return f"${value:,.2f}" if currency == "USD" else f"{value:,.2f} {currency}"
 

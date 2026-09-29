@@ -3,6 +3,7 @@ import {
   ColorType,
   CrosshairMode,
   LineSeries,
+  PriceScaleMode,
   createChart,
   createSeriesMarkers,
   type IChartApi,
@@ -12,9 +13,10 @@ import {
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Candle, QuarterBlock, QuarterRow, QuartersResponse, SwingPoint } from "../api";
+import { countdown, measure, PRESETS, presetStart, type Preset } from "../chartNav";
 import type { CrosshairBus } from "../crosshairSync";
 import { DrawingEditor } from "../drawingEditor";
 import type { DrawingCtl } from "../drawings";
@@ -24,7 +26,28 @@ import { LabPrimitive, type LabMark } from "../labPrimitive";
 import { NewsPrimitive, type NewsMark } from "../newsPrimitive";
 import { QuartersPrimitive } from "../quartersPrimitive";
 import type { ChartPalette } from "../theme";
+import { logicalOfTime, stepOf, timeOfLogical } from "../timeMap";
 import { ZonesPrimitive, type Zone } from "../zonesPrimitive";
+import { AUTO_SCALE, ScaleMenu, type ScaleState } from "./ScaleMenu";
+
+/** The symbol's pip and the feed clock's offset from UTC (seconds), from /api/scan. */
+export interface Market {
+  pip: number;
+  clockOffset: number;
+}
+export const ChartMarket = createContext<Market>({ pip: 0.1, clockOffset: 0 });
+
+/** A shift-drag measure, in chart pixels (x, y) and logical bars and price (l, p). */
+interface Ruler {
+  x0: number;
+  y0: number;
+  l0: number;
+  p0: number;
+  x1: number;
+  y1: number;
+  l1: number;
+  p1: number;
+}
 
 export interface ChartEvent {
   time: number; // unix seconds of the candle it happened on
@@ -57,6 +80,15 @@ const NO_SWINGS: SwingPoint[] = []; // stable defaults, so the effects don't rer
 const NO_NEWS: NewsMark[] = [];
 const NO_ML: LabMark[] = [];
 const QUARTER_PANE = 1;
+
+/** The chart's candle opens with the forming one, as the chart shows them. */
+const timesOf = (candles: Candle[], live: Candle | null) => {
+  const times = candles.map((c) => c.time);
+  if (live && (!times.length || live.time > times[times.length - 1])) times.push(live.time);
+  return times;
+};
+
+const fmtSigned = (v: number, digits: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(digits)}`;
 
 const fmtChange = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmtPrice(Math.abs(v))}`;
 
@@ -127,6 +159,14 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const fittedKey = useRef<string | null>(null);
   const [hover, setHover] = useState<Candle | null>(null);
   const liveCandle = useMemo(() => (liveBar ? withLive(candles, liveBar) : null), [liveBar, candles]);
+  const liveRef = useRef(liveCandle);
+  liveRef.current = liveCandle;
+  const market = useContext(ChartMarket);
+  const marketRef = useRef(market);
+  marketRef.current = market;
+  const [scale, setScale] = useState<ScaleState>(AUTO_SCALE);
+  const [offLive, setOffLive] = useState(false); // the live candle is scrolled out of view
+  const [ruler, setRuler] = useState<Ruler | null>(null);
 
   useEffect(() => {
     const chart = createChart(containerRef.current!, {
@@ -165,7 +205,47 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     // Near the left edge: page in older candles. New data keeps the view anchored on the right.
     chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
       if (range && range.from < 10) needOlderRef.current?.();
+      const n = timesOf(candlesRef.current, liveRef.current).length;
+      setOffLive(!!range && n > 0 && range.to < n - 1);
     });
+    // Shift-drag measures: price change, pips, %, bars and time. It goes away on release.
+    const el = containerRef.current!;
+    const measureDown = (e: PointerEvent) => {
+      if (!e.shiftKey || e.button !== 0) return;
+      const r = el.getBoundingClientRect();
+      const at = (ev: PointerEvent) => {
+        const x = Math.min(Math.max(ev.clientX - r.left, 0), chart.timeScale().width());
+        const y = Math.min(Math.max(ev.clientY - r.top, 0), chart.panes()[0]?.getHeight() ?? 0);
+        const l = chart.timeScale().coordinateToLogical(x);
+        const p = series.coordinateToPrice(y);
+        return l === null || p === null ? null : { x, y, l, p };
+      };
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+      if (x > chart.timeScale().width() || y > (chart.panes()[0]?.getHeight() ?? 0)) return;
+      const a = at(e);
+      if (!a) return;
+      // Take the press from the chart and the drawing editor: no pan, no drawing.
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const show = (b: NonNullable<ReturnType<typeof at>>) =>
+        setRuler({ x0: a.x, y0: a.y, l0: a.l, p0: a.p, x1: b.x, y1: b.y, l1: b.l, p1: b.p });
+      const move = (ev: PointerEvent) => {
+        const b = at(ev);
+        if (b) show(b);
+      };
+      const end = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", end);
+        window.removeEventListener("pointercancel", end);
+        setRuler(null);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", end);
+      window.addEventListener("pointercancel", end);
+      show(a);
+    };
+    el.addEventListener("pointerdown", measureDown, true); // before the drawing editor's listener
     // Resizing the chart rescales every pane; keep the quarterly pane at its fixed height.
     const resize = new ResizeObserver(() => {
       const h = quarterPaneHeight.current;
@@ -180,6 +260,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     seriesRef.current = series;
     zonesRef.current = primitive;
     return () => {
+      el.removeEventListener("pointerdown", measureDown, true);
       editor.destroy();
       editorRef.current = null;
       resize.disconnect();
@@ -274,6 +355,60 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     zonesRef.current?.update({ highlight });
   }, [highlight]);
 
+  // The price scale: log or % from the session open, a locked range (autoScale off keeps the
+  // range the chart has now, through new data), inverted.
+  const sessionOpen = useMemo(() => {
+    const s = quarters?.rows.session;
+    return s?.length ? s[s.length - 1].open : null;
+  }, [quarters]);
+  const percent = scale.mode === "percent" && sessionOpen !== null;
+  useEffect(() => {
+    chartRef.current?.priceScale("right").applyOptions({
+      mode: scale.mode === "log" ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
+      autoScale: !scale.locked,
+      invertScale: scale.inverted,
+    });
+  }, [scale]);
+  useEffect(() => {
+    seriesRef.current?.applyOptions({
+      priceFormat: percent
+        ? { type: "custom", minMove: 0.01, formatter: (p: number) => `${fmtSigned((p / sessionOpen! - 1) * 100, 2)}%` }
+        : { type: "price", precision: 2, minMove: 0.01 },
+    });
+  }, [percent, sessionOpen]);
+
+  // Time left on the forming candle, beside the price label. Without live ticks the forming
+  // candle is the one after the last close.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series || !candles.length) return;
+    const step = stepOf(candles.map((c) => c.time));
+    let shown = "";
+    const tick = () => {
+      const open = liveRef.current?.time ?? candles[candles.length - 1].time + step;
+      const text = countdown(open, step, Date.now() / 1000 + marketRef.current.clockOffset) ?? "";
+      if (text !== shown) series.applyOptions({ title: text });
+      shown = text;
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => {
+      clearInterval(id);
+      series.applyOptions({ title: "" });
+    };
+  }, [candles]);
+
+  const goPreset = (preset: Preset) => {
+    const chart = chartRef.current;
+    const start = quarters ? presetStart(quarters.rows, preset) : null;
+    if (!chart || start === null) return;
+    const times = timesOf(candlesRef.current, liveRef.current);
+    // From the left edge of the candle holding the start to a little past the live one; older
+    // candles page in when the start is before the first loaded one.
+    chart.timeScale().setVisibleLogicalRange({ from: logicalOfTime(times, start) - 0.5, to: times.length + 2 });
+  };
+  const toLive = () => chartRef.current?.timeScale().scrollToRealTime();
+
   useEffect(() => {
     newsRef.current?.update({ marks: news, times: candles.map((c) => c.time) });
   }, [news, candles]);
@@ -337,9 +472,33 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   }, [candles, quarters, quarterRows]);
 
   const shown = hover ?? liveCandle ?? candles[candles.length - 1];
+  let rulerView = null;
+  if (ruler && containerRef.current) {
+    const times = timesOf(candles, liveCandle);
+    const [b0, b1] = [Math.round(ruler.l0), Math.round(ruler.l1)];
+    const m = measure(ruler.p0, ruler.p1, b1 - b0, timeOfLogical(times, b1) - timeOfLogical(times, b0), market.pip);
+    const { offsetLeft: ox, offsetTop: oy } = containerRef.current;
+    const up = m.change >= 0;
+    rulerView = (
+      <div className="chart-ruler" aria-hidden="true">
+        <div className={`chart-ruler-box ${up ? "up" : "down"}`} style={{
+          left: ox + Math.min(ruler.x0, ruler.x1), top: oy + Math.min(ruler.y0, ruler.y1),
+          width: Math.abs(ruler.x1 - ruler.x0), height: Math.abs(ruler.y1 - ruler.y0),
+        }} />
+        <div className={`chart-ruler-label num ${up ? "up" : "down"}`} style={{
+          left: ox + ruler.x1, top: oy + ruler.y1 + (ruler.y1 >= ruler.y0 ? 10 : -10),
+          transform: `translate(-50%, ${ruler.y1 >= ruler.y0 ? "0" : "-100%"})`,
+        }}>
+          <span>{fmtSigned(m.change, 2)}{m.pct !== null && ` (${fmtSigned(m.pct, 2)}%)`}</span>
+          {m.pips !== null && <span>{fmtSigned(m.pips, 1)} pips</span>}
+          <span>{m.bars} bars · {m.duration}</span>
+        </div>
+      </div>
+    );
+  }
   const quarterNow = shown ? blocksAt(quarters, quarterRows, shown.time) : [];
   return (
-    <div className="chart-wrap" aria-busy={loading} onMouseLeave={onLeave}>
+    <div className="chart-wrap has-nav" aria-busy={loading} onMouseLeave={onLeave}>
       {shown && (
         <div className="chart-legend num" aria-hidden="true">
           <span><i>O</i>{fmtPrice(shown.open)}</span>
@@ -355,6 +514,23 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       )}
       {loading && <div className="chart-skeleton" aria-hidden="true" />}
       <div ref={containerRef} className="chart" role="img" aria-label="Price chart with order blocks, liquidity and inducement levels" />
+      {rulerView}
+      {offLive && (
+        <button type="button" className="chart-live-btn" title="Scroll to the live candle" onClick={toLive}>
+          Live <span aria-hidden="true">→</span>
+        </button>
+      )}
+      <div className="chart-nav">
+        <div className="chart-presets" role="group" aria-label="Time range">
+          {PRESETS.map((p) => (
+            <button key={p.id} type="button" className="chart-nav-btn" title={p.title} disabled={!quarters} onClick={() => goPreset(p.id)}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <span className="chart-nav-hint muted">Shift-drag to measure</span>
+        <ScaleMenu value={scale} onChange={setScale} percentOk={sessionOpen !== null} />
+      </div>
     </div>
   );
 }

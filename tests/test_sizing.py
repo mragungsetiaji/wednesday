@@ -79,7 +79,7 @@ class SpecMT5(FakeMT5):
         return types.SimpleNamespace(balance=5_000.0, currency="USD")
 
     def symbol_info(self, symbol):
-        return types.SimpleNamespace(trade_tick_size=0.01, trade_tick_value=1.0, point=0.01, trade_contract_size=100.0,
+        return types.SimpleNamespace(trade_tick_size=0.01, trade_tick_value=1.0, point=0.01, digits=2, trade_contract_size=100.0,
                                      volume_min=0.01, volume_step=0.01, volume_max=50.0)
 
 
@@ -89,6 +89,7 @@ def test_mt5_trading_spec(monkeypatch):
     feed.connect()
     spec = feed.trading_spec()
     assert spec["per_point"] == 100.0 and spec["balance"] == 5_000.0 and spec["lot_step"] == 0.01
+    assert spec["point"] == 0.01 and spec["digits"] == 2
 
 
 def test_scan_setups_carry_sizes(tmp_path):

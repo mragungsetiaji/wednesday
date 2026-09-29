@@ -29,6 +29,34 @@ overlays (**Mid OBs**, **HTF**, **Swings**, **Quarters**, **News**, **ML**) swit
 The header price follows the [live price](data-sources.md#live-price): each tick
 flashes green or red, and the arrow keeps the last direction.
 
+### Moving around the chart
+
+A bar under each chart (the main one and every full screen pane) holds:
+
+- **Time range presets**: **Today** (the trading day, from 18:00 New York),
+  **Session** (the current Tokyo, London, NY AM or NY PM window), **Week** (from
+  Sunday 18:00 New York), **5D** (the last five trading days) and **1M**. They
+  come from the same New York blocks as the [quarterly pane](#quarterly-theory-pane),
+  so they land on the right candles whatever the feed clock. Older candles load
+  when the range starts before the first one on the chart.
+- **Scale**: **Price** (auto, the default), **Log**, or **% from session open**
+  (the price axis in percent from the current session's open). **Lock range**
+  keeps the price range the chart has now, so a spike, a new tick or a scan
+  doesn't rescale it, until you unlock it. **Invert** flips the chart upside down,
+  to check a bias the other way. **Reset** goes back to auto.
+
+**Shift-drag** on the chart measures a move: the price change, in % and in pips,
+and how many bars and how long it spans. It goes away when you let go. A pip is
+ten of the symbol's points as the MT5 terminal reports them (0.1 on a two-digit
+gold); without MT5 it's the symbol's usual size (0.1 on gold, 0.01 on yen pairs
+and silver).
+
+When you scroll back and the live candle leaves the screen, a **Live** button
+at the bottom right brings it back.
+
+The time left on the forming candle counts down beside the price label, for the
+chart's timeframe.
+
 ## Drawings
 
 The column left of the chart holds drawing tools, TradingView style:
@@ -69,7 +97,10 @@ Mac) step back through the last 100 changes; a drag counts as one. The eye hides
 or shows every drawing, and Esc cancels a tool or the selection.
 
 Drawings are anchored to time and price, not pixels, so one drawing shows on
-every timeframe and in full screen. They are saved in the database per data
+every timeframe and in full screen: a position from 10:00 to 11:00 is 12 candles
+wide on 5M, 4 on 15M and one on 1H. Time past the last candle runs at the
+timeframe's length, and moving a drawing shifts it by whole candles of time, so
+it keeps its duration across the daily break or a weekend. They are saved in the database per data
 source and symbol (MT5 times are the broker's clock, and Yahoo's `GC=F` isn't
 spot XAUUSD), in the `drawings` table.
 

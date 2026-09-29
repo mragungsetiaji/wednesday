@@ -12,7 +12,7 @@ import { JournalPage } from "./components/JournalPage";
 import { LabPage } from "./components/LabPage";
 import { MlPanel } from "./components/MlPanel";
 import { NewsAlert } from "./components/NewsAlert";
-import { PriceChart } from "./components/PriceChart";
+import { ChartMarket, PriceChart } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
 import { SettingsPage } from "./components/SettingsPage";
@@ -218,7 +218,10 @@ export default function App() {
     return () => resize.disconnect();
   }, [showBanner]);
 
+  const market = useMemo(() => ({ pip: data?.pip ?? 0.1, clockOffset: data?.clock_offset ?? 0 }), [data?.pip, data?.clock_offset]);
+
   return (
+    <ChartMarket.Provider value={market}>
     <div ref={appRef} className="app">
       <header ref={topbarRef} className="topbar">
         {view === "journal" ? (
@@ -481,5 +484,6 @@ export default function App() {
         />
       )}
     </div>
+    </ChartMarket.Provider>
   );
 }

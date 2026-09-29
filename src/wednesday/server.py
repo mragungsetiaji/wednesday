@@ -34,7 +34,7 @@ from .plugins import PLUGIN_API, features, load_new_plugins, load_plugins
 from .quarters import quarters_payload, utc_to_feed
 from .mt5_terminals import find_terminals
 from .secret_store import get_secret, update_secrets
-from .sizing import RiskSettings
+from .sizing import RiskSettings, pip_size
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .terms import Terms
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
@@ -58,6 +58,12 @@ def _candle_rows(candles: pd.DataFrame) -> list[dict]:
 
 def _iso(dt) -> str | None:
     return dt.isoformat() if dt is not None else None
+
+
+def clock_offset(clock: str) -> int:
+    """Seconds the feed clock is ahead of UTC right now (the chart's times are feed-clock unix)."""
+    now = pd.Timestamp.now(tz="UTC")
+    return round((utc_to_feed(now, clock) - now.tz_localize(None)).total_seconds() / 60) * 60
 
 
 def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | None = None,
@@ -107,6 +113,8 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                 "error_at": _iso(st.error_at),
                 "conn": st.conn,
                 "tick_seconds": engine.tick_seconds if 0 < engine.tick_seconds < 60 else 0,
+                "pip": pip_size(engine.symbol, st.result.price if st.result else None, st.spec),
+                "clock_offset": clock_offset(current_clock()),
                 "poll": engine.poll,  # False with --no-poll: one scan, then nothing new
                 "app_version": __version__,
                 "config": cfg.to_dict(),

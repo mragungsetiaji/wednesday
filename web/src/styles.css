@@ -575,6 +575,173 @@ p {
   inset: 0;
   inset-inline-start: var(--s3); /* keep the first candles off the edge */
 }
+/* Under the chart: time range presets, the measure hint and the price scale menu. */
+.chart-wrap.has-nav {
+  --chart-nav-h: 28px;
+  container-type: inline-size;
+}
+.chart-wrap.has-nav > .chart {
+  inset-block-end: var(--chart-nav-h);
+}
+.chart-nav {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  height: var(--chart-nav-h);
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding-inline: var(--s2);
+  border-top: 1px solid var(--line);
+  font-size: var(--text-xs);
+}
+.chart-presets {
+  display: flex;
+  gap: 2px;
+}
+.chart-nav-hint {
+  margin-inline-start: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.chart-nav-btn {
+  height: 22px;
+  padding-inline: 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  white-space: nowrap;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.chart-nav-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.chart-nav-btn:disabled {
+  opacity: 0.5;
+}
+.chart-nav-btn.is-on {
+  color: var(--accent);
+}
+@container (max-width: 420px) {
+  .chart-nav-hint {
+    display: none;
+  }
+}
+.scale-menu {
+  position: relative;
+  flex: none;
+}
+.scale-pop {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: calc(100% + 4px);
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  min-width: 190px;
+  padding: var(--s2);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 8px 24px rgb(0 0 0 / 0.3);
+  font-size: var(--text-sm);
+}
+.scale-pop fieldset {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+.scale-pop hr {
+  width: 100%;
+  margin: var(--s1) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.scale-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 28px;
+  padding-inline: var(--s1);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.scale-opt:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.scale-opt:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+.scale-reset {
+  justify-self: start;
+  margin-top: var(--s1);
+}
+/* Back to the live candle, when it's scrolled out of view: bottom right, clear of the price axis. */
+.chart-live-btn {
+  position: absolute;
+  inset-inline-end: 80px;
+  inset-block-end: calc(var(--chart-nav-h, 0px) + 36px);
+  z-index: 4;
+  height: 26px;
+  padding-inline: var(--s2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 2px 8px rgb(0 0 0 / 0.25);
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.chart-live-btn:hover {
+  background: var(--hover);
+}
+/* The shift-drag measure. */
+.chart-ruler {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.chart-ruler-box {
+  position: absolute;
+  border: 1px dashed currentColor;
+}
+.chart-ruler-box.up {
+  color: var(--bull);
+  background: color-mix(in srgb, var(--bull) 14%, transparent);
+}
+.chart-ruler-box.down {
+  color: var(--bear);
+  background: color-mix(in srgb, var(--bear) 14%, transparent);
+}
+.chart-ruler-label {
+  position: absolute;
+  display: grid;
+  justify-items: center;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chart-ruler-label.up {
+  background: var(--bull);
+}
+.chart-ruler-label.down {
+  background: var(--bear);
+}
+
 /* OHLC readout over the chart. Its own backing keeps it legible over the zone labels the
    chart draws in the same corner. */
 .chart-legend {

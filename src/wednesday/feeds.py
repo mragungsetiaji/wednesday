@@ -175,7 +175,8 @@ class MT5Feed(DataFeed):
         per_point = sym.trade_tick_value / tick if tick and sym.trade_tick_value > 0 else sym.trade_contract_size
         return {"balance": float(acc.balance), "currency": acc.currency, "per_point": float(per_point),
                 "contract_size": float(sym.trade_contract_size), "min_lot": float(sym.volume_min),
-                "lot_step": float(sym.volume_step), "max_lot": float(sym.volume_max) or None}
+                "lot_step": float(sym.volume_step), "max_lot": float(sym.volume_max) or None,
+                "point": float(sym.point), "digits": int(sym.digits)}
 
     def fetch_history(self, tf: Timeframe, before: pd.Timestamp, count: int) -> pd.DataFrame:
         """The terminal's own ``tf`` candles, so scrolling back needs no M1 history."""
