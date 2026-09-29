@@ -18,7 +18,6 @@ import {
   handlesOf,
   hits,
   isPosition,
-  logicalOfTime,
   newId,
   positionBox,
   positionOf,
@@ -26,13 +25,13 @@ import {
   TEXT_SIZE,
   textBox,
   textFontOf,
-  timeOfLogical,
   toPoint,
   toXY,
   trackPosition,
   type DrawingCtl,
   type PositionTrack,
 } from "./drawings";
+import { logicalOfTime, stepOf, timeShift } from "./timeMap";
 import { fmtMoney, fmtPrice, fmtSigned } from "./format";
 import { sizeFor } from "./sizing";
 import { withAlpha, type ChartPalette } from "./theme";
@@ -306,7 +305,10 @@ const make = (kind: DrawingKind, points: DrawingPoint[]): Drawing => ({
 export class DrawingEditor {
   private readonly primitive: DrawingsPrimitive;
   private ctl: DrawingCtl | null = null;
-  private times: number[] = [];
+  private times: number[] = []; // candle opens, the forming candle's included: what the chart shows
+  private closed: number[] = []; // closed candle opens only
+  private liveTime: number | null = null;
+  private step = 60; // seconds per candle
   private draft: Drawing | null = null; // the drawing being placed
   private placing: { start: XY; moved: boolean } | null = null;
   private drag: { orig: Drawing; last: Drawing; handle: number | null; startL: number; startP: number; moved: boolean } | null = null;
@@ -342,10 +344,18 @@ export class DrawingEditor {
       if (this.draft && (!this.ctl || this.ctl.tool !== this.draft.kind)) this.cancelPlacing(); // Esc, or another tool
     }
     if (patch.candles) {
-      this.times = patch.candles.map((c) => c.time);
+      this.closed = patch.candles.map((c) => c.time);
+      this.step = stepOf(this.closed);
       this.primitive.update({ candles: patch.candles });
     }
     if (patch.live !== undefined) this.primitive.update({ live: patch.live });
+    const liveTime = patch.live === undefined ? this.liveTime : patch.live?.time ?? null;
+    if (patch.candles || liveTime !== this.liveTime) {
+      // The forming candle is on the chart too: a point on it maps to it, not to a guess past the last close.
+      this.liveTime = liveTime;
+      const last = this.closed[this.closed.length - 1];
+      this.times = liveTime !== null && last !== undefined && liveTime > last ? [...this.closed, liveTime] : this.closed;
+    }
     if (patch.palette) this.primitive.update({ palette: patch.palette });
     if (patch.font) {
       setTextFont(patch.font);
@@ -525,7 +535,7 @@ export class DrawingEditor {
 
   /**
    * A position at the click: entry there, the stop 40px away and the target at 2R, running
-   * 20 candles to the right. The handles set the real ones.
+   * 20 candles (of this timeframe's length) to the right. The handles set the real ones.
    */
   private newPosition(kind: "long" | "short", pt: DrawingPoint, y: number): Drawing | null {
     const away = this.series.coordinateToPrice(kind === "long" ? y + 40 : y - 40);
@@ -533,7 +543,7 @@ export class DrawingEditor {
     const risk = Math.abs(pt.p - away);
     if (!risk) return null;
     const sign = kind === "long" ? 1 : -1;
-    const end = timeOfLogical(this.times, logicalOfTime(this.times, pt.t) + 20);
+    const end = pt.t + 20 * this.step;
     return {
       ...make(kind, [pt, { t: end, p: pt.p }]),
       props: { stop: pt.p - sign * risk, target: pt.p + sign * 2 * risk },
@@ -560,7 +570,7 @@ export class DrawingEditor {
       const t = sign > 0 ? Math.max(pt.p, entry + eps) : Math.min(pt.p, entry - eps);
       return { ...orig, props: { ...orig.props, target: t } };
     }
-    const minEnd = timeOfLogical(this.times, logicalOfTime(this.times, start.t) + 1);
+    const minEnd = start.t + this.step;
     return { ...orig, points: [start, { t: Math.max(pt.t, minEnd), p: end.p }] };
   }
 
@@ -572,12 +582,11 @@ export class DrawingEditor {
       const l = this.chart.timeScale().coordinateToLogical(p.x);
       const price = this.series.coordinateToPrice(p.y);
       if (l === null || price === null) return null;
-      const dl = Math.round(l - drag.startL); // whole candles, so points stay on candle opens
+      // Whole candles of this chart, as a time shift: every point moves by the same time, so the
+      // drawing keeps its duration (and its place on the other timeframes) across a gap.
+      const dt = timeShift(this.times, drag.startL, l, this.step);
       const dp = price - drag.startP;
-      const moved: Drawing = {
-        ...orig,
-        points: orig.points.map((pt) => ({ t: timeOfLogical(this.times, logicalOfTime(this.times, pt.t) + dl), p: pt.p + dp })),
-      };
+      const moved: Drawing = { ...orig, points: orig.points.map((pt) => ({ t: pt.t + dt, p: pt.p + dp })) };
       if (isPosition(orig)) {
         const { stop, target } = positionOf(orig);
         moved.props = { ...orig.props, stop: stop + dp, target: target + dp };

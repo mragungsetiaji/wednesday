@@ -11,14 +11,15 @@ its levels by hand. It suggests; it never places trades.
 make install     # uv sync --extra llm --extra ml, plus npm install in web/
 make test        # uv run pytest -q
 make typecheck   # tsc -b in web/
+make test-ui     # node --test on web/src/*.test.ts (Node 22.18+)
 make demo        # dashboard on synthetic data, no market data or keys needed
 make dev         # synthetic API + Vite hot reload on http://localhost:5173
 make scan ARGS="--source synthetic"   # one scan in the console
 ```
 
 Python is managed by uv (3.11 locally, `>=3.10` supported); use `uv run`, not a bare
-`python`. Run `make test` after Python changes and `make typecheck` after changes in
-`web/`. Tests and local runs should use `--source synthetic`: the other sources hit
+`python`. Run `make test` after Python changes, and `make typecheck` and `make test-ui`
+after changes in `web/`. Tests and local runs should use `--source synthetic`: the other sources hit
 Yahoo Finance or need an MT5 terminal, which only exists on Windows.
 
 ## Where things are

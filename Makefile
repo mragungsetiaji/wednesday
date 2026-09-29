@@ -14,7 +14,7 @@ WEB  := web
 UI_BUILD   := $(WEB)/dist/index.html
 UI_SOURCES := $(shell find $(WEB)/src -type f 2>/dev/null) $(WEB)/index.html $(WEB)/vite.config.ts $(WEB)/package.json
 
-.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui desktop scan check test typecheck telegram-chats telegram-test clean
+.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui desktop scan check test test-ui typecheck telegram-chats telegram-test clean
 
 help: ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -68,6 +68,9 @@ check: ## Test the data feed connection
 
 test: ## Run the Python tests
 	$(UV) run pytest -q
+
+test-ui: $(WEB)/node_modules ## Run the dashboard unit tests (Node 22.18+)
+	cd $(WEB) && $(NPM) test
 
 typecheck: $(WEB)/node_modules ## Type-check the dashboard
 	cd $(WEB) && $(NPM) run typecheck

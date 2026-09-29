@@ -12,32 +12,10 @@ import type {
 
 import type { QuarterBlock, QuarterRow } from "./api";
 import { withAlpha, type ChartPalette } from "./theme";
+import { logicalOf } from "./timeMap";
 
 export const ROW_TITLES: Record<QuarterRow, string> = { week: "Week", session: "Session", q90: "90m" };
 const SHORT: Record<string, string> = { Tokyo: "TKY", London: "LDN", "NY AM": "NY", "NY PM": "PM" };
-
-/**
- * Where time t sits on the charted timeframe, in (fractional) bars: bar i spans
- * logical i - 0.5 to i + 0.5, so a 90-minute block inside a 4H bar gets its
- * share of that bar's width. Gaps (weekends) collapse to the bar boundary; times after
- * the last bar extend at the bar step (the chart's empty space on the right).
- */
-export function logicalOf(times: number[], t: number): number {
-  const n = times.length;
-  if (n === 0) return 0;
-  const step = n > 1 ? times[n - 1] - times[n - 2] : 60;
-  if (t <= times[0]) return -0.5 - (times[0] - t) / step;
-  let lo = 0;
-  let hi = n - 1;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >> 1;
-    if (times[mid] <= t) lo = mid;
-    else hi = mid - 1;
-  }
-  if (lo === n - 1) return lo - 0.5 + (t - times[lo]) / step; // past the last bar: extend at the bar step
-  const span = Math.min(times[lo + 1] - times[lo], step * 1.5);
-  return lo - 0.5 + Math.min(1, (t - times[lo]) / span);
-}
 
 /**
  * The quarterly theory pane under the price chart: one row per cycle (week,

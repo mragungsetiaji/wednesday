@@ -1,7 +1,7 @@
 import type { IChartApi, ISeriesApi, Logical, SeriesType } from "lightweight-charts";
 
 import type { Candle, Drawing, DrawingKind, DrawingPoint, Sizing } from "./api";
-import { logicalOf } from "./quartersPrimitive";
+import { logicalOfTime, timeOfLogical } from "./timeMap.ts";
 
 export type DrawTool = "cursor" | DrawingKind;
 
@@ -28,27 +28,6 @@ export const newId = (): string =>
         const r = (Math.random() * 16) | 0;
         return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
       });
-
-const stepOf = (times: number[]) => (times.length > 1 ? times[times.length - 1] - times[times.length - 2] : 60);
-
-/**
- * Logical position of a time on this chart: candle i opens at i (drawn at its centre) and a
- * time inside it lands proportionally further on, so a 15M point sits inside its 1H candle.
- * Before the first and after the last candle it extends at the candle step.
- */
-export const logicalOfTime = (times: number[], t: number): number => logicalOf(times, t) + 0.5;
-
-/** The time at a logical position: the inverse of logicalOfTime. */
-export function timeOfLogical(times: number[], l: number): number {
-  const n = times.length;
-  if (n === 0) return 0;
-  const step = stepOf(times);
-  const i = Math.floor(l);
-  if (i >= n - 1) return Math.round(times[n - 1] + (l - (n - 1)) * step);
-  if (i < 0) return Math.round(times[0] + l * step);
-  const span = Math.min(times[i + 1] - times[i], step * 1.5);
-  return Math.round(times[i] + (l - i) * span);
-}
 
 /** Chart pixels (CSS px, relative to the price pane) of a point; null when the price is off scale. */
 export function toXY(chart: IChartApi, series: ISeriesApi<SeriesType>, times: number[], pt: DrawingPoint) {

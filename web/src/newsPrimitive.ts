@@ -11,7 +11,7 @@ import type {
 } from "lightweight-charts";
 
 import type { CalendarEvent } from "./api";
-import { logicalOf } from "./quartersPrimitive";
+import { logicalOf } from "./timeMap";
 import { withAlpha, type ChartPalette } from "./theme";
 
 /** Releases at the same minute drawn as one line. */
