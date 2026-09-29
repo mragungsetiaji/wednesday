@@ -18,6 +18,9 @@ import { ChartMarket, type ChartNav } from "./PriceChart";
 import { DrawingStyleBar } from "./DrawingStyleBar";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { LevelsMenu } from "./LevelsMenu";
+import { SnapshotMenu, type SnapshotSource } from "./SnapshotMenu";
+import { Toasts } from "./Toasts";
+import { compose, fileName } from "../snapshot";
 import type { Drawings } from "../drawingsData";
 import { NewsAlert } from "./NewsAlert";
 import { LiveTickerPrice } from "./TickerPrice";
@@ -169,6 +172,32 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
   }, [onClose]);
 
   const paneTf = (i: number) => (i === 0 ? tf : tfs[i] ?? DEFAULT_TFS[i]);
+
+  // Snapshot of the whole layout: each chart's screenshot where it sits in the grid, its
+  // timeframe on it, one footer under all of them.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const layoutInfo = () => ({ symbol: market.symbol || symbol, timeframes: cells.map((_, i) => paneTf(i)), at: Date.now(),
+    clockOffset: market.clockOffset, clockName: market.clockName });
+  const layoutShot: SnapshotSource = {
+    make: () => {
+      const grid = gridRef.current;
+      if (!grid) return null;
+      const g = grid.getBoundingClientRect();
+      const charts = grid.querySelectorAll<HTMLElement>(".pane .chart");
+      const parts = cells.flatMap((_, i) => {
+        const canvas = navs.current[i]?.capture();
+        const el = charts[i];
+        if (!canvas || !el) return [];
+        const r = el.getBoundingClientRect();
+        return [{ canvas, x: r.left - g.left, y: r.top - g.top, w: r.width, h: r.height, label: cells.length > 1 ? paneTf(i) : undefined }];
+      });
+      if (!parts.length) return null;
+      return compose(parts, g.width, g.height, layoutInfo(),
+        { surface: palette.surface, text: palette.textStrong, muted: palette.muted, grid: palette.grid,
+          font: getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif" });
+    },
+    name: () => fileName(layoutInfo()),
+  };
   const setPaneTf = (i: number, value: string) => {
     if (i === 0) onTf(value);
     else setTfs(DEFAULT_TFS.map((d, j) => (j === i ? value : tfs[j] ?? d)));
@@ -222,12 +251,13 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
             ))}
             <LevelsMenu value={levelGroups} onChange={onLevelGroups} />
           </div>
+          <SnapshotMenu source={layoutShot} label="Snapshot layout" className="button quiet focus-snap" />
           <button type="button" className="button quiet focus-exit" onClick={onClose} title="Exit full screen (Esc or F)">
             <CollapseIcon /> Exit
           </button>
         </div>
       </header>
-      <div className={`focus-grid${layout > 1 ? " is-split has-focus" : ""}`}
+      <div ref={gridRef} className={`focus-grid${layout > 1 ? " is-split has-focus" : ""}`}
         style={{ "--cols": template(sizes.cols), "--rows": template(sizes.rows) } as CSSProperties}>
         {cells.map((c, i) => (
           <ChartPane key={i} label={`Chart ${i + 1}`} tf={paneTf(i)} onTf={(v) => setPaneTf(i, v)} timeframes={known}
@@ -252,6 +282,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
       </div>
       <DrawingStyleBar ctl={drawings} />
       <NewsAlert events={upcomingNews} />
+      <Toasts />
       <ChartKeys active timeframes={known} setTf={(v) => setPaneTf(pane, v)} nav={() => navs.current[pane] ?? null}
         panes={layout} focusPane={setFocused} setTool={drawings.available ? drawings.setTool : null} toggleFullScreen={onClose}
         clockOffset={market.clockOffset} />

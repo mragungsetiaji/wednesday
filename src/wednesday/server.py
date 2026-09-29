@@ -14,8 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
-from fastapi import Body, FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
@@ -36,6 +36,7 @@ from . import plugin_install
 from .plugins import PLUGIN_API, features, load_new_plugins, load_plugins
 from .quarters import NEW_YORK, quarter_blocks, quarters_payload, utc_to_feed
 from .sessions import reference_levels
+from .snapshots import Snapshots, SnapshotError
 from .distribution import distribution as move_distribution, tables as distribution_tables_of
 from .mt5_terminals import find_terminals
 from .secret_store import get_secret, update_secrets
@@ -81,7 +82,7 @@ def clock_offset(clock: str) -> int:
 
 
 def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | None = None,
-               clock: str = "UTC", auth: Auth | None = None) -> FastAPI:
+               clock: str = "UTC", auth: Auth | None = None, snapshots: Snapshots | None = None) -> FastAPI:
     """Serve a fixed :class:`Engine`, or a :class:`Runtime` whose data source the dashboard can change.
     ``auth`` turns on the login (see :mod:`wednesday.auth`); without it the dashboard is open."""
     app = FastAPI(title="Wednesday", docs_url="/api/docs", openapi_url="/api/openapi.json")
@@ -657,8 +658,27 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return {"ok": True}
 
     app.include_router(lab_router(lambda: runtime.lab if runtime else None, current, current_source, current_clock))
+    # ---- chart snapshots (PNG), for the journal ----
+    shots = snapshots or Snapshots()
+
+    @app.post("/api/snapshots")
+    async def upload_snapshot(request: Request) -> dict:
+        """A chart snapshot made by the dashboard (raw PNG body), kept under data/snapshots."""
+        try:
+            sid = shots.save(await request.body())
+        except SnapshotError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"id": sid, "url": f"/api/snapshots/{sid}.png"}
+
+    @app.get("/api/snapshots/{snapshot_id}.png")
+    def get_snapshot(snapshot_id: str):
+        path = shots.path(snapshot_id)
+        if path is None:
+            raise HTTPException(404, "No such snapshot")
+        return FileResponse(path, media_type="image/png", headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
     app.include_router(journal_router(lambda: runtime.journals if runtime else None, current,
-                                      lambda: features(app.state.plugins)))
+                                      lambda: features(app.state.plugins), shots))
 
     # Plugins mount their routes before the dashboard's catch-all static mount below.
     plugins = load_plugins(app, runtime) if runtime else []

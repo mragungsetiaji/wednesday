@@ -30,19 +30,25 @@ import { SessionsPrimitive } from "../sessionsPrimitive";
 import type { ChartPalette } from "../theme";
 import { logicalOfTime, stepOf, timeOfLogical } from "../timeMap";
 import { ZonesPrimitive, type Zone } from "../zonesPrimitive";
+import { compose, fileName } from "../snapshot";
 import { AUTO_SCALE, ScaleMenu, type ScaleState } from "./ScaleMenu";
+import { copySnapshot, SnapshotMenu, type SnapshotSource } from "./SnapshotMenu";
 
-/** The symbol's pip and the feed clock's offset from UTC (seconds), from /api/scan. */
+/** The symbol, its pip and the feed clock (name, and offset from UTC in seconds), from /api/scan. */
 export interface Market {
   pip: number;
   clockOffset: number;
+  symbol: string;
+  clockName: string;
 }
-export const ChartMarket = createContext<Market>({ pip: 0.1, clockOffset: 0 });
+export const ChartMarket = createContext<Market>({ pip: 0.1, clockOffset: 0, symbol: "", clockName: "UTC" });
 
 /** What the keyboard shortcuts do to a chart. */
 export interface ChartNav {
   reset: () => void; // default zoom, scrolled to the live candle
   goTo: (t: number) => void; // centre a feed-clock time, loading older candles as needed
+  snapshot: () => void; // copy a picture of the chart (saved where the clipboard is refused)
+  capture: () => HTMLCanvasElement | null; // the chart's own screenshot, for a layout snapshot
 }
 
 /** Opens the keyboard shortcut list (the chart's "?" button). */
@@ -86,6 +92,7 @@ interface Props {
   live?: LiveFeed | null; // live ticks: their forming M1 candle is folded into the last candle
   drawings?: DrawingCtl | null; // the trader's drawings, shown and edited here
   nav?: Ref<ChartNav | null>; // for the keyboard shortcuts
+  timeframe?: string; // named in a snapshot's footer; resetKey when not given
 }
 
 const ROW_PX = 22;
@@ -151,7 +158,7 @@ function candleAt(times: number[], t: number): number {
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
-  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS }: Props) {
+  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe }: Props) {
   const liveBar = useLiveTick(live)?.bar ?? null; // only the chart re-renders on a tick, not its parent
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -460,7 +467,32 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     else goToRef.current = null; // no older history: stay at the start
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candles]);
+  // Snapshot: the chart's own screenshot (every primitive and drawing is painted into it), with
+  // the footer. The crosshair stays out.
+  const capture = () => chartRef.current?.takeScreenshot(true, false) ?? null;
+  const tfName = timeframe ?? resetKey;
+  const snapshotInfo = () => ({ symbol: marketRef.current.symbol || "XAUUSD", timeframes: [tfName], at: Date.now(),
+    clockOffset: marketRef.current.clockOffset, clockName: marketRef.current.clockName });
+  const snapshot: SnapshotSource = {
+    make: () => {
+      const canvas = capture();
+      const el = containerRef.current;
+      if (!canvas || !el) return null;
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      return compose([{ canvas, x: 0, y: 0, w, h }], w, h, snapshotInfo(),
+        { surface: palette.surface, text: palette.textStrong, muted: palette.muted, grid: palette.grid, font: FONT });
+    },
+    name: () => fileName(snapshotInfo()),
+  };
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+
   useImperativeHandle(nav, () => ({
+    snapshot: () => {
+      copySnapshot(snapshotRef.current).catch(() => {});
+    },
+    capture,
     reset: () => {
       const ts = chartRef.current?.timeScale();
       ts?.resetTimeScale();
@@ -598,6 +630,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
         <span className="chart-nav-hint muted">Shift-drag to measure</span>
         <button type="button" className="chart-nav-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"
           onClick={() => window.dispatchEvent(new Event(SHOW_SHORTCUTS))}>?</button>
+        <SnapshotMenu source={snapshot} />
         <ScaleMenu value={scale} onChange={setScale} percentOk={sessionOpen !== null} />
       </div>
     </div>

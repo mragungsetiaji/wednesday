@@ -104,6 +104,25 @@ class DesktopApi:
         return picked[0] if picked else None
 
 
+    def save_png(self, data: str, name: str) -> str | None:
+        """Save a chart snapshot (base64 PNG) where the trader picks; WebView2 has no downloads."""
+        import base64
+
+        import webview
+
+        safe = "".join(c for c in os.path.basename(name or "") if c.isalnum() or c in "-_.") or "wednesday.png"
+        if not safe.lower().endswith(".png"):
+            safe += ".png"
+        dialog = webview.FileDialog.SAVE if hasattr(webview, "FileDialog") else webview.SAVE_DIALOG
+        picked = webview.windows[0].create_file_dialog(dialog, directory=str(Path.home() / "Pictures"), save_filename=safe,
+                                                       file_types=("PNG images (*.png)",))
+        if not picked:
+            return None
+        path = Path(picked if isinstance(picked, str) else picked[0])
+        path.write_bytes(base64.b64decode(data))
+        return str(path)
+
+
 def serve_in_window(app, host: str, port: int) -> None:
     """Start uvicorn on a thread, show the dashboard in a window, stop the server when it closes."""
     import uvicorn

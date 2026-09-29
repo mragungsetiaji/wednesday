@@ -4107,3 +4107,100 @@ fieldset:disabled .switch {
   display: flex;
   gap: var(--s2);
 }
+
+/* ---------- Chart snapshots ---------- */
+.snapshot-menu {
+  position: relative;
+  flex: none;
+}
+.snapshot-menu > button {
+  display: inline-grid;
+  place-items: center;
+}
+.snapshot-pop {
+  min-width: 200px;
+}
+.snapshot-pop .scale-opt {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: start;
+}
+.snapshot-dialog form {
+  display: grid;
+  gap: var(--s3);
+}
+.snapshot-dialog select {
+  width: 100%;
+  font: inherit;
+}
+.snapshot-preview {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  outline: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.keys-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s2);
+}
+.toasts {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: calc(var(--statusbar-h, 28px) + var(--s4));
+  z-index: 80;
+  display: grid;
+  justify-items: center;
+  gap: var(--s2);
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  max-width: min(520px, calc(100vw - 32px));
+  padding: var(--s2) var(--s3);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 8px 24px rgb(0 0 0 / 0.3);
+  color: var(--text);
+  font-size: var(--text-sm);
+  pointer-events: auto;
+}
+.toast a {
+  color: var(--accent);
+  font-weight: 600;
+}
+.journal-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+.journal-shot {
+  position: relative;
+}
+.journal-shot img {
+  display: block;
+  width: 180px;
+  height: 110px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  outline: 1px solid var(--line);
+}
+.journal-shot button {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: 4px;
+}
+.journal-shot-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-inline-start: var(--s1);
+  white-space: nowrap;
+}

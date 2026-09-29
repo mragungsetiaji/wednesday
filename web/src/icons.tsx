@@ -138,6 +138,13 @@ export const LockIcon = (p: IconProps) => (
   </Svg>
 );
 
+export const CameraIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M2 5.5A1.5 1.5 0 0 1 3.5 4h1.8l1-1.5h3.4l1 1.5h1.8A1.5 1.5 0 0 1 14 5.5v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z" />
+    <circle cx="8" cy="8.5" r="2.3" />
+  </Svg>
+);
+
 export const TrashIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M2.5 4.5h11M6.5 4.5V3h3v1.5M4 4.5l.7 9h6.6l.7-9" />

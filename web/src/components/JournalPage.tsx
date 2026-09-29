@@ -3,9 +3,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createJournal, deleteJournal, fetchJournal, fetchJournals, fetchTerminalAccount, importReport, journalCsvUrl, saveTradeNote,
   syncJournal, updateJournal, type Journal, type JournalStats, type JournalTrade, type JournalsResponse, type TerminalAccount,
+  detachSnapshot,
+  snapshotUrl,
 } from "../api";
 import { fmtPrice, fmtUnix } from "../format";
-import { CheckIcon, CrossIcon } from "../icons";
+import { CameraIcon, CheckIcon, CrossIcon, TrashIcon } from "../icons";
 import { usePref } from "../prefs";
 import type { ChartPalette } from "../theme";
 import { JournalChart, type JournalView } from "./JournalChart";
@@ -586,12 +588,17 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
                 </td>
                 <td className="journal-note-cell">
                   {t.tags.map((g) => <span key={g} className="badge">{g}</span>)} {t.note}
+                  {t.images.length > 0 && (
+                    <span className="muted journal-shot-count" title={`${t.images.length} chart snapshot${t.images.length > 1 ? "s" : ""}`}>
+                      <CameraIcon size={12} /> {t.images.length}
+                    </span>
+                  )}
                 </td>
               </tr>,
               open === t.id && (
                 <tr key={`${t.id}-note`} className="lab-scores-row">
                   <td colSpan={10}>
-                    <NoteEditor journalId={journalId} trade={t} onSaved={() => { setOpen(null); onSaved(); }} />
+                    <NoteEditor journalId={journalId} trade={t} onSaved={() => { setOpen(null); onSaved(); }} onChanged={onSaved} />
                   </td>
                 </tr>
               ),
@@ -637,7 +644,34 @@ function Pager({ page, pages, total, onGo }: { page: number; pages: number; tota
   );
 }
 
-function NoteEditor({ journalId, trade, onSaved }: { journalId: string; trade: JournalTrade; onSaved: () => void }) {
+/** A trade's chart snapshots: open one full size, or take it off (its file goes too). */
+function Shots({ journalId, trade, onChanged }: { journalId: string; trade: JournalTrade; onChanged: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <div className="field">
+      <span className="field-label">Charts</span>
+      <div className="journal-shots">
+        {trade.images.map((id) => (
+          <div key={id} className="journal-shot">
+            <a href={snapshotUrl(id)} target="_blank" rel="noreferrer" title="Open full size">
+              <img src={snapshotUrl(id)} alt="Chart snapshot" loading="lazy" />
+            </a>
+            <button type="button" className="icon-button" aria-label="Remove this chart" title="Remove this chart"
+              onClick={() => window.confirm("Remove this chart from the trade? The image is deleted.") &&
+                detachSnapshot(journalId, trade.id, id).then(onChanged).catch((e) => setError(errText(e)))}>
+              <TrashIcon size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+      {error && <span className="text-error">{error}</span>}
+      <span className="field-note">Add one from a chart: the camera under it, then Attach to a journal trade.</span>
+    </div>
+  );
+}
+
+function NoteEditor({ journalId, trade, onSaved, onChanged }: { journalId: string; trade: JournalTrade; onSaved: () => void;
+  onChanged: () => void }) {
   const [note, setNote] = useState(trade.note);
   const [tags, setTags] = useState(trade.tags.join(", "));
   const [error, setError] = useState<string | null>(null);
@@ -655,6 +689,7 @@ function NoteEditor({ journalId, trade, onSaved }: { journalId: string; trade: J
         Opened {fmtUnix(trade.open_time)} · position {trade.position} · commission {money(trade.commission)} · swap {money(trade.swap)}
         {trade.mfe !== null && <> · best floating {signed(trade.mfe)}</>}
       </p>
+      {trade.images.length > 0 && <Shots journalId={journalId} trade={trade} onChanged={onChanged} />}
       <label className="field">
         <span className="field-label">Note</span>
         <textarea rows={2} value={note} placeholder="Why you took it, what you'd do again" onChange={(e) => setNote(e.target.value)} />

@@ -44,6 +44,8 @@ A bar under each chart (the main one and every full screen pane) holds:
   keeps the price range the chart has now, so a spike, a new tick or a scan
   doesn't rescale it, until you unlock it. **Invert** flips the chart upside down,
   to check a bias the other way. **Reset** goes back to auto.
+- **Snapshot** (the camera, or **Alt+S** to copy straight away): **Copy image**,
+  **Save as PNG**, or **Attach to a journal trade**. See [Chart snapshots](#chart-snapshots).
 
 **Shift-drag** on the chart measures a move: the price change, in % and in pips,
 and how many bars and how long it spans. It goes away when you let go. A pip is
@@ -68,6 +70,7 @@ them.
 | `5`, `15`, `1h`, `4h` … then Enter | Switch the focused chart's timeframe (Esc cancels) |
 | Alt+1 … Alt+6 | Focus chart 1 to 6 in full screen (it gets a thin outline; clicking a chart focuses it too) |
 | Alt+R | Reset the zoom and scroll to the live candle |
+| Alt+S | Copy a snapshot of the focused chart (saved as a file where copying isn't allowed) |
 | Alt+G | Go to a date and time: "last Wednesday 09:30", "yesterday 8pm", "24 Sep 3:15pm", "2026-09-24 14:00" |
 | Alt+H / Alt+T / Alt+B | Horizontal line / trendline / rectangle tool |
 | F | Full screen on and off |
@@ -85,6 +88,25 @@ goes through the server, which converts it with the feed clock's offset on that
 date, so a date across a DST change still lands on the right candle. A weekday is
 the latest one (today counts); "last" skips today. When the date is older than the
 loaded candles, older ones load first.
+
+### Chart snapshots
+
+The camera under a chart makes a picture of it as it is on screen: candles, zones,
+levels, quarters, news lines and your drawings, without the crosshair. A footer
+names the symbol and timeframe, the time in New York and on the feed clock, and
+carries TradingView's notice (Lightweight Charts™, © TradingView), which every
+exported chart image keeps.
+
+- **Copy image** puts it on the clipboard, to paste into a chat. Where the
+  clipboard is refused (plain http on a LAN, or the desktop app's WebView2) it is
+  saved as a file instead, and a message says so.
+- **Save as PNG** downloads it; the desktop app asks where to save it.
+- **Attach to a journal trade** shows the picture, lets you pick the journal and
+  one of its trades (open trades first, then the newest), and adds it to that
+  trade's note. See [the journal](journal.md#notes).
+
+In full screen, **Snapshot layout** at the top does the same for every chart at
+once, each where it sits in the grid with its timeframe on it, and one footer.
 
 ## Drawings
 

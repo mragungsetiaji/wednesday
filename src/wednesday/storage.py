@@ -236,6 +236,7 @@ journal_notes_table = Table(
     Column("note", Text, nullable=False),
     Column("tags", Text, nullable=False),  # JSON list
     Column("updated_at", String(40), nullable=False),
+    Column("images", Text, nullable=True),  # JSON list of chart snapshot ids (snapshots.py)
 )
 
 
@@ -624,6 +625,7 @@ class Store:
         if table is journal_notes_table:
             for r in rows:
                 r["tags"] = json.loads(r["tags"])
+                r["images"] = json.loads(r["images"]) if r.get("images") else []
         return rows
 
     def journal_fill(self, journal_id: str, trades: list[dict], cash: list[dict], replace: bool) -> None:
@@ -637,14 +639,21 @@ class Store:
             for i in range(0, len(rows), 2000):
                 self._upsert(table, rows[i : i + 2000], ["journal_id", "id"])
 
-    def journal_note(self, journal_id: str, trade_id: str, note: str, tags: list[str], updated_at: str) -> None:
-        if not note and not tags:
+    def journal_note(self, journal_id: str, trade_id: str, note: str, tags: list[str], updated_at: str,
+                     images: list[str] | None = None) -> None:
+        """Save a trade's note and tags; ``images`` None keeps the snapshots it has."""
+        t = journal_notes_table
+        if images is None:
+            with self.engine.connect() as conn:
+                had = conn.execute(select(t.c.images).where(t.c.journal_id == journal_id, t.c.trade_id == trade_id)).scalar()
+            images = json.loads(had) if had else []
+        if not note and not tags and not images:
             with self.engine.begin() as conn:
-                t = journal_notes_table
                 conn.execute(t.delete().where(t.c.journal_id == journal_id, t.c.trade_id == trade_id))
             return
         self._upsert(journal_notes_table, [{"journal_id": journal_id, "trade_id": trade_id, "note": note,
-                                            "tags": json.dumps(tags), "updated_at": updated_at}],
+                                            "tags": json.dumps(tags), "updated_at": updated_at,
+                                            "images": json.dumps(images) if images else None}],
                      ["journal_id", "trade_id"])
 
     # ---- helpers --------------------------------------------------------

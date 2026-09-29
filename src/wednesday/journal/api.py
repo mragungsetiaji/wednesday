@@ -7,6 +7,7 @@ from typing import Callable
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import Response
 
+from ..snapshots import Snapshots
 from .service import MULTI_FEATURE, JournalError, Journals
 
 MAX_REPORT_BYTES = 50 * 1024 * 1024
@@ -15,7 +16,7 @@ TERMINAL_TIMEOUT = 15  # the same, for the logged-in account alone
 
 
 def journal_router(get_journals: Callable[[], Journals | None], get_engine: Callable,
-                   get_features: Callable[[], list[str]]) -> APIRouter:
+                   get_features: Callable[[], list[str]], snapshots: Snapshots | None = None) -> APIRouter:
     r = APIRouter(prefix="/api/journals")
 
     def svc() -> Journals:
@@ -71,7 +72,12 @@ def journal_router(get_journals: Callable[[], Journals | None], get_engine: Call
     @r.delete("/{journal_id}")
     def delete(journal_id: str) -> dict:
         one(journal_id)
-        return {"deleted": svc().delete(journal_id)}
+        images = svc().images(journal_id)
+        deleted = svc().delete(journal_id)
+        if deleted and snapshots:
+            for sid in images:  # the journal's chart snapshots go with it
+                snapshots.delete(sid)
+        return {"deleted": deleted}
 
     @r.get("/{journal_id}")
     def stats(journal_id: str) -> dict:
@@ -116,6 +122,30 @@ def journal_router(get_journals: Callable[[], Journals | None], get_engine: Call
         if not isinstance(tags, list):
             raise HTTPException(422, "tags is a list")
         return svc().set_note(journal_id, trade_id, str(body.get("note") or ""), tags)
+
+    @r.post("/{journal_id}/trades/{trade_id}/images")
+    def attach_image(journal_id: str, trade_id: str, body: dict = Body(...)) -> dict:
+        """Attach an uploaded chart snapshot (POST /api/snapshots) to a trade's note."""
+        one(journal_id)
+        sid = str(body.get("snapshot_id") or "")
+        if snapshots is None or snapshots.path(sid) is None:
+            raise HTTPException(404, "No such snapshot: upload it first")
+        try:
+            return svc().attach_image(journal_id, trade_id, sid)
+        except KeyError:
+            raise HTTPException(404, "No such trade in this journal") from None
+
+    @r.delete("/{journal_id}/trades/{trade_id}/images/{snapshot_id}")
+    def detach_image(journal_id: str, trade_id: str, snapshot_id: str) -> dict:
+        """Take a snapshot off a trade's note; its file goes too."""
+        one(journal_id)
+        try:
+            out = svc().detach_image(journal_id, trade_id, snapshot_id)
+        except KeyError:
+            raise HTTPException(404, "That trade has no such snapshot") from None
+        if snapshots:
+            snapshots.delete(snapshot_id)
+        return out
 
     @r.get("/{journal_id}/trades.csv")
     def trades_csv(journal_id: str) -> Response:

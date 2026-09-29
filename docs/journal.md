@@ -136,8 +136,15 @@ Click a trade to write a note and tags (`a+ setup`, `fomo`, `moved stop`). They
 are kept by trade, survive a re-sync, and go into the CSV. They are the start of
 what the second brain (#15) will read.
 
+A trade can also hold chart pictures: under any chart, press the camera and
+**Attach to a journal trade** (see [Chart snapshots](dashboard.md#chart-snapshots)).
+They show above the note, open full size on a click, and the bin removes one. A
+trade keeps up to 12; a camera and the count show in the Note column. The images
+are PNG files in `data/snapshots/`, next to the database's `data/` folder and never
+outside it; removing the picture or the journal deletes the files.
+
 ## Storage
 
 `journals`, `journal_trades`, `journal_cash` and `journal_notes` in Wednesday's
-database. Times are unix seconds of the broker's server clock, as MT5 reports
+database, and the chart pictures in `data/snapshots/`. Times are unix seconds of the broker's server clock, as MT5 reports
 them. Nothing leaves the machine.

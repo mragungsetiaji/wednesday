@@ -65,6 +65,9 @@ export function ChartKeys({ active, timeframes, setTf, nav, panes = 1, focusPane
         } else if (e.code === "KeyG") {
           e.preventDefault();
           setGoTo(true);
+        } else if (e.code === "KeyS") {
+          e.preventDefault();
+          k.nav()?.snapshot();
         } else if (TOOL_KEYS[e.code] && k.setTool) {
           e.preventDefault();
           k.setTool(TOOL_KEYS[e.code]);

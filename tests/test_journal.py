@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from wednesday import server
+from wednesday.snapshots import Snapshots
 from wednesday.engine import Runtime
 from wednesday.journal.imports import BALANCE, BUY, IN, INOUT, OUT, SELL, ReportError, from_deals, parse_report
 from wednesday.journal.service import Journals, canonical
@@ -201,7 +202,7 @@ def journal_api(tmp_path, monkeypatch):
     enabled: list[str] = []
     monkeypatch.setattr(server, "load_plugins",
                         lambda app, rt: [PluginInfo("fake", None, 1, enabled, loaded=True)])
-    return TestClient(server.create_app(runtime, ui_dir=tmp_path)), enabled
+    return TestClient(server.create_app(runtime, ui_dir=tmp_path, snapshots=Snapshots(tmp_path / "shots"))), enabled
 
 
 def test_journal_api_flow(journal_api):
@@ -241,6 +242,43 @@ def test_journal_api_flow(journal_api):
     assert t["connected"] is False and "isn't MT5" in t["detail"]
     assert api.delete(f"/api/journals/{j['id']}").json() == {"deleted": True}
     assert api.get(f"/api/journals/{j['id']}").status_code == 404
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
+
+
+def test_chart_snapshots_attach_to_a_trade(journal_api, tmp_path):
+    api, _ = journal_api
+    assert api.post("/api/snapshots", content=b"GIF89a").status_code == 422
+    shot = api.post("/api/snapshots", content=PNG).json()
+    assert api.get(shot["url"]).content == PNG
+    assert api.get("/api/snapshots/..%2F..%2Fj.db.png").status_code == 404
+    assert api.get("/api/snapshots/nothere.png").status_code == 404
+    [file] = (tmp_path / "shots").iterdir()
+    assert file.name == f"{shot['id']}.png"
+
+    j = api.post("/api/journals", json={"name": "Main"}).json()
+    api.post(f"/api/journals/{j['id']}/import", content=REPORT.encode("utf-16"))
+    tid = api.get(f"/api/journals/{j['id']}").json()["trades"][0]["id"]
+    base = f"/api/journals/{j['id']}/trades"
+    assert api.post(f"{base}/nope/images", json={"snapshot_id": shot["id"]}).status_code == 404
+    assert api.post(f"{base}/{tid}/images", json={"snapshot_id": "0" * 32}).status_code == 404
+    assert api.post(f"{base}/{tid}/images", json={"snapshot_id": shot["id"]}).json()["images"] == [shot["id"]]
+    # Writing the note keeps the image; an image alone keeps the note row.
+    api.put(f"{base}/{tid}/note", json={"note": "the sweep", "tags": []})
+    [t] = api.get(f"/api/journals/{j['id']}").json()["trades"]
+    assert t["images"] == [shot["id"]] and t["note"] == "the sweep"
+    api.put(f"{base}/{tid}/note", json={"note": "", "tags": []})
+    assert api.get(f"/api/journals/{j['id']}").json()["trades"][0]["images"] == [shot["id"]]
+
+    two = api.post("/api/snapshots", content=PNG).json()["id"]
+    api.post(f"{base}/{tid}/images", json={"snapshot_id": two})
+    assert api.delete(f"{base}/{tid}/images/{shot['id']}").json()["images"] == [two]
+    assert api.get(shot["url"]).status_code == 404  # its file went with it
+    assert api.delete(f"{base}/{tid}/images/{shot['id']}").status_code == 404
+    # Removing the journal removes its snapshots.
+    assert api.delete(f"/api/journals/{j['id']}").json() == {"deleted": True}
+    assert list((tmp_path / "shots").iterdir()) == []
 
 
 def test_sync_refuses_another_account(tmp_path):

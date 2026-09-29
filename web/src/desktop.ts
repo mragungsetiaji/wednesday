@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 /** Methods the Windows desktop app exposes to the page (see DesktopApi in desktop.py). */
 export interface DesktopApi {
   pick_terminal(): Promise<string | null>;
+  save_png(data: string, name: string): Promise<string | null>; // base64 PNG; the path saved to, or null (cancelled)
 }
 
 declare global {

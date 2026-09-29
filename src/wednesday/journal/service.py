@@ -16,6 +16,7 @@ from .stats import analyse
 
 MULTI_FEATURE = "journal.multi"
 MARGIN = 15 * 3600  # load bars this far past a trade's ends: the deal and price clocks can differ by hours
+MAX_IMAGES = 12  # chart snapshots per trade
 CACHE_TTL = 120  # seconds; the stats also refresh at once when the journal's data changes
 GOLD = {"XAUUSD", "XAU", "GOLD"}
 
@@ -150,6 +151,35 @@ class Journals:
         self._changed(journal_id)
         return {"trade_id": trade_id, "note": note, "tags": tags}
 
+    def _note(self, journal_id: str, trade_id: str) -> dict:
+        found = [n for n in self.store.journal_rows(journal_notes_table, journal_id) if n["trade_id"] == trade_id]
+        return found[0] if found else {"note": "", "tags": [], "images": []}
+
+    def attach_image(self, journal_id: str, trade_id: str, snapshot_id: str) -> dict:
+        """Add a chart snapshot to a trade's note (made if the trade has none)."""
+        self.get(journal_id)
+        if not any(t["id"] == trade_id for t in self.store.journal_rows(journal_trades_table, journal_id)):
+            raise KeyError(trade_id)
+        n = self._note(journal_id, trade_id)
+        images = [*n["images"], snapshot_id][-MAX_IMAGES:] if snapshot_id not in n["images"] else n["images"]
+        self.store.journal_note(journal_id, trade_id, n["note"], n["tags"], _now(), images)
+        self._changed(journal_id)
+        return {"trade_id": trade_id, "images": images}
+
+    def detach_image(self, journal_id: str, trade_id: str, snapshot_id: str) -> dict:
+        self.get(journal_id)
+        n = self._note(journal_id, trade_id)
+        if snapshot_id not in n["images"]:
+            raise KeyError(snapshot_id)
+        images = [i for i in n["images"] if i != snapshot_id]
+        self.store.journal_note(journal_id, trade_id, n["note"], n["tags"], _now(), images)
+        self._changed(journal_id)
+        return {"trade_id": trade_id, "images": images}
+
+    def images(self, journal_id: str) -> list[str]:
+        """Every snapshot the journal's notes hold (to delete the files with the journal)."""
+        return [i for n in self.store.journal_rows(journal_notes_table, journal_id) for i in n["images"]]
+
     # ---- stats ----
     def _changed(self, journal_id: str) -> None:
         with self._lock:
@@ -186,7 +216,7 @@ class Journals:
         result = analyse(trades, cash, bars, j.get("time_offset"))
         for t in result["trades"]:
             n = notes.get(t["id"])
-            t["note"], t["tags"] = (n["note"], n["tags"]) if n else ("", [])
+            t["note"], t["tags"], t["images"] = (n["note"], n["tags"], n["images"]) if n else ("", [], [])
             t.pop("journal_id", None)
         result["verification"]["prices_from"] = used
         acc = j.get("account") or {}

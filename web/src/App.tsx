@@ -15,6 +15,7 @@ import { MlPanel } from "./components/MlPanel";
 import { NewsAlert } from "./components/NewsAlert";
 import { ChartKeys } from "./components/ChartKeys";
 import { LevelsMenu } from "./components/LevelsMenu";
+import { Toasts } from "./components/Toasts";
 import { ChartMarket, PriceChart, type ChartNav } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
@@ -243,7 +244,8 @@ export default function App() {
   }, [showBanner]);
 
   const mainNav = useRef<ChartNav | null>(null);
-  const market = useMemo(() => ({ pip: data?.pip ?? 0.1, clockOffset: data?.clock_offset ?? 0 }), [data?.pip, data?.clock_offset]);
+  const market = useMemo(() => ({ pip: data?.pip ?? 0.1, clockOffset: data?.clock_offset ?? 0, symbol: data?.symbol ?? "",
+    clockName: data?.clock ?? "UTC" }), [data?.pip, data?.clock_offset, data?.symbol, data?.clock]);
 
   return (
     <ChartMarket.Provider value={market}>
@@ -487,6 +489,7 @@ export default function App() {
 
       {/* Full screen renders its own copy: the browser only shows the full screen element. */}
       {!(focus && scan && data) && <NewsAlert events={upcomingNews} />}
+      {!focus && <Toasts />}
 
       {focus && scan && data && (
         <ChartFocus

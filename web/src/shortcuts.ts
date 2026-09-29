@@ -14,6 +14,7 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: "Alt+1 … Alt+6", action: "Focus chart 1 to 6", where: "Full screen" },
   { keys: "Alt+R", action: "Reset the zoom and scroll to the live candle" },
   { keys: "Alt+G", action: "Go to a date and time (New York or feed clock)" },
+  { keys: "Alt+S", action: "Copy a snapshot of the focused chart (saved where copying isn't allowed)" },
   { keys: "Alt+H", action: "Horizontal line tool" },
   { keys: "Alt+T", action: "Trendline tool" },
   { keys: "Alt+B", action: "Rectangle (box) tool" },

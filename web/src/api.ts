@@ -1126,6 +1126,7 @@ export interface JournalTrade {
   price_ok: boolean | null; // null: no bar to check against
   note: string;
   tags: string[];
+  images: string[]; // chart snapshot ids: /api/snapshots/<id>.png
 }
 
 export type Point = [number, number];
@@ -1205,6 +1206,26 @@ export const syncJournal = (id: string) =>
   send<{ trades: number; cash: number; journal: Journal }>("POST", `/api/journals/${encodeURIComponent(id)}/sync`);
 export const saveTradeNote = (id: string, tradeId: string, note: string, tags: string[]) =>
   send<{ note: string; tags: string[] }>("PUT", `/api/journals/${encodeURIComponent(id)}/trades/${encodeURIComponent(tradeId)}/note`, { note, tags });
+export const snapshotUrl = (id: string) => `/api/snapshots/${id}.png`;
+export async function uploadSnapshot(png: Blob): Promise<{ id: string; url: string }> {
+  const res = await apiFetch("/api/snapshots", { method: "POST", body: png, headers: { "Content-Type": "image/png" } });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+export const attachSnapshot = (journalId: string, tradeId: string, snapshotId: string) =>
+  send<{ trade_id: string; images: string[] }>("POST",
+    `/api/journals/${encodeURIComponent(journalId)}/trades/${encodeURIComponent(tradeId)}/images`, { snapshot_id: snapshotId });
+export const detachSnapshot = (journalId: string, tradeId: string, snapshotId: string) =>
+  send<{ trade_id: string; images: string[] }>("DELETE",
+    `/api/journals/${encodeURIComponent(journalId)}/trades/${encodeURIComponent(tradeId)}/images/${snapshotId}`);
 export const journalCsvUrl = (id: string) => `/api/journals/${encodeURIComponent(id)}/trades.csv`;
 export async function importReport(id: string, file: File): Promise<{ trades: number; cash: number; journal: Journal }> {
   const res = await apiFetch(`/api/journals/${encodeURIComponent(id)}/import`, { method: "POST", body: file });
