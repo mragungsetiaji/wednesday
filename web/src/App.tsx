@@ -1,6 +1,6 @@
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { fetchQuarters, fetchScan, type QuartersResponse, type ScanResponse } from "./api";
+import { fetchQuarters, fetchScan, fetchSessions, type QuartersResponse, type ScanResponse, type SessionsResponse } from "./api";
 import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
 import { ChartFocus } from "./components/ChartFocus";
@@ -14,6 +14,7 @@ import { LabPage } from "./components/LabPage";
 import { MlPanel } from "./components/MlPanel";
 import { NewsAlert } from "./components/NewsAlert";
 import { ChartKeys } from "./components/ChartKeys";
+import { LevelsMenu } from "./components/LevelsMenu";
 import { ChartMarket, PriceChart, type ChartNav } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
@@ -29,6 +30,7 @@ import { useMl } from "./mlData";
 import { usePref } from "./prefs";
 import { newsMarks } from "./newsPrimitive";
 import { buildRail } from "./rail";
+import { levelGroups, levelView, DEFAULT_LEVELS, type LevelGroup } from "./refLevels";
 import { useDrawings } from "./drawingsData";
 import { useLiveFeed } from "./liveData";
 import { useChartPalette } from "./theme";
@@ -84,6 +86,9 @@ export default function App() {
   const [showQuarters, setShowQuarters] = usePref("xau.quarters", true);
   const [showSwings, setShowSwings] = usePref("wed.swings", true);
   const [showNews, setShowNews] = usePref("wed.newsLines", true);
+  const [savedLevels, setLevelGroups] = usePref<LevelGroup[]>("wed.refLevels", DEFAULT_LEVELS);
+  const levelGroupsOn = useMemo(() => levelGroups(savedLevels), [savedLevels]);
+  const [sessions, setSessions] = useState<SessionsResponse | null>(null);
   const calendar = useCalendar();
   const upcomingNews = useMemo(() => calendar?.events ?? [], [calendar]);
   const allNews = useMemo(() => newsMarks(calendar?.week ?? []), [calendar]);
@@ -166,6 +171,22 @@ export default function App() {
       alive = false;
     };
   }, [version]);
+
+  // Killzones and reference levels: recomputed by the server once per scan.
+  useEffect(() => {
+    if (!version) {
+      setSessions(null);
+      return;
+    }
+    let alive = true;
+    fetchSessions()
+      .then((res) => alive && setSessions(res))
+      .catch(() => alive && setSessions(null));
+    return () => {
+      alive = false;
+    };
+  }, [version]);
+  const levels = useMemo(() => levelView(sessions, levelGroupsOn), [sessions, levelGroupsOn]);
 
   const quarterRows = useMemo(() => (showQuarters ? quarterRowsFor(tf) : []), [showQuarters, tf]);
 
@@ -345,6 +366,7 @@ export default function App() {
                     }} />
                     ML
                   </label>
+                  <LevelsMenu value={levelGroupsOn} onChange={setLevelGroups} />
                 </div>
                 </div>
               </div>
@@ -366,6 +388,7 @@ export default function App() {
                 news={news}
                 ml={showMl ? mlMarks : undefined}
                 mlHighlight={mlHot}
+                levels={levels}
                 live={live}
                 drawings={drawings}
                 nav={mainNav}
@@ -383,6 +406,8 @@ export default function App() {
                   {showNews && <li><span className="key key-news" /> High-impact news</li>}
                   {quarterRows.length > 0 && <li><span className="key key-quarter" /> Quarters: green closed up</li>}
                   {showMl && <li><span className="key key-ml" /> Model block (probability)</li>}
+                  {levels.killzones.length > 0 && <li><span className="key key-killzone" /> Killzones</li>}
+                  {levels.lines.length > 0 && <li><span className="key key-reflevel" /> Session levels, faint once swept</li>}
                   <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
                 </ul>
                 <button type="button" className="icon-button" onClick={() => setFocus(true)} disabled={!scan}
@@ -477,6 +502,9 @@ export default function App() {
           showQuarters={showQuarters}
           showNews={showNews}
           allDetectors={allDetectors}
+          sessions={sessions}
+          levelGroups={levelGroupsOn}
+          onLevelGroups={setLevelGroups}
           toggles={[
             { label: "Mid OBs", checked: showMidOb, onChange: setShowMidOb },
             { label: "HTF", title: "Higher timeframes", checked: showHigherTf, onChange: setShowHigherTf },

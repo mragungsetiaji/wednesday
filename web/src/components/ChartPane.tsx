@@ -1,6 +1,6 @@
 import { useId, useMemo, type CSSProperties, type Ref } from "react";
 
-import type { DetectorInfo, QuartersResponse, Scan } from "../api";
+import type { DetectorInfo, QuartersResponse, Scan, SessionsResponse } from "../api";
 import type { CrosshairBus } from "../crosshairSync";
 import type { DrawingCtl } from "../drawings";
 import type { LiveFeed } from "../liveData";
@@ -9,7 +9,9 @@ import { fmtPrice } from "../format";
 import { Direction, LayersIcon } from "../icons";
 import type { NewsMark } from "../newsPrimitive";
 import type { RailItem } from "../rail";
+import { levelGroups as knownGroups, levelView, type LevelGroup } from "../refLevels";
 import type { ChartPalette } from "../theme";
+import { LevelChecks } from "./LevelsMenu";
 import { PriceChart, type ChartNav } from "./PriceChart";
 import { usePopover } from "./usePopover";
 
@@ -24,6 +26,7 @@ export interface PaneLayers {
   swings?: boolean;
   quarters?: boolean;
   news?: boolean;
+  levels?: LevelGroup[];
   lookback?: number;
 }
 
@@ -43,6 +46,8 @@ interface Props {
   showQuarters: boolean;
   showNews: boolean;
   allDetectors: DetectorInfo[];
+  sessions: SessionsResponse | null;
+  levelGroups: LevelGroup[];
   own?: PaneLayers; // this pane's overrides
   onOwn?: (o: PaneLayers) => void;
   label: string; // accessible name, e.g. "Chart 2"
@@ -58,7 +63,7 @@ interface Props {
 
 /** One chart of the full-screen layout, with its own timeframe. */
 export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers: global, palette, quarters, showQuarters, showNews,
-  allDetectors, own = NO_OWN, onOwn, label, sync, news, live, drawings, nav, cell, focused, onFocus }: Props) {
+  allDetectors, sessions, levelGroups, own = NO_OWN, onOwn, label, sync, news, live, drawings, nav, cell, focused, onFocus }: Props) {
   const layers = useMemo<LayerOptions>(() => ({
     detectors: own.detectors ? allDetectors.filter((d) => own.detectors!.includes(d.name)) : global.detectors,
     showHigherTf: own.htf ?? global.showHigherTf,
@@ -67,6 +72,8 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
   }), [own, allDetectors, global]);
   const quartersOn = own.quarters ?? showQuarters;
   const newsOn = own.news ?? showNews;
+  const groupsOn = useMemo(() => (own.levels ? knownGroups(own.levels) : levelGroups), [own.levels, levelGroups]);
+  const levels = useMemo(() => levelView(sessions, groupsOn), [sessions, groupsOn]);
   const [chart, loadOlder] = useCandles(tf, version, own.lookback ?? lookback);
   const zones = useMemo(() => (chart ? buildZones(scan, chart, tf, rail, layers) : []), [scan, chart, tf, rail, layers]);
   const events = useMemo(() => buildEvents(scan, tf, layers.detectors), [scan, tf, layers.detectors]);
@@ -95,7 +102,7 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
         {onOwn && (
           <PaneLayersMenu label={label} own={own} onOwn={onOwn} allDetectors={allDetectors} lookback={lookback} effective={{
             detectors: layers.detectors.map((d) => d.name), midOb: layers.showMidOb, htf: layers.showHigherTf,
-            swings: layers.showSwings, quarters: quartersOn, news: newsOn, lookback: own.lookback ?? lookback,
+            swings: layers.showSwings, quarters: quartersOn, news: newsOn, levels: groupsOn, lookback: own.lookback ?? lookback,
           }} />
         )}
       </div>
@@ -113,6 +120,7 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
         sync={sync}
         swings={layers.showSwings ? chart?.swings : undefined}
         news={newsOn ? news : undefined}
+        levels={levels}
         live={live}
         drawings={drawings}
         nav={nav}
@@ -168,6 +176,8 @@ function PaneLayersMenu({ label, own, onOwn, allDetectors, lookback, effective }
               {t.label}
             </label>
           ))}
+          <hr />
+          <LevelChecks className="pane-levels" value={effective.levels} onChange={(v) => onOwn({ ...own, levels: v })} />
           <hr />
           <label className="scale-opt pane-lookback">
             Candles

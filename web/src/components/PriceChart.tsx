@@ -25,6 +25,8 @@ import { fmtPrice } from "../format";
 import { LabPrimitive, type LabMark } from "../labPrimitive";
 import { NewsPrimitive, type NewsMark } from "../newsPrimitive";
 import { QuartersPrimitive } from "../quartersPrimitive";
+import { NO_LEVELS, type LevelView } from "../refLevels";
+import { SessionsPrimitive } from "../sessionsPrimitive";
 import type { ChartPalette } from "../theme";
 import { logicalOfTime, stepOf, timeOfLogical } from "../timeMap";
 import { ZonesPrimitive, type Zone } from "../zonesPrimitive";
@@ -78,6 +80,7 @@ interface Props {
   swings?: SwingPoint[]; // HH / LH / HL / LL labels at swing points, [] hides them
   news?: NewsMark[]; // high-impact releases as vertical lines, [] hides them
   ml?: LabMark[]; // the active model's blocks, [] hides them
+  levels?: LevelView; // killzones and reference levels (sessions.py)
   mlHighlight?: string | null;
   onNeedOlder?: () => void; // the view reached the first candle: load older ones
   live?: LiveFeed | null; // live ticks: their forming M1 candle is folded into the last candle
@@ -148,7 +151,7 @@ function candleAt(times: number[], t: number): number {
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
-  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav }: Props) {
+  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS }: Props) {
   const liveBar = useLiveTick(live)?.bar ?? null; // only the chart re-renders on a tick, not its parent
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -159,6 +162,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const quartersRef = useRef<QuartersPrimitive | null>(null);
   const newsRef = useRef<NewsPrimitive | null>(null);
   const mlRef = useRef<LabPrimitive | null>(null);
+  const sessionsRef = useRef<SessionsPrimitive | null>(null);
   const editorRef = useRef<DrawingEditor | null>(null);
   const quarterPaneHeight = useRef(0);
   const candlesRef = useRef<Candle[]>([]);
@@ -186,6 +190,11 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       rightPriceScale: { scaleMargins: { top: 0.08, bottom: 0.08 } },
     });
     const series = chart.addSeries(CandlestickSeries, { borderVisible: false, priceLineStyle: 2 });
+    // Killzones and reference levels first: they sit under the zones and the news lines.
+    const sessionsPrimitive = new SessionsPrimitive(palette);
+    sessionsPrimitive.update({ font: FONT, formatPrice: fmtPrice });
+    series.attachPrimitive(sessionsPrimitive);
+    sessionsRef.current = sessionsPrimitive;
     const primitive = new ZonesPrimitive(palette);
     primitive.update({ font: FONT, formatPrice: fmtPrice });
     series.attachPrimitive(primitive);
@@ -302,6 +311,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     quartersRef.current?.update({ palette });
     newsRef.current?.update({ palette });
     mlRef.current?.update({ palette });
+    sessionsRef.current?.update({ palette });
     editorRef.current?.update({ palette });
     seriesRef.current?.applyOptions({
       upColor: palette.bull,
@@ -465,6 +475,10 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   useEffect(() => {
     newsRef.current?.update({ marks: news, times: candles.map((c) => c.time) });
   }, [news, candles]);
+
+  useEffect(() => {
+    sessionsRef.current?.update({ view: levels, times: candles.map((c) => c.time) });
+  }, [levels, candles]);
 
   useEffect(() => {
     mlRef.current?.update({ marks: ml, highlight: mlHighlight, times: candles.map((c) => c.time) });

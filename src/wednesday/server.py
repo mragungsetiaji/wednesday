@@ -34,6 +34,7 @@ from .history import older_candles
 from . import plugin_install
 from .plugins import PLUGIN_API, features, load_new_plugins, load_plugins
 from .quarters import NEW_YORK, quarter_blocks, quarters_payload, utc_to_feed
+from .sessions import reference_levels
 from .distribution import distribution as move_distribution, tables as distribution_tables_of
 from .mt5_terminals import find_terminals
 from .secret_store import get_secret, update_secrets
@@ -68,6 +69,8 @@ log = logging.getLogger(__name__)
 DIST_TTL = 6 * 3600  # seconds the stored history's periods are kept; the live buffer's are fresh
 DIST_BARS = 2_000_000  # stored M1 bars read for the distribution: about five years
 DIST_DAYS = 3000  # daily bars asked of the feed, for lookbacks past the M1 history
+LEVELS_TTL = 6 * 3600  # seconds the stored bars before the live buffer are kept for the reference levels
+LEVELS_DAYS = 70  # calendar days of M1 the reference levels need: the whole previous month
 
 
 def clock_offset(clock: str) -> int:
@@ -266,6 +269,34 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         if quarters_cache.get("key") != key:
             quarters_cache.update(key=key, value=quarters_payload(m1, current_clock()))
         return quarters_cache["value"]
+
+    # ---- session shading and reference levels: the live buffer, reaching back into the stored
+    # bars far enough to cover the previous month ----
+    levels_cache: dict = {}
+
+    @app.get("/api/sessions")
+    def get_sessions() -> dict:
+        """Killzones and reference levels (previous day / week / month, Asia range, opens) for the chart."""
+        engine = current()
+        version, _, m1 = engine.snapshot()
+        if m1 is None or m1.empty:
+            raise HTTPException(503, "no data yet")
+        clock, key = current_clock(), (current_source(), engine.symbol, current_clock())
+        if levels_cache.get("key") == (key, version):
+            return levels_cache["value"]
+        base = levels_cache.get("base")
+        if base is None or base["key"] != key or time.monotonic() - base["at"] > LEVELS_TTL:
+            store = runtime.store if runtime else target.store
+            older = None
+            if store and engine.feed.persist:
+                start = int((m1.index[-1] - pd.Timedelta(days=LEVELS_DAYS)).timestamp())
+                older = store.load_bar_range(current_source(), engine.symbol, start, int(m1.index[0].timestamp()) - 60)
+            base = {"key": key, "at": time.monotonic(), "older": older}
+        older = base["older"]
+        bars = pd.concat([older[older.index < m1.index[0]], m1]) if older is not None and len(older) else m1
+        value = reference_levels(bars, clock)
+        levels_cache.update(base=base, key=(key, version), value=value)
+        return value
 
     # ---- move distribution: stored history's periods (slow to read, kept a while) + the live buffer's ----
     dist_cache: dict = {}

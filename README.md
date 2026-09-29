@@ -50,6 +50,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **Ranks limit setups**: entry on the order block's body, stop on the opposite edge capped at 3.00, extreme first, then nearest.
 - **Maps everything to the chart**: every setup and level in the ladder is pinned on the chart under the same tag.
 - **Full screen with 1, 2 or 4 charts**, TradingView style: each on its own timeframe, crosshairs linked, panes resizable by dragging.
+- **Sessions and reference levels** on the chart: killzones, the Asia range, previous day / week / month high and low (faded once swept), and the day, week, midnight and quarter opens, all in New York time.
 - **Quarterly theory pane** under the chart: every weekday, session (Tokyo, London, NY AM, NY PM) and 90-minute quarter as a green or red block, plus how often each one closed green.
 - **Your bias steers the list**: set bullish, bearish or neutral by hand; setups get RISK ON / RISK OFF labels, sells at a lower high (or buys at a higher low) come first, and neutral marks everything no trade.
 - **News brief**: Claude or OpenAI reads the news pages you pick and suggests a bias you can apply with one click.

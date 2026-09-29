@@ -236,6 +236,37 @@ export interface QuartersResponse {
 
 export const fetchQuarters = () => getJson<QuartersResponse>("/api/quarters");
 
+export type RefLevelKind =
+  | "asia_high" | "asia_low" | "pdh" | "pdl" | "pwh" | "pwl" | "pmh" | "pml"
+  | "day_open" | "week_open" | "midnight_open" | "quarter_open";
+
+/** A reference level drawn from start to end (feed-clock unix), faded after it was swept. */
+export interface RefLevel {
+  kind: RefLevelKind;
+  label: string;
+  price: number;
+  start_unix: number;
+  end_unix: number;
+  swept_unix: number | null;
+  current: boolean; // the running period's: labelled at the right edge
+}
+
+export interface Killzone {
+  name: "Asia" | "London" | "NY AM" | "NY PM";
+  day: string;
+  start_unix: number;
+  end_unix: number;
+}
+
+/** Killzones and reference levels for the price chart (/api/sessions). */
+export interface SessionsResponse {
+  clock: string;
+  killzones: Killzone[];
+  lines: RefLevel[];
+}
+
+export const fetchSessions = () => getJson<SessionsResponse>("/api/sessions");
+
 export type DistPeriod = "day" | "week" | "session" | "q90";
 export type DistMeasure = "change" | "range_pct" | "range_atr";
 export type DistLookback = "1y" | "5y" | "all";

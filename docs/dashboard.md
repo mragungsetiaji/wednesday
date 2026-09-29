@@ -174,11 +174,11 @@ screen, TradingView style. Pick a layout at the top:
 
 Each chart has its own timeframe tabs; the first one follows the dashboard's
 timeframe, the others are remembered in this browser, as is the layout. The
-toggles at the top (Mid OBs, HTF, Swings, Quarters, News) switch for every chart
+toggles at the top (Mid OBs, HTF, Swings, Quarters, News, Sessions) switch for every chart
 at once. **Esc** or **Exit** goes back. On a phone the charts stack and scroll.
 
 - **Per-chart layers**: the layers button at the right of a chart's tabs gives
-  that chart its own detectors, overlays and candle count (more candles for a 4H
+  that chart its own detectors, overlays, session levels and candle count (more candles for a 4H
   chart that should show weeks, fewer for a 1M one). It follows the toggles at the
   top until you change something in it; then a dot marks it, and **Reset to the
   toggles above** hands it back. Each chart's choices are remembered by its place
@@ -225,6 +225,38 @@ bars, so the counts get more meaningful over time.
 
 The blocks need to know what clock the bar times are in: see
 [Feed clock](data-sources.md#feed-clock).
+
+## Sessions and reference levels
+
+The **Sessions** menu above the chart draws what an SMC trader marks by hand every
+morning. Tick any of:
+
+| Toggle | What it draws |
+| --- | --- |
+| Killzones | Faint bands: Asia 20:00–00:00, London 02:00–05:00, NY AM 07:00–10:00, NY PM 13:30–16:00 New York |
+| Asia high / low | The Asia killzone's range, from 20:00 to the day's close, once the window has closed |
+| Previous day H / L | PDH / PDL across the next trading day |
+| Previous week H / L | PWH / PWL across the next week |
+| Previous month H / L | PMH / PML across the next month |
+| Day, week and 00:00 opens | The 18:00 day open, the Sunday 18:00 week open and the midnight New York open (true day open) |
+| Quarter open | The current 90-minute quarter's open (see the quarterly pane above) |
+
+A high or low turns faint from the first closed bar that trades through it (it was
+swept). The running period's levels are named above their start, with the price.
+Past days keep their lines, so you can see how price treated them; the last 30
+trading days are drawn.
+
+Everything is set in New York time, with the trading day from 18:00 to 17:00, and
+converted to the feed's clock the same way as the quarterly pane, so the bands and
+lines stay put through the DST changes whatever the broker's clock. The levels come
+from closed M1 bars only; the previous month reaches into the stored history when
+the live window doesn't cover it, and a period gives levels only when the history
+holds all of it.
+
+In full screen, each chart's layer menu can switch these separately from the menu
+at the top (see [Full screen and multiple charts](#full-screen-and-multiple-charts)).
+
+![A 15M chart with the killzones shaded and the previous day, week and month levels, the Asia range and the opens drawn](images/sessions.png)
 
 ## Model layer (ML)
 

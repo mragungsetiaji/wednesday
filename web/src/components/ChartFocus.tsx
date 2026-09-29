@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import type { CalendarEvent, DetectorInfo, QuartersResponse, Scan, TradeBias } from "../api";
+import type { CalendarEvent, DetectorInfo, QuartersResponse, Scan, SessionsResponse, TradeBias } from "../api";
 import type { NewsMark } from "../newsPrimitive";
 import type { LayerOptions } from "../chartData";
 import { CrosshairBus } from "../crosshairSync";
@@ -9,6 +9,7 @@ import type { LiveFeed } from "../liveData";
 import { boundaries, LAYOUTS, layoutOf, moveBoundary, paneCells, paneCount, sizesFor, template, type LayoutId, type Sizes } from "../focusLayouts";
 import { usePref } from "../prefs";
 import type { RailItem } from "../rail";
+import type { LevelGroup } from "../refLevels";
 import type { ChartPalette } from "../theme";
 import { BiasPill } from "./BiasPill";
 import { ChartKeys } from "./ChartKeys";
@@ -16,6 +17,7 @@ import { ChartPane, type PaneLayers } from "./ChartPane";
 import { ChartMarket, type ChartNav } from "./PriceChart";
 import { DrawingStyleBar } from "./DrawingStyleBar";
 import { DrawingToolbar } from "./DrawingToolbar";
+import { LevelsMenu } from "./LevelsMenu";
 import type { Drawings } from "../drawingsData";
 import { NewsAlert } from "./NewsAlert";
 import { LiveTickerPrice } from "./TickerPrice";
@@ -103,6 +105,9 @@ interface Props {
   showQuarters: boolean;
   showNews: boolean;
   allDetectors: DetectorInfo[];
+  sessions: SessionsResponse | null;
+  levelGroups: LevelGroup[];
+  onLevelGroups: (v: LevelGroup[]) => void;
   toggles: Toggle[];
   tf: string; // the first chart follows the dashboard's timeframe
   onTf: (tf: string) => void;
@@ -121,7 +126,7 @@ interface Props {
  * if you like, its own layers. Uses the browser's full screen when it is allowed; leaving it
  * (Esc) closes the view.
  */
-export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, showNews, allDetectors, toggles, tf, onTf, status, bias, news, live, drawings, upcomingNews, onClose }: Props) {
+export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, showNews, allDetectors, sessions, levelGroups, onLevelGroups, toggles, tf, onTf, status, bias, news, live, drawings, upcomingNews, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [savedLayout, setLayoutId] = usePref<LayoutId | number>("wed.focusLayout", "2"); // 1 / 2 / 4 before more layouts
   const spec = layoutOf(savedLayout);
@@ -215,6 +220,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
                 {t.label}
               </label>
             ))}
+            <LevelsMenu value={levelGroups} onChange={onLevelGroups} />
           </div>
           <button type="button" className="button quiet focus-exit" onClick={onClose} title="Exit full screen (Esc or F)">
             <CollapseIcon /> Exit
@@ -227,6 +233,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
           <ChartPane key={i} label={`Chart ${i + 1}`} tf={paneTf(i)} onTf={(v) => setPaneTf(i, v)} timeframes={known}
             scan={scan} version={version} lookback={lookback} rail={rail} layers={layers} palette={palette}
             quarters={quarters} showQuarters={showQuarters} showNews={showNews} allDetectors={allDetectors}
+            sessions={sessions} levelGroups={levelGroups}
             own={paneLayers[i]} onOwn={(o) => {
               const { [i]: _old, ...rest } = paneLayers;
               setPaneLayers(Object.keys(o).length ? { ...rest, [i]: o } : rest);

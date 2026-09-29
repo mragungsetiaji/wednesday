@@ -1130,6 +1130,8 @@ p {
 .key-idm { height: 0; border-top: 2px dotted var(--idm); }
 .key-bos { height: 0; border-top: 1px dashed var(--text-2); }
 .key-news { width: 0; height: 12px; border-left: 1.5px dashed var(--accent); }
+.key-killzone { width: 14px; background: color-mix(in srgb, var(--text-3) 22%, transparent); }
+.key-reflevel { width: 14px; height: 0; border-top: 1.5px solid var(--text-2); }
 .key-swing { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
 .key-quarter {
   width: 18px;
@@ -4009,4 +4011,62 @@ fieldset:disabled .switch {
 }
 .dist details {
   margin-top: var(--s2);
+}
+
+/* Sessions and reference levels menu (toolbar and full screen). */
+.levels-menu {
+  position: relative;
+  flex: none;
+}
+.levels-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding-inline: var(--s2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--text-sm);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.levels-btn:hover,
+.levels-btn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+.levels-count {
+  min-width: 16px;
+  padding-inline: 4px;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--text);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+.levels-btn.is-on .levels-count {
+  background: var(--accent);
+  color: var(--surface);
+}
+.levels-caret {
+  display: inline-flex;
+  color: var(--text-3);
+  transform: rotate(180deg);
+}
+.levels-btn[aria-expanded="true"] .levels-caret {
+  transform: none;
+}
+.levels-pop {
+  inset-inline-end: auto;
+  inset-inline-start: 0;
+  inset-block-end: auto;
+  inset-block-start: calc(100% + 4px);
+  min-width: 230px;
+}
+.levels-pop .field-hint,
+.pane-levels .field-hint {
+  margin: var(--s1) var(--s1) 0;
+  max-width: 230px;
 }
