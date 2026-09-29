@@ -10,7 +10,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -25,6 +25,7 @@ from .bias import TradeBias
 from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .llm_usage import BudgetExceeded
 from .news import CALENDAR_KEY, CalendarSettings
+from .news_stats import CalendarImportError, NewsReactions, brief_line, event_key, history_summary, parse_csv
 from .drawings import clean_drawing, drawing_payload
 from .drawing_alerts import clean_alert
 from .engine import RECONNECT_ATTEMPTS, Engine, Runtime
@@ -415,6 +416,27 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         runtime.set_bias(new.stamped())
         return {"bias": bias_payload()}
 
+    # ---- news reactions: how gold moved after past releases of each event type ----
+    reactions = NewsReactions(runtime.store) if runtime and runtime.store else None
+
+    def news_bars(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        """M1 bars (feed clock) from the live buffer, and from the stored history before it."""
+        engine = current()
+        _, _, m1 = engine.snapshot()
+        part = m1[(m1.index >= start) & (m1.index <= end)] if m1 is not None and len(m1) else None
+        if (part is None or part.empty or part.index[0] > start) and runtime and runtime.store and engine.feed.persist:
+            stored = runtime.store.load_bar_range(current_source(), engine.symbol, _unix(start), _unix(end))
+            if len(stored):
+                part = stored if part is None or part.empty else pd.concat([stored[stored.index < part.index[0]], part])
+        return part if part is not None else pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+
+    def news_stats() -> dict[str, dict]:
+        if reactions is None or runtime.calendar is None:
+            return {}
+        s = runtime.calendar.settings
+        return reactions.stats(news_bars, current_clock(), s.currencies, s.impacts,
+                               key=(current_source(), current().symbol))
+
     def brief_context() -> dict:
         engine = current()
         _, result, _ = engine.snapshot()
@@ -426,6 +448,16 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                     ctx[f"{r.timeframe.name} structure"] = f"{r.bias.direction} {r.bias.event} at {r.bias.level:.2f}"
         bias = trade_bias()
         ctx["Trader's current bias"] = f"{bias.direction}" + (f" ({bias.note})" if bias and bias.note else "") if bias else "not set"
+        # How gold moved after past releases of the events coming up (facts from the stored history).
+        if runtime and runtime.calendar is not None:
+            stats = news_stats()
+            seen = set()
+            for e in runtime.calendar.upcoming(past=timedelta(0)):
+                k = event_key(e["currency"], e["title"])
+                if k in seen or k not in stats:
+                    continue
+                seen.add(k)
+                ctx[f"{engine.symbol} after past {e['currency']} {e['title']} (M1)"] = brief_line(stats[k])
         return ctx
 
     def need_brief():
@@ -497,11 +529,38 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return log.report()
 
     def with_chart_times(snap: dict) -> dict:
-        """Add each event's time on the chart's (feed clock) axis, so news lines up with the candles."""
+        """Add each event's time on the chart's (feed clock) axis, so news lines up with the candles,
+        and how gold moved after past releases of it."""
         clock = current_clock()
+        stats = news_stats() if snap["events"] or snap["week"] else {}
         for key in ("events", "week"):
-            snap[key] = [{**e, "chart_time_unix": _unix(utc_to_feed(pd.Timestamp(e["time"]), clock))} for e in snap[key]]
+            snap[key] = [{**e, "chart_time_unix": _unix(utc_to_feed(pd.Timestamp(e["time"]), clock)),
+                          "reaction": stats.get(event_key(e["currency"], e["title"]))} for e in snap[key]]
+        if runtime and runtime.store:
+            snap["history"] = history_summary(runtime.store)
         return snap
+
+    @app.get("/api/calendar/reactions")
+    def calendar_reactions() -> dict:
+        """Per event type: gold's move after past releases, from the stored calendar and M1 bars."""
+        if reactions is None or runtime.calendar is None:
+            return {"available": False, "types": [], "history": None}
+        types = sorted(news_stats().values(), key=lambda s: (-s["count"], s["currency"], s["title"]))
+        return {"available": True, "types": types, "history": history_summary(runtime.store)}
+
+    @app.post("/api/calendar/import")
+    async def calendar_import(request: Request, zone: str = "UTC") -> dict:
+        """Add a past calendar (CSV, raw body) to the history."""
+        if not runtime or not runtime.store:
+            raise HTTPException(409, "Importing a calendar needs the server running with --serve and a database")
+        try:
+            rows = parse_csv(await request.body(), zone)
+        except CalendarImportError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        runtime.store.calendar_put(rows)
+        if reactions:
+            reactions.invalidate()
+        return {"imported": len(rows), "history": history_summary(runtime.store)}
 
     @app.get("/api/calendar")
     def get_calendar() -> dict:

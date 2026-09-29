@@ -3,7 +3,9 @@
 The default source is ForexFactory's free weekly JSON export (this week's
 events with country, impact, forecast and previous). It is fetched at most once
 an hour on a background thread; the last good copy is kept in the store so a
-restart doesn't refetch and a failed fetch keeps showing what was known.
+restart doesn't refetch and a failed fetch keeps showing what was known. Every
+fetched week is also added to the calendar history (``calendar_events``), which
+the news reaction stats read (:mod:`.news_stats`).
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import urllib.request
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 
+from .news_stats import store_rows
 from .storage import Store
 
 log = logging.getLogger(__name__)
@@ -110,6 +113,8 @@ class Calendar:
         self._last_try: datetime | None = None
         self._lock = threading.Lock()
         self._busy = False
+        if store and self.events:
+            store.calendar_put(store_rows(self.events))  # the cached week, into the history
 
     def stale(self, now: datetime) -> bool:
         if self.source != self.settings.url or not self.fetched_at:
@@ -128,6 +133,7 @@ class Calendar:
         self.events, self.fetched_at, self.source, self.error = events, datetime.now(timezone.utc).isoformat(), url, None
         if self.store:
             self.store.set_setting(CALENDAR_CACHE_KEY, {"events": events, "fetched_at": self.fetched_at, "url": url})
+            self.store.calendar_put(store_rows(events))
 
     def _refresh_bg(self) -> None:
         try:

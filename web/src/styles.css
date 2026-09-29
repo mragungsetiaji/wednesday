@@ -1300,6 +1300,46 @@ p {
   font-size: var(--text-xs);
   color: var(--text-3);
 }
+.news-reaction {
+  color: var(--text-2);
+}
+/* The news line under the pointer: its releases and gold's past reactions to them. */
+.news-tip {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  gap: 2px;
+  max-width: 280px;
+  padding: 6px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.18), 0 1px 2px rgb(0 0 0 / 0.12);
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.news-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s2) var(--s3);
+  margin-block: var(--s2);
+}
+.news-import .field {
+  min-width: 200px;
+}
+.news-reactions > p + p {
+  margin-top: var(--s1);
+}
+.news-reaction-table .end:not(.wrap) {
+  white-space: nowrap;
+}
+.news-tip b {
+  font-weight: 600;
+  color: var(--text);
+}
 
 /* ---------- Price ladder ---------- */
 .rail {

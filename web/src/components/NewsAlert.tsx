@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { CalendarEvent } from "../api";
+import { reactionLines } from "../newsReaction";
 
 const SOON_MS = 60 * 60_000; // the card appears an hour before
 const IMMINENT_MS = 30 * 60_000; // and starts to glow in the last half hour
@@ -108,6 +109,11 @@ export function NewsAlert({ events }: { events: CalendarEvent[] }) {
             {first.title}: forecast {first.forecast ?? "–"} · previous {first.previous ?? "–"}
           </p>
         )}
+        {reactionLines(next.group, 2).map((line) => (
+          <p key={line} className="news-figures news-reaction num" title="Gold's move after past releases of it, from stored M1 bars">
+            {line}
+          </p>
+        ))}
       </div>
     </aside>
   );

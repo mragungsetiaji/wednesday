@@ -188,6 +188,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const [scale, setScale] = useState<ScaleState>(AUTO_SCALE);
   const [offLive, setOffLive] = useState(false); // the live candle is scrolled out of view
   const [ruler, setRuler] = useState<Ruler | null>(null);
+  const [newsTip, setNewsTip] = useState<{ mark: NewsMark; x: number } | null>(null); // the news line under the pointer
 
   useEffect(() => {
     const chart = createChart(containerRef.current!, {
@@ -220,6 +221,8 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       const bar = param.seriesData.get(series) as Candle | undefined;
       setHover(bar && "open" in bar ? { ...bar, time: param.time as number } : null);
       quartersPrimitive.update({ hoverTime: param.time === undefined ? null : (param.time as number) });
+      const tip = param.point && param.paneIndex === 0 ? newsPrimitive.markAt(param.point.x) : null;
+      setNewsTip((cur) => (cur?.mark === tip?.mark ? cur : tip));
       // Only moves made by the pointer on this chart are passed on (not ones set by a linked chart).
       const link = syncRef.current;
       if (link && param.sourceEvent && param.time !== undefined && param.point) {
@@ -614,6 +617,16 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       {loading && <div className="chart-skeleton" aria-hidden="true" />}
       <div ref={containerRef} className="chart" role="img" aria-label="Price chart with order blocks, liquidity and inducement levels" />
       {rulerView}
+      {newsTip && containerRef.current && (
+        <div className="news-tip" role="tooltip" style={{
+          left: containerRef.current.offsetLeft + Math.min(Math.max(newsTip.x, 140), containerRef.current.clientWidth - 140),
+          top: containerRef.current.offsetTop + 64,
+        }}>
+          {newsTip.mark.events.map((e) => <b key={e}>{e}</b>)}
+          {newsTip.mark.reactions.map((r) => <span key={r} className="num">{r}</span>)}
+          {newsTip.mark.reactions.length === 0 && <span className="muted">No past releases of it stored yet</span>}
+        </div>
+      )}
       {offLive && (
         <button type="button" className="chart-live-btn" title="Scroll to the live candle (Alt+R also resets the zoom)" onClick={toLive}>
           Live <span aria-hidden="true">→</span>

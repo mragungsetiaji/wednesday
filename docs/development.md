@@ -43,11 +43,12 @@ src/wednesday/
   quarters.py     quarterly theory blocks (weekday, session, 90m) in New York time + green stats
   report.py       console table
   engine.py       scan loop shared by the console and the web server
-  server.py       FastAPI: /api/scan, /api/candles, /api/quarters, /api/bias, /api/brief, /api/calendar, /api/settings, /api/alerts, serves the dashboard
+  server.py       FastAPI: /api/scan, /api/candles, /api/quarters, /api/bias, /api/brief, /api/calendar (+ /reactions, /import), /api/settings, /api/alerts, serves the dashboard
   settings.py     data source settings, source catalog, precedence rules
   alerts.py       Telegram alerts when price enters an order block
   bias.py         the trader's bias, its expiry, and the risk on / off label per setup
-  news.py         economic calendar (ForexFactory weekly feed) for the risk-time card
+  news.py         economic calendar (ForexFactory weekly feed) for the risk-time card; every week kept in calendar_events
+  news_stats.py   gold's move after past releases per event type (M1, feed clock), calendar CSV import
   brief.py        LLM news brief (Claude or OpenAI): fetch news pages, ask, suggest a bias
   storage.py      SQLAlchemy store: settings, M1 history, alert log, Lab labels, journals (SQLite / PostgreSQL)
   lab/            machine learning: tags, per-minute dataset + causal features, trade outcomes,

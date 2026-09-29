@@ -622,6 +622,32 @@ export interface CalendarEvent {
   forecast: string | null;
   previous: string | null;
   chart_time_unix: number; // the release time on the chart's axis (feed clock)
+  reaction?: NewsReaction | null; // how gold moved after past releases of this event
+}
+
+type ByWindow = { "5": number | null; "15": number | null; "60": number | null };
+
+/** Gold after past releases of one event type, from the stored calendar and M1 bars (news_stats.py). */
+export interface NewsReaction {
+  title: string;
+  currency: string;
+  count: number; // releases with M1 bars around them (the most recent 24 at most)
+  stored: number; // releases of it in the calendar history
+  last: number | null; // unix seconds of the latest one used
+  move: ByWindow; // median size of the move after 5/15/60 minutes, in price
+  move_atr: ByWindow; // the same in ATRs (15M ATR(14) before the release)
+  range15: number | null; // median high-low of the first 15 minutes
+  range15_atr: number | null;
+  reversed: number; // releases whose first (5m) move had reversed by 60m
+  up15: number; // releases with the 15m move up
+  surprise: Record<"above" | "below", { count: number; move15: number | null }>; // actual vs forecast
+  summary: string; // "CPI m/m: median 15m range 9.40 (last 12)"
+}
+
+export interface CalendarHistory {
+  stored: number;
+  first: string | null;
+  last: string | null;
 }
 
 export interface CalendarSettings {
@@ -639,9 +665,27 @@ export interface CalendarResponse {
   fetched_at?: string | null;
   error?: string | null;
   loading?: boolean;
+  history?: CalendarHistory;
 }
 
 export const fetchCalendar = () => getJson<CalendarResponse>("/api/calendar");
+export const fetchNewsReactions = () =>
+  getJson<{ available: boolean; types: NewsReaction[]; history: CalendarHistory | null }>("/api/calendar/reactions");
+
+/** Add a past calendar (CSV) to the history; ``zone`` is how times without an offset are read. */
+export async function importCalendar(file: File, zone: string): Promise<{ imported: number; history: CalendarHistory }> {
+  const res = await apiFetch(`/api/calendar/import?zone=${encodeURIComponent(zone)}`, { method: "POST", body: file });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      detail = (await res.json()).detail ?? detail;
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
 export const saveCalendar = (s: CalendarSettings) => send<CalendarResponse>("PUT", "/api/calendar", s);
 
 // ---- Risk: position size per setup ----

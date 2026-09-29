@@ -40,7 +40,8 @@ Nothing is filtered out. The swing tags (`LH`, `HH`, `HL`, `LL`) are explained i
 ## News brief (LLM)
 
 The brief reads news pages you choose, adds the current price and structure per
-timeframe, and asks Claude or OpenAI for a few points plus a closing line such as
+timeframe and, for this week's coming releases, how gold moved after past ones
+([past reactions](dashboard.md#past-reactions-to-a-release)), and asks Claude or OpenAI for a few points plus a closing line such as
 `BIAS: BEARISH`. That line shows as **Suggests bearish · Use it**: one click
 applies it, nothing changes on its own.
 

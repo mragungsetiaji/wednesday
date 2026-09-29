@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { fetchCalendar, saveCalendar, type CalendarResponse, type CalendarSettings } from "../api";
+import {
+  fetchCalendar, fetchNewsReactions, importCalendar, saveCalendar, type CalendarHistory, type CalendarResponse, type CalendarSettings,
+  type NewsReaction,
+} from "../api";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CNY", "AUD", "CAD", "CHF"];
 const IMPACTS = ["High", "Medium", "Low"];
@@ -155,6 +158,126 @@ export function CalendarSettingsForm() {
         )}
         {data.fetched_at && <p className="field-note">Updated {new Date(data.fetched_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}.</p>}
       </div>
+      <NewsReactions />
     </form>
+  );
+}
+
+const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString([], { dateStyle: "medium" }) : "–");
+const px = (v: number | null) => (v === null ? "–" : v.toFixed(2));
+const atr = (v: number | null) => (v === null ? "" : ` · ${v.toFixed(1)} ATR`);
+const signed = (v: number | null) => (v === null ? "–" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}`);
+
+/**
+ * How gold moved after past releases of each event type, from the calendar history (every fetched
+ * week, plus imported CSVs) and the stored M1 bars. Only releases with bars around them count.
+ */
+function NewsReactions() {
+  const [types, setTypes] = useState<NewsReaction[] | null>(null);
+  const [history, setHistory] = useState<CalendarHistory | null>(null);
+  const [zone, setZone] = useState("UTC");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const load = useCallback(() => fetchNewsReactions().then((r) => {
+    setTypes(r.available ? r.types : null);
+    setHistory(r.history);
+  }).catch(() => {}), []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const upload = async (file: File) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const r = await importCalendar(file, zone);
+      setMessage({ kind: "ok", text: `Added ${r.imported} release${r.imported === 1 ? "" : "s"} to the history.` });
+      await load();
+    } catch (err) {
+      setMessage({ kind: "error", text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (types === null) return null;
+  const measured = types.filter((t) => t.count > 0);
+  return (
+    <div className="news-reactions">
+      <h3 className="subhead">Past reactions</h3>
+      <p className="field-note">
+        Gold's move after earlier releases of each event, from the stored M1 bars: the size of the move 5, 15 and 60
+        minutes after, the range of the first 15 minutes, and how often the first move had reversed by the hour. They
+        describe what happened, not what will. The risk-time card, the news lines and the brief show them too.
+      </p>
+      <p className="field-note num">
+        {history && history.stored > 0
+          ? <>Calendar history: {history.stored} releases, {day(history.first)} to {day(history.last)}. </>
+          : "No calendar history yet: every fetched week is kept from now on. "}
+        Older weeks can be imported from CSV.
+      </p>
+      <div className="news-import">
+        <label className="field">
+          <span className="field-label">Times in the file without an offset are</span>
+          <select value={zone} onChange={(e) => setZone(e.target.value)} disabled={busy}>
+            <option value="UTC">UTC</option>
+            <option value="America/New_York">New York time</option>
+          </select>
+        </label>
+        <input ref={fileRef} type="file" accept=".csv,text/csv" hidden onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) upload(f);
+          e.target.value = "";
+        }} />
+        <button type="button" className="button secondary" disabled={busy} onClick={() => fileRef.current?.click()}
+          title="Columns: currency (or country), title (or event), datetime (or date and time); optional impact, actual, forecast, previous">
+          {busy ? "Importing…" : "Import calendar CSV"}
+        </button>
+        <span className="form-status" role="status">
+          {message && <span className={message.kind === "error" ? "text-error" : undefined}>{message.text}</span>}
+        </span>
+      </div>
+      {measured.length === 0 ? (
+        <p className="empty">
+          {types.length ? "No stored release has M1 bars around it yet." : "No release matching the currencies and impact above is stored yet."}
+        </p>
+      ) : (
+        <div className="table-scroll">
+          <table className="data compact news-reaction-table">
+            <thead>
+              <tr>
+                <th scope="col">Event</th>
+                <th scope="col" className="end" title="Releases with M1 bars around them, of those stored">Used</th>
+                <th scope="col" className="end" title="Median high-low of the first 15 minutes">15m range</th>
+                <th scope="col" className="end" title="Median size of the move from the last price before the release">Move 5m / 15m / 60m</th>
+                <th scope="col" className="end" title="The 60-minute move on the other side of the price before the release from the 5-minute one">Reversed</th>
+                <th scope="col" className="end wrap" title="Median 15-minute move when the actual came in above or below the forecast">Above / below forecast</th>
+              </tr>
+            </thead>
+            <tbody>
+              {measured.map((t) => (
+                <tr key={`${t.currency} ${t.title}`}>
+                  <td>{t.currency} {t.title}</td>
+                  <td className="end num">{t.count}<span className="muted"> / {t.stored}</span></td>
+                  <td className="end num">{px(t.range15)}<span className="muted">{atr(t.range15_atr)}</span></td>
+                  <td className="end num" title={t.move_atr["15"] === null ? undefined
+                    : `In ATRs: ${[t.move_atr["5"], t.move_atr["15"], t.move_atr["60"]].map((v) => (v === null ? "–" : v.toFixed(1))).join(" / ")}`}>
+                    {px(t.move["5"])} / {px(t.move["15"])} / {px(t.move["60"])}
+                  </td>
+                  <td className="end num">{t.reversed} of {t.count}</td>
+                  <td className="end num wrap">
+                    {t.surprise.above.count || t.surprise.below.count
+                      ? <>{signed(t.surprise.above.move15)} <span className="muted">({t.surprise.above.count})</span> / {signed(t.surprise.below.move15)} <span className="muted">({t.surprise.below.count})</span></>
+                      : <span className="muted">no actuals</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

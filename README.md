@@ -73,12 +73,12 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 
 ### News risk time
 
-High-impact US releases are dashed lines on the chart (amber ahead, grey once out), and an hour before one a card appears in the corner with a countdown. In the last 30 minutes a light runs around it. Close it and it comes back once at the 30-minute mark.
+High-impact US releases are dashed lines on the chart (amber ahead, grey once out), and an hour before one a card appears in the corner with a countdown. In the last 30 minutes a light runs around it. Close it and it comes back once at the 30-minute mark. The card, the line's tooltip and the news brief also say how gold moved after past releases of the same event (median 15-minute range, the move after 5/15/60 minutes, how often the first move reversed), from the stored calendar and M1 bars.
 
 <table>
   <tr>
     <td width="58%"><img src="docs/images/news-chart.png" alt="News lines and labels on the 1H chart: NFP, ISM, FOMC, Waller and CPI"></td>
-    <td width="42%" valign="top"><img src="docs/images/news-card.png" alt="Risk-time card 18 minutes before CPI, with a light running around its edge"></td>
+    <td width="42%" valign="top"><img src="docs/images/news-card.png" alt="Risk-time card 38 minutes before CPI, with gold's median 15-minute range after the last 20 releases"></td>
   </tr>
 </table>
 

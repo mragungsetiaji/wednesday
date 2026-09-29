@@ -197,6 +197,19 @@ journals_table = Table(
     Column("sample", Boolean, nullable=True),  # the made-up sample portfolio (journal/sample.py)
 )
 
+calendar_events_table = Table(
+    "calendar_events",
+    metadata,
+    Column("time", BigInteger, primary_key=True),  # the release, unix seconds UTC
+    Column("currency", String(8), primary_key=True),
+    Column("title", String(200), primary_key=True),
+    Column("impact", String(16), nullable=True),
+    Column("forecast", String(40), nullable=True),
+    Column("previous", String(40), nullable=True),
+    Column("actual", String(40), nullable=True),  # the weekly feed has none; imported calendars may
+    Column("source", String(16), nullable=True),  # "feed" or "csv"
+)
+
 journal_trades_table = Table(
     "journal_trades",
     metadata,
@@ -605,6 +618,34 @@ class Store:
             cond = (t.c.drawing_id == drawing_id, t.c.source == source, t.c.symbol == symbol)
             return conn.execute(t.delete().where(*cond)).rowcount > 0
 
+    # ---- calendar history -----------------------------------------------
+    def calendar_put(self, rows: list[dict]) -> None:
+        """Add or update past and coming releases; a known figure isn't wiped by a row without it."""
+        for i in range(0, len(rows), 2000):
+            self._upsert(calendar_events_table, rows[i : i + 2000], ["time", "currency", "title"],
+                         keep=("forecast", "previous", "actual"))
+
+    def calendar_history(self, currencies: list[str] | None = None, impacts: list[str] | None = None,
+                         before: int | None = None) -> list[dict]:
+        """Stored releases, newest first."""
+        t = calendar_events_table
+        q = select(t)
+        if currencies:
+            q = q.where(t.c.currency.in_(currencies))
+        if impacts:  # an imported release without an impact counts under any
+            q = q.where(t.c.impact.in_(impacts) | t.c.impact.is_(None))
+        if before is not None:
+            q = q.where(t.c.time < before)
+        with self.engine.connect() as conn:
+            return [dict(r._mapping) for r in conn.execute(q.order_by(t.c.time.desc()))]
+
+    def calendar_bounds(self) -> tuple[int, int | None, int | None]:
+        """Stored releases: count, first and last time (unix seconds)."""
+        t = calendar_events_table
+        with self.engine.connect() as conn:
+            n, first, last = conn.execute(select(func.count(), func.min(t.c.time), func.max(t.c.time))).one()
+        return int(n), first, last
+
     # ---- journal --------------------------------------------------------
     def journals(self) -> list[dict]:
         t = journals_table
@@ -667,7 +708,8 @@ class Store:
                      ["journal_id", "trade_id"])
 
     # ---- helpers --------------------------------------------------------
-    def _upsert(self, table: Table, rows: list[dict], keys: list[str]) -> None:
+    def _upsert(self, table: Table, rows: list[dict], keys: list[str], keep: tuple[str, ...] = ()) -> None:
+        """Insert or update by ``keys``; columns in ``keep`` keep their value when the new one is null."""
         if not rows:
             return
         if self.backend == "sqlite":
@@ -681,6 +723,7 @@ class Store:
                 conn.execute(table.insert(), rows)
             return
         stmt = insert(table)
-        update = {c.name: stmt.excluded[c.name] for c in table.columns if c.name not in keys}
+        update = {c.name: func.coalesce(stmt.excluded[c.name], c) if c.name in keep else stmt.excluded[c.name]
+                  for c in table.columns if c.name not in keys}
         with self.engine.begin() as conn:
             conn.execute(stmt.on_conflict_do_update(index_elements=keys, set_=update), rows)

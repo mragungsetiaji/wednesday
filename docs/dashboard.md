@@ -163,8 +163,9 @@ spot XAUUSD), in the `drawings` table.
 
 An hour before high-impact news (USD by default), a card appears in the bottom
 right with the release, a countdown, the time in your zone and in New York, and
-the forecast and previous figure. Releases at the same minute (CPI m/m, core,
-y/y) share one card.
+the forecast and previous figure, and how gold moved after past releases of it
+(see [Past reactions](#past-reactions-to-a-release)). Releases at the same minute
+(CPI m/m, core, y/y) share one card.
 
 - **Last 30 minutes**: a light runs around the card's edge and the countdown turns
   amber. With reduced motion on, the edge turns solid amber instead.
@@ -173,7 +174,7 @@ y/y) share one card.
   mark; after that it hides for that release. It also shows over the full
   screen charts.
 
-![Risk-time card, 18 minutes before CPI](images/news-card.png)
+![Risk-time card, 38 minutes before CPI, with gold's median 15-minute range after past releases](images/news-card.png)
 
 The same releases are drawn on every chart as dashed vertical lines with their
 name at the top: amber for what's ahead (and the last 10 minutes), grey for what
@@ -186,6 +187,42 @@ lines match the candles with MT5 broker time too.
 The calendar comes from ForexFactory's free weekly feed, fetched at most once an
 hour and kept in the database. **Settings > News calendar** picks the currencies
 and impact levels and lists what's coming this week.
+
+### Past reactions to a release
+
+Every fetched week stays in the database (`calendar_events`), so Wednesday
+builds up a history of releases. For each event type (CPI m/m, NFP, FOMC
+statement, …) it measures gold after past releases, from the M1 bars:
+
+- the move 5, 15 and 60 minutes after, from the last price before the release,
+  in price and in ATRs (ATR(14) of the 15M bars before it);
+- the high-low range of the first 15 minutes;
+- how often the first move reversed: the 60-minute move on the other side of the
+  pre-release price from the 5-minute one;
+- the median 15-minute move when the actual came in above or below the
+  forecast, when the history has the actual figure (imported calendars can).
+
+Only releases with M1 bars from just before to an hour after count (the most
+recent 24 per event), and every figure says how many that was. The release's
+UTC time is converted to the feed clock the same way as the news lines, so MT5
+broker time lines up. These describe past moves; they don't say what the next
+release will do.
+
+They show in three places: a line on the risk-time card (*CPI m/m: median 15m
+range 9.40 (last 12)*), the tooltip when you hover a news line on the chart, and
+the news brief's context, as facts about the releases coming up.
+
+**Settings > News calendar > Past reactions** has the table, and **Import calendar
+CSV** adds older weeks, since the feed only gives the current one. The CSV needs a
+header with `currency` (or `country`), `title` (or `event`) and `datetime`, or
+`date` and `time` (`8:30am` works); `impact`, `actual`, `forecast` and `previous`
+are optional. Times without an offset are read as UTC or New York time, as
+picked next to the button; all-day and tentative rows are skipped. Titles have to
+match the feed's (`CPI m/m`, `Non-Farm Employment Change`) to count as the same
+event. A release imported again is updated, and a figure the file has isn't
+wiped by the weekly feed later.
+
+![Past reactions per event type in Settings, with the CSV import](images/news-reactions.png)
 
 ## Full screen and multiple charts
 

@@ -11,6 +11,7 @@ import type {
 } from "lightweight-charts";
 
 import type { CalendarEvent } from "./api";
+import { reactionLines } from "./newsReaction";
 import { logicalOf } from "./timeMap";
 import { withAlpha, type ChartPalette } from "./theme";
 
@@ -19,6 +20,8 @@ export interface NewsMark {
   time: number; // chart axis (feed clock)
   label: string; // "USD CPI m/m +2"
   at: number; // real time of the release, ms
+  events: string[]; // "USD CPI m/m · forecast 0.3%", for the tooltip
+  reactions: string[]; // gold after past releases (newsReaction.ts)
 }
 
 export function newsMarks(events: CalendarEvent[]): NewsMark[] {
@@ -30,6 +33,8 @@ export function newsMarks(events: CalendarEvent[]): NewsMark[] {
       time,
       label: `${group[0].currency} ${group[0].title}${group.length > 1 ? ` +${group.length - 1}` : ""}`,
       at: Date.parse(group[0].time),
+      events: group.map((e) => `${e.currency} ${e.title}${e.forecast ? ` · forecast ${e.forecast}` : ""}`),
+      reactions: reactionLines(group),
     }));
 }
 
@@ -128,6 +133,22 @@ export class NewsPrimitive implements ISeriesPrimitive<Time> {
 
   paneViews(): readonly IPrimitivePaneView[] {
     return this.views;
+  }
+
+  /** The mark whose line is within ``px`` of x (CSS px on the pane), for the tooltip. */
+  markAt(x: number, px = 6): { mark: NewsMark; x: number } | null {
+    const chart = this.chart;
+    if (!chart || !this.marks.length || this.times.length < 2) return null;
+    const ts = chart.timeScale();
+    const a = ts.logicalToCoordinate(0 as Logical);
+    const b = ts.logicalToCoordinate(1 as Logical);
+    if (a === null || b === null) return null;
+    let best: { mark: NewsMark; x: number } | null = null;
+    for (const m of this.marks) {
+      const mx = a + logicalOf(this.times, m.time) * (b - a);
+      if (Math.abs(mx - x) <= px && (!best || Math.abs(mx - x) < Math.abs(best.x - x))) best = { mark: m, x: mx };
+    }
+    return best;
   }
 
   update(patch: Partial<Pick<NewsPrimitive, "marks" | "times" | "palette" | "font">>): void {
