@@ -117,3 +117,19 @@ def test_status_has_pip_and_clock_offset(engine, tmp_path):
     assert pip_size("EURUSD", 1.1) == pytest.approx(0.0001)
     engine.state.spec = {"point": 0.001}
     assert client.get("/api/status").json()["pip"] == pytest.approx(0.01)
+
+
+def test_ny_wall_time_to_feed_clock(engine, tmp_path):
+    utc = TestClient(create_app(engine, source="synthetic", ui_dir=tmp_path, clock="UTC"))
+    broker = TestClient(create_app(engine, source="synthetic", ui_dir=tmp_path, clock="NY+7"))
+    unix = lambda s: int(pd.Timestamp(s).timestamp())  # noqa: E731
+    # 09:30 New York is 14:30 UTC in winter (EST) and 13:30 after the March change (EDT).
+    assert utc.get("/api/clock/feed?ny=2026-03-06T09:30").json()["feed_unix"] == unix("2026-03-06 14:30")
+    assert utc.get("/api/clock/feed?ny=2026-03-09T09:30").json()["feed_unix"] == unix("2026-03-09 13:30")
+    # A broker clock 7 hours ahead of New York follows it through the change.
+    assert broker.get("/api/clock/feed?ny=2026-03-06T09:30").json()["feed_unix"] == unix("2026-03-06 16:30")
+    assert broker.get("/api/clock/feed?ny=2026-03-09T09:30").json()["feed_unix"] == unix("2026-03-09 16:30")
+    # 02:30 on 8 March 2026 doesn't exist in New York: it moves on to 03:00 EDT, when the clocks go on.
+    assert utc.get("/api/clock/feed?ny=2026-03-08T02:30").json()["feed_unix"] == unix("2026-03-08 07:00")
+    assert utc.get("/api/clock/feed?ny=soon").status_code == 422
+    assert utc.get("/api/clock/feed?ny=2026-03-06T09:30Z").status_code == 422

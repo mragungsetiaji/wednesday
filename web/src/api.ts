@@ -236,6 +236,10 @@ export interface QuartersResponse {
 
 export const fetchQuarters = () => getJson<QuartersResponse>("/api/quarters");
 
+/** A New York wall time ("2026-09-24T09:30") as the chart's feed-clock unix seconds. */
+export const nyToFeed = (ny: string) =>
+  getJson<{ ny: string; feed: string; feed_unix: number }>(`/api/clock/feed?ny=${encodeURIComponent(ny)}`);
+
 export interface SourceInfo {
   id: string;
   title: string;

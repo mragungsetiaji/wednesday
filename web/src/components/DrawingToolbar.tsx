@@ -20,9 +20,9 @@ const ShortIcon = (p: { size?: number }) => <PositionIcon {...p} short />;
 
 const TOOLS: { tool: DrawTool; label: string; Icon: (p: { size?: number }) => React.ReactNode }[] = [
   { tool: "cursor", label: "Cursor", Icon: CursorIcon },
-  { tool: "trendline", label: "Trendline: click two points", Icon: TrendlineIcon },
-  { tool: "hline", label: "Horizontal line: click a price", Icon: HLineIcon },
-  { tool: "rect", label: "Rectangle: click two corners", Icon: RectIcon },
+  { tool: "trendline", label: "Trendline: click two points (Alt+T)", Icon: TrendlineIcon },
+  { tool: "hline", label: "Horizontal line: click a price (Alt+H)", Icon: HLineIcon },
+  { tool: "rect", label: "Rectangle: click two corners (Alt+B)", Icon: RectIcon },
   { tool: "path", label: "Path: click each point, click the last one again (or Enter) to end", Icon: PathIcon },
   { tool: "text", label: "Text: click where it goes, then type", Icon: TextIcon },
   { tool: "long", label: "Long position: click the entry", Icon: LongIcon },

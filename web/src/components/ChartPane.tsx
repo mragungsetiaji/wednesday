@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type Ref } from "react";
 
 import type { QuartersResponse, Scan } from "../api";
 import type { CrosshairBus } from "../crosshairSync";
@@ -10,7 +10,7 @@ import { Direction } from "../icons";
 import type { NewsMark } from "../newsPrimitive";
 import type { RailItem } from "../rail";
 import type { ChartPalette } from "../theme";
-import { PriceChart } from "./PriceChart";
+import { PriceChart, type ChartNav } from "./PriceChart";
 
 interface Props {
   tf: string;
@@ -29,17 +29,20 @@ interface Props {
   news?: NewsMark[];
   live?: LiveFeed | null;
   drawings?: DrawingCtl | null;
+  nav?: Ref<ChartNav | null>;
+  focused?: boolean; // receives the keyboard shortcuts (outlined when there are several panes)
+  onFocus?: () => void;
 }
 
 /** One chart of the full-screen layout, with its own timeframe. */
-export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers, palette, quarters, showQuarters, label, sync, news, live, drawings }: Props) {
+export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers, palette, quarters, showQuarters, label, sync, news, live, drawings, nav, focused, onFocus }: Props) {
   const [chart, loadOlder] = useCandles(tf, version, lookback);
   const zones = useMemo(() => (chart ? buildZones(scan, chart, tf, rail, layers) : []), [scan, chart, tf, rail, layers]);
   const events = useMemo(() => buildEvents(scan, tf, layers.detectors), [scan, tf, layers.detectors]);
   const rows = useMemo(() => (showQuarters ? quarterRowsFor(tf) : []), [showQuarters, tf]);
 
   return (
-    <section className="pane" aria-label={`${label}: ${tf}`}>
+    <section className={`pane${focused ? " is-focused" : ""}`} aria-label={`${label}: ${tf}`} onPointerDownCapture={onFocus}>
       <div className="pane-head">
         <div className="tabs tabs-compact" role="tablist" aria-label={`${label} timeframe`}>
           {timeframes.map((name) => {
@@ -74,6 +77,7 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
         news={news}
         live={live}
         drawings={drawings}
+        nav={nav}
       />
     </section>
   );

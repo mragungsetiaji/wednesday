@@ -31,7 +31,7 @@ from .features import catalog as feature_catalog
 from .history import older_candles
 from . import plugin_install
 from .plugins import PLUGIN_API, features, load_new_plugins, load_plugins
-from .quarters import quarters_payload, utc_to_feed
+from .quarters import NEW_YORK, quarters_payload, utc_to_feed
 from .mt5_terminals import find_terminals
 from .secret_store import get_secret, update_secrets
 from .sizing import RiskSettings, pip_size
@@ -256,6 +256,20 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         if quarters_cache.get("key") != key:
             quarters_cache.update(key=key, value=quarters_payload(m1, current_clock()))
         return quarters_cache["value"]
+
+    @app.get("/api/clock/feed")
+    def ny_to_feed(ny: str = Query(..., description="New York wall time, e.g. 2026-09-24T09:30")) -> dict:
+        """A New York wall time as the chart's feed-clock unix seconds (for go to date)."""
+        try:
+            wall = pd.Timestamp(ny)
+        except ValueError as exc:
+            raise HTTPException(422, "ny is a date and time like 2026-09-24T09:30") from exc
+        if wall.tzinfo is not None:
+            raise HTTPException(422, "ny is a New York wall time, without an offset")
+        # A time the spring change skips moves on to 03:00; one the autumn change repeats takes the first.
+        aware = wall.tz_localize(NEW_YORK, ambiguous=True, nonexistent="shift_forward")
+        feed = utc_to_feed(aware, current_clock())
+        return {"ny": wall.isoformat(), "feed": feed.isoformat(), "feed_unix": int(feed.timestamp())}
 
     @app.get("/api/bias")
     def get_bias() -> dict:

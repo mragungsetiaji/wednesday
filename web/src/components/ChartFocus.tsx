@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import type { CalendarEvent, QuartersResponse, Scan, TradeBias } from "../api";
 import type { NewsMark } from "../newsPrimitive";
@@ -10,7 +10,9 @@ import { usePref } from "../prefs";
 import type { RailItem } from "../rail";
 import type { ChartPalette } from "../theme";
 import { BiasPill } from "./BiasPill";
+import { ChartKeys } from "./ChartKeys";
 import { ChartPane } from "./ChartPane";
+import { ChartMarket, type ChartNav } from "./PriceChart";
 import { DrawingStyleBar } from "./DrawingStyleBar";
 import { DrawingToolbar } from "./DrawingToolbar";
 import type { Drawings } from "../drawingsData";
@@ -132,6 +134,10 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
   const [savedSplit, saveSplit] = usePref<Split>("wed.focusSplit", { x: 0.5, y: 0.5 });
   const [split, setSplit] = useState<Split>(savedSplit); // follows the drag; saved when it ends
   const bus = useMemo(() => new CrosshairBus(), []);
+  const [focused, setFocused] = useState(0); // the pane the keyboard shortcuts act on
+  const navs = useRef<(ChartNav | null)[]>([]);
+  const market = useContext(ChartMarket);
+  const pane = Math.min(focused, layout - 1);
 
   useEffect(() => {
     const el = ref.current;
@@ -194,17 +200,18 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
               </label>
             ))}
           </div>
-          <button type="button" className="button quiet focus-exit" onClick={onClose} title="Exit full screen (Esc)">
+          <button type="button" className="button quiet focus-exit" onClick={onClose} title="Exit full screen (Esc or F)">
             <CollapseIcon /> Exit
           </button>
         </div>
       </header>
-      <div className={`focus-grid layout-${layout}`}
+      <div className={`focus-grid layout-${layout}${layout > 1 ? " has-focus" : ""}`}
         style={{ "--split-x": split.x, "--split-y": split.y } as CSSProperties}>
         {Array.from({ length: layout }, (_, i) => (
           <ChartPane key={i} label={`Chart ${i + 1}`} tf={paneTf(i)} onTf={(v) => setPaneTf(i, v)} timeframes={known}
             scan={scan} version={version} lookback={lookback} rail={rail} layers={layers} palette={palette}
-            quarters={quarters} showQuarters={showQuarters} sync={{ bus, id: i }} news={news} live={live} drawings={drawings} />
+            quarters={quarters} showQuarters={showQuarters} sync={{ bus, id: i }} news={news} live={live} drawings={drawings}
+            nav={(h) => { navs.current[i] = h; }} focused={i === pane} onFocus={() => setFocused(i)} />
         ))}
         {layout > 1 && (
           <Splitter axis="x" value={split.x} onChange={(x) => setSplit((s) => ({ ...s, x }))}
@@ -217,6 +224,9 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
       </div>
       <DrawingStyleBar ctl={drawings} />
       <NewsAlert events={upcomingNews} />
+      <ChartKeys active timeframes={known} setTf={(v) => setPaneTf(pane, v)} nav={() => navs.current[pane] ?? null}
+        panes={layout} focusPane={setFocused} setTool={drawings.available ? drawings.setTool : null} toggleFullScreen={onClose}
+        clockOffset={market.clockOffset} />
     </div>
   );
 }

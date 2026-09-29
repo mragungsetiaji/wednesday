@@ -1040,6 +1040,18 @@ p {
   min-height: 0;
   background: var(--surface);
 }
+/* The pane the keyboard acts on, when there are several. */
+.pane {
+  position: relative;
+}
+.focus-grid.has-focus .pane.is-focused::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
 .pane-head {
   display: flex;
   align-items: center;
@@ -3778,4 +3790,94 @@ fieldset:disabled .switch {
 .brief-budget {
   font-size: var(--text-xs);
   color: var(--warn);
+}
+
+/* ---------- Keyboard shortcuts ---------- */
+.tf-typed {
+  position: fixed;
+  inset-inline-start: 50%;
+  inset-block-end: calc(var(--statusbar-h) + var(--s6));
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  max-width: calc(100vw - 2 * var(--s4));
+  padding: var(--s2) var(--s4);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 8px 24px rgb(0 0 0 / 0.3);
+  font-size: var(--text-sm);
+}
+.tf-typed .num {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--text);
+}
+.tf-typed.is-error .muted {
+  color: var(--error);
+}
+.keys-dialog {
+  width: min(560px, calc(100vw - 2 * var(--s4)));
+  max-height: calc(100dvh - 2 * var(--s6));
+  padding: var(--s4) var(--s6) var(--s6);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 24px 64px rgb(0 0 0 / 0.45);
+}
+.keys-dialog::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+.keys-dialog h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.keys-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.keys-table {
+  width: 100%;
+  margin-top: var(--s2);
+}
+.keys-table td:first-child {
+  white-space: nowrap;
+  padding-inline-end: var(--s4);
+}
+.keys-table kbd {
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+.goto-dialog form {
+  display: grid;
+  gap: var(--s3);
+}
+.goto-dialog input[type="text"] {
+  width: 100%;
+}
+.goto-clock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.goto-clock legend {
+  width: 100%;
+  margin-bottom: var(--s1);
+}
+.goto-clock label {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
 }

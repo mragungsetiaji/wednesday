@@ -13,7 +13,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 
 import type { Candle, QuarterBlock, QuarterRow, QuartersResponse, SwingPoint } from "../api";
 import { countdown, measure, PRESETS, presetStart, type Preset } from "../chartNav";
@@ -36,6 +36,15 @@ export interface Market {
   clockOffset: number;
 }
 export const ChartMarket = createContext<Market>({ pip: 0.1, clockOffset: 0 });
+
+/** What the keyboard shortcuts do to a chart. */
+export interface ChartNav {
+  reset: () => void; // default zoom, scrolled to the live candle
+  goTo: (t: number) => void; // centre a feed-clock time, loading older candles as needed
+}
+
+/** Opens the keyboard shortcut list (the chart's "?" button). */
+export const SHOW_SHORTCUTS = "wed:shortcuts";
 
 /** A shift-drag measure, in chart pixels (x, y) and logical bars and price (l, p). */
 interface Ruler {
@@ -73,6 +82,7 @@ interface Props {
   onNeedOlder?: () => void; // the view reached the first candle: load older ones
   live?: LiveFeed | null; // live ticks: their forming M1 candle is folded into the last candle
   drawings?: DrawingCtl | null; // the trader's drawings, shown and edited here
+  nav?: Ref<ChartNav | null>; // for the keyboard shortcuts
 }
 
 const ROW_PX = 22;
@@ -138,7 +148,7 @@ function candleAt(times: number[], t: number): number {
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
-  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null }: Props) {
+  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav }: Props) {
   const liveBar = useLiveTick(live)?.bar ?? null; // only the chart re-renders on a tick, not its parent
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -409,6 +419,49 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   };
   const toLive = () => chartRef.current?.timeScale().scrollToRealTime();
 
+  // Go to a time: centre it at the current zoom and put the crosshair on its candle. Before the
+  // first loaded candle, scroll to the start so older candles load, then try again.
+  const goToRef = useRef<{ t: number; first: number; tries: number } | null>(null);
+  const applyGoTo = () => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    const want = goToRef.current;
+    if (!chart || !series || !want) return;
+    const times = timesOf(candlesRef.current, liveRef.current);
+    if (!times.length) return;
+    const ts = chart.timeScale();
+    const range = ts.getVisibleLogicalRange();
+    const width = range ? range.to - range.from : 120;
+    if (want.t < times[0] && want.tries < 30) {
+      goToRef.current = { ...want, first: times[0], tries: want.tries + 1 };
+      ts.setVisibleLogicalRange({ from: -2, to: width - 2 }); // near the start: older candles page in
+      return;
+    }
+    goToRef.current = null;
+    const l = logicalOfTime(times, want.t);
+    ts.setVisibleLogicalRange({ from: l - width / 2, to: l + width / 2 });
+    const bar = candlesRef.current.find((c) => c.time === candleAt(times, want.t));
+    if (bar) chart.setCrosshairPosition(bar.close, bar.time as UTCTimestamp, series);
+  };
+  useEffect(() => {
+    const want = goToRef.current;
+    if (!want) return;
+    if (candles.length && candles[0].time < want.first) applyGoTo(); // older candles came in
+    else goToRef.current = null; // no older history: stay at the start
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles]);
+  useImperativeHandle(nav, () => ({
+    reset: () => {
+      const ts = chartRef.current?.timeScale();
+      ts?.resetTimeScale();
+      ts?.scrollToRealTime();
+    },
+    goTo: (t: number) => {
+      goToRef.current = { t, first: Infinity, tries: 0 };
+      applyGoTo();
+    },
+  }));
+
   useEffect(() => {
     newsRef.current?.update({ marks: news, times: candles.map((c) => c.time) });
   }, [news, candles]);
@@ -516,7 +569,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       <div ref={containerRef} className="chart" role="img" aria-label="Price chart with order blocks, liquidity and inducement levels" />
       {rulerView}
       {offLive && (
-        <button type="button" className="chart-live-btn" title="Scroll to the live candle" onClick={toLive}>
+        <button type="button" className="chart-live-btn" title="Scroll to the live candle (Alt+R also resets the zoom)" onClick={toLive}>
           Live <span aria-hidden="true">→</span>
         </button>
       )}
@@ -529,6 +582,8 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
           ))}
         </div>
         <span className="chart-nav-hint muted">Shift-drag to measure</span>
+        <button type="button" className="chart-nav-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"
+          onClick={() => window.dispatchEvent(new Event(SHOW_SHORTCUTS))}>?</button>
         <ScaleMenu value={scale} onChange={setScale} percentOk={sessionOpen !== null} />
       </div>
     </div>

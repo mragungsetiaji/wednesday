@@ -57,6 +57,35 @@ at the bottom right brings it back.
 The time left on the forming candle counts down beside the price label, for the
 chart's timeframe.
 
+### Keyboard shortcuts
+
+During the NY open your hands stay on MT5; the chart takes keys too. None of them
+fire while you're typing in a field, and **?** (or the **?** under a chart) lists
+them.
+
+| Keys | Action |
+| --- | --- |
+| `5`, `15`, `1h`, `4h` … then Enter | Switch the focused chart's timeframe (Esc cancels) |
+| Alt+1 … Alt+4 | Focus chart 1 to 4 in full screen (it gets a thin outline; clicking a chart focuses it too) |
+| Alt+R | Reset the zoom and scroll to the live candle |
+| Alt+G | Go to a date and time: "last Wednesday 09:30", "yesterday 8pm", "24 Sep 3:15pm", "2026-09-24 14:00" |
+| Alt+H / Alt+T / Alt+B | Horizontal line / trendline / rectangle tool |
+| F | Full screen on and off |
+| ? | The shortcut list |
+| Shift+drag | Measure a move |
+| Enter | Finish a path |
+| Esc | Cancel the tool or the selection; leave full screen |
+| Delete | Delete the selected drawing |
+| Ctrl+Z (⌘Z) | Undo a drawing change |
+| Ctrl+Shift+Z, Ctrl+Y (⌘⇧Z) | Redo |
+
+Go to reads times in **New York** time by default, or on the **feed** clock (the
+chart's own times); end the text with "NY" or "feed" to pick one. A New York time
+goes through the server, which converts it with the feed clock's offset on that
+date, so a date across a DST change still lands on the right candle. A weekday is
+the latest one (today counts); "last" skips today. When the date is older than the
+loaded candles, older ones load first.
+
 ## Drawings
 
 The column left of the chart holds drawing tools, TradingView style:

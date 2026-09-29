@@ -12,7 +12,8 @@ import { JournalPage } from "./components/JournalPage";
 import { LabPage } from "./components/LabPage";
 import { MlPanel } from "./components/MlPanel";
 import { NewsAlert } from "./components/NewsAlert";
-import { ChartMarket, PriceChart } from "./components/PriceChart";
+import { ChartKeys } from "./components/ChartKeys";
+import { ChartMarket, PriceChart, type ChartNav } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
 import { SettingsPage } from "./components/SettingsPage";
@@ -218,6 +219,7 @@ export default function App() {
     return () => resize.disconnect();
   }, [showBanner]);
 
+  const mainNav = useRef<ChartNav | null>(null);
   const market = useMemo(() => ({ pip: data?.pip ?? 0.1, clockOffset: data?.clock_offset ?? 0 }), [data?.pip, data?.clock_offset]);
 
   return (
@@ -364,6 +366,7 @@ export default function App() {
                 mlHighlight={mlHot}
                 live={live}
                 drawings={drawings}
+                nav={mainNav}
               />
               </div>
               <div className="chart-foot">
@@ -381,7 +384,7 @@ export default function App() {
                   <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
                 </ul>
                 <button type="button" className="icon-button" onClick={() => setFocus(true)} disabled={!scan}
-                  title="Full screen: one, two or four charts" aria-label="Full screen charts">
+                  title="Full screen: one, two or four charts (F)" aria-label="Full screen charts">
                   <ExpandIcon size={15} />
                 </button>
               </div>
@@ -449,6 +452,10 @@ export default function App() {
 
       <StatusBar version={data?.app_version} status={status} source={data?.source}
         scannedAt={data?.scanned_at ?? null} barTime={scan?.time ?? null} />
+
+      <ChartKeys active={view === "chart" && !focus} timeframes={timeframes} setTf={setTf} nav={() => mainNav.current}
+        setTool={drawings.available ? drawings.setTool : null} toggleFullScreen={() => scan && setFocus(true)}
+        clockOffset={market.clockOffset} />
 
       {/* Full screen renders its own copy: the browser only shows the full screen element. */}
       {!(focus && scan && data) && <NewsAlert events={upcomingNews} />}
