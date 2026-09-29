@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId } from "react";
+
+import { usePopover } from "./usePopover";
 
 export type ScaleMode = "auto" | "log" | "percent";
 export interface ScaleState {
@@ -19,29 +21,8 @@ const summary = (s: ScaleState) =>
 
 /** The price scale menu under a chart: scale mode, lock the range, invert. */
 export function ScaleMenu({ value, onChange, percentOk }: { value: ScaleState; onChange: (s: ScaleState) => void; percentOk: boolean }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const { open, setOpen, ref } = usePopover<HTMLDivElement>();
   const id = useId();
-
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        setOpen(false);
-        ref.current?.querySelector("button")?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", away);
-    document.addEventListener("keydown", esc, true);
-    return () => {
-      document.removeEventListener("pointerdown", away);
-      document.removeEventListener("keydown", esc, true);
-    };
-  }, [open]);
 
   const changed = value.mode !== "auto" || value.locked || value.inverted;
   return (

@@ -85,7 +85,8 @@ export default function App() {
   const [showNews, setShowNews] = usePref("wed.newsLines", true);
   const calendar = useCalendar();
   const upcomingNews = useMemo(() => calendar?.events ?? [], [calendar]);
-  const news = useMemo(() => (showNews ? newsMarks(calendar?.week ?? []) : []), [calendar, showNews]);
+  const allNews = useMemo(() => newsMarks(calendar?.week ?? []), [calendar]);
+  const news = useMemo(() => (showNews ? allNews : []), [allNews, showNews]);
   const [showMl, setShowMl] = usePref("wed.ml", false);
   const [mlThreshold, setMlThreshold] = usePref("wed.mlCut", 0);
   const [mlHot, setMlHot] = useState<string | null>(null);
@@ -472,6 +473,8 @@ export default function App() {
           palette={palette}
           quarters={quarters}
           showQuarters={showQuarters}
+          showNews={showNews}
+          allDetectors={allDetectors}
           toggles={[
             { label: "Mid OBs", checked: showMidOb, onChange: setShowMidOb },
             { label: "HTF", title: "Higher timeframes", checked: showHigherTf, onChange: setShowHigherTf },
@@ -483,7 +486,7 @@ export default function App() {
           onTf={setTf}
           status={status}
           bias={tradeBias}
-          news={news}
+          news={allNews}
           live={live}
           drawings={drawings}
           upcomingNews={upcomingNews}

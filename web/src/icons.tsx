@@ -64,11 +64,27 @@ export const CollapseIcon = (p: IconProps) => (
 );
 
 /** Chart layout: one, two side by side, or a 2×2 grid. */
-export const LayoutIcon = ({ panes, ...p }: IconProps & { panes: 1 | 2 | 4 }) => (
+/** A full screen layout: its columns and rows; `big` keeps the first column whole. */
+export const LayoutIcon = ({ cols, rows, big, ...p }: IconProps & { cols: number; rows: number; big?: boolean }) => {
+  const x = (i: number) => 2 + (12 * i) / cols;
+  const y = (i: number) => 2.5 + (11 * i) / rows;
+  const lines = [
+    ...Array.from({ length: cols - 1 }, (_, i) => `M${x(i + 1)} 2.5v11`),
+    ...Array.from({ length: rows - 1 }, (_, i) => `M${big ? x(1) : 2} ${y(i + 1)}H14`),
+  ];
+  return (
+    <Svg {...p}>
+      <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+      {lines.length > 0 && <path d={lines.join("")} />}
+    </Svg>
+  );
+};
+
+/** Layers: stacked sheets, for a pane's layer menu. */
+export const LayersIcon = (p: IconProps) => (
   <Svg {...p}>
-    <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
-    {panes >= 2 && <path d="M8 2.5v11" />}
-    {panes === 4 && <path d="M2 8h12" />}
+    <path d="M8 2.5l5.5 3L8 8.5 2.5 5.5 8 2.5z" />
+    <path d="M2.5 8.5L8 11.5l5.5-3M2.5 11L8 14l5.5-3" />
   </Svg>
 );
 

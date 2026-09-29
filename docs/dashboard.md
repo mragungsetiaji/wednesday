@@ -66,7 +66,7 @@ them.
 | Keys | Action |
 | --- | --- |
 | `5`, `15`, `1h`, `4h` … then Enter | Switch the focused chart's timeframe (Esc cancels) |
-| Alt+1 … Alt+4 | Focus chart 1 to 4 in full screen (it gets a thin outline; clicking a chart focuses it too) |
+| Alt+1 … Alt+6 | Focus chart 1 to 6 in full screen (it gets a thin outline; clicking a chart focuses it too) |
 | Alt+R | Reset the zoom and scroll to the live candle |
 | Alt+G | Go to a date and time: "last Wednesday 09:30", "yesterday 8pm", "24 Sep 3:15pm", "2026-09-24 14:00" |
 | Alt+H / Alt+T / Alt+B | Horizontal line / trendline / rectangle tool |
@@ -163,24 +163,40 @@ and impact levels and lists what's coming this week.
 
 ## Full screen and multiple charts
 
-The button at the bottom right of the chart opens the charts full screen,
-TradingView style. Pick a layout at the top: **one chart**, **two side by side**
-or **four in a 2 × 2 grid**. Each chart has its own timeframe tabs; the first
-one follows the dashboard's timeframe, the others are remembered in this
-browser, as is the layout. Mid OBs, higher timeframes and quarters switch for
-all charts at once. **Esc** or **Exit** goes back. On a phone the charts stack
-and scroll.
+The button at the bottom right of the chart (or **F**) opens the charts full
+screen, TradingView style. Pick a layout at the top:
 
+- **one chart**, **two side by side**, **three columns** or **three rows**;
+- **one big chart with two or three stacked beside it**, for an execution chart
+  next to its higher timeframes;
+- **four in a 2 × 2 grid**, or **six in 3 columns × 2 rows** for an ultrawide
+  monitor.
+
+Each chart has its own timeframe tabs; the first one follows the dashboard's
+timeframe, the others are remembered in this browser, as is the layout. The
+toggles at the top (Mid OBs, HTF, Swings, Quarters, News) switch for every chart
+at once. **Esc** or **Exit** goes back. On a phone the charts stack and scroll.
+
+- **Per-chart layers**: the layers button at the right of a chart's tabs gives
+  that chart its own detectors, overlays and candle count (more candles for a 4H
+  chart that should show weeks, fewer for a 1M one). It follows the toggles at the
+  top until you change something in it; then a dot marks it, and **Reset to the
+  toggles above** hands it back. Each chart's choices are remembered by its place
+  (chart 1, chart 2 …), so they survive switching layouts as long as the layout
+  still has that chart.
 - **Linked crosshairs**: hovering one chart moves the crosshair of the others to
   the candle that contains the same moment on their timeframe (and the same
   price), and their OHLC and quarter readouts follow. A chart whose candles
   don't reach back that far just hides its crosshair.
-- **Resizable panes**: drag the line between charts. With four charts there is
-  one line for the columns and one for the rows. Arrow keys move a focused line
-  (Shift for bigger steps), double-click puts it back in the middle. The sizes
-  are remembered.
+- **Resizable panes**: drag a line between charts; each line moves only the two
+  charts beside it. Arrow keys move a focused line (Shift for bigger steps), and
+  double-click shares the two evenly. Every layout remembers its own sizes.
 
-![Four charts: 30M, 15M, 4H and 5M, crosshairs linked](images/fullscreen-4.png)
+![Four charts: 1H, 4H, 5M and 30M, crosshairs linked](images/fullscreen-4.png)
+
+![One big 15M chart with 4H and 5M stacked beside it; the 4H chart's own layers hide its order blocks and quarters](images/fullscreen-1plus2.png)
+
+![Six charts, 3 columns × 2 rows](images/fullscreen-6.png)
 
 ![Two charts side by side, light theme](images/fullscreen-2.png)
 

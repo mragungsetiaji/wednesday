@@ -636,7 +636,8 @@ p {
   position: relative;
   flex: none;
 }
-.scale-pop {
+.scale-pop,
+.chart-pop {
   position: absolute;
   inset-inline-end: 0;
   inset-block-end: calc(100% + 4px);
@@ -658,7 +659,57 @@ p {
   border: 0;
   min-inline-size: 0;
 }
-.scale-pop hr {
+.pane-layers-pop {
+  inset-block-end: auto;
+  inset-block-start: calc(100% + 4px);
+  min-width: 220px;
+}
+.pane-layers-pop .field-hint {
+  margin: var(--s1) var(--s1) 0;
+  max-width: 220px;
+}
+.pane-lookback {
+  justify-content: space-between;
+}
+.pane-lookback select {
+  font: inherit;
+}
+.pane-layers {
+  position: relative;
+  margin-inline-start: auto;
+  flex: none;
+}
+.pane-layers-btn {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.pane-layers-btn:hover,
+.pane-layers-btn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+.pane-layers-btn.is-on {
+  color: var(--accent);
+}
+.pane-layers-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.scale-pop hr,
+.chart-pop hr {
   width: 100%;
   margin: var(--s1) 0;
   border: 0;
@@ -972,21 +1023,20 @@ p {
 
 /* 1px of --line between panes, like TradingView's split layouts. */
 .focus-grid {
-  --split-x: 0.5;
-  --split-y: 0.5;
+  --cols: minmax(0, 1fr);
+  --rows: minmax(0, 1fr);
   position: relative;
   flex: 1;
   min-height: 0;
   display: grid;
+  grid-template-columns: var(--cols);
+  grid-template-rows: var(--rows);
   gap: 1px;
   background: var(--line);
 }
-.focus-grid.layout-2 {
-  grid-template-columns: minmax(0, calc(var(--split-x) * 100%)) minmax(0, 1fr);
-}
-.focus-grid.layout-4 {
-  grid-template-columns: minmax(0, calc(var(--split-x) * 100%)) minmax(0, 1fr);
-  grid-template-rows: minmax(0, calc(var(--split-y) * 100%)) minmax(0, 1fr);
+.focus-grid > .pane {
+  grid-column: var(--col, auto);
+  grid-row: var(--row, auto) / span var(--row-span, 1);
 }
 
 /* Drag handles over the 1px lines between panes: a wide hit area, the line lights up on hover. */
@@ -1005,7 +1055,7 @@ p {
 .splitter-x {
   top: 0;
   bottom: 0;
-  left: calc(var(--split-x) * 100% - 4px);
+  left: calc(var(--at) * 100% - 4px);
   width: 9px;
   cursor: col-resize;
 }
@@ -1016,9 +1066,9 @@ p {
   width: 3px;
 }
 .splitter-y {
-  left: 0;
+  left: calc(var(--from, 0) * 100%);
   right: 0;
-  top: calc(var(--split-y) * 100% - 4px);
+  top: calc(var(--at) * 100% - 4px);
   height: 9px;
   cursor: row-resize;
 }
@@ -1836,11 +1886,14 @@ p {
   .focus-grid {
     overflow-y: auto;
   }
-  .focus-grid.layout-2,
-  .focus-grid.layout-4 {
+  .focus-grid.is-split {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
     grid-auto-rows: minmax(360px, 1fr);
+  }
+  .focus-grid.is-split > .pane {
+    grid-column: auto;
+    grid-row: auto;
   }
   .splitter {
     display: none;

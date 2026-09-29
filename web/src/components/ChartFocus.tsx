@@ -1,17 +1,18 @@
 import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import type { CalendarEvent, QuartersResponse, Scan, TradeBias } from "../api";
+import type { CalendarEvent, DetectorInfo, QuartersResponse, Scan, TradeBias } from "../api";
 import type { NewsMark } from "../newsPrimitive";
 import type { LayerOptions } from "../chartData";
 import { CrosshairBus } from "../crosshairSync";
 import { CollapseIcon, LayoutIcon } from "../icons";
 import type { LiveFeed } from "../liveData";
+import { boundaries, LAYOUTS, layoutOf, moveBoundary, paneCells, paneCount, sizesFor, template, type LayoutId, type Sizes } from "../focusLayouts";
 import { usePref } from "../prefs";
 import type { RailItem } from "../rail";
 import type { ChartPalette } from "../theme";
 import { BiasPill } from "./BiasPill";
 import { ChartKeys } from "./ChartKeys";
-import { ChartPane } from "./ChartPane";
+import { ChartPane, type PaneLayers } from "./ChartPane";
 import { ChartMarket, type ChartNav } from "./PriceChart";
 import { DrawingStyleBar } from "./DrawingStyleBar";
 import { DrawingToolbar } from "./DrawingToolbar";
@@ -19,54 +20,44 @@ import type { Drawings } from "../drawingsData";
 import { NewsAlert } from "./NewsAlert";
 import { LiveTickerPrice } from "./TickerPrice";
 
-type Layout = 1 | 2 | 4;
-const LAYOUTS: { panes: Layout; title: string }[] = [
-  { panes: 1, title: "One chart" },
-  { panes: 2, title: "Two charts, side by side" },
-  { panes: 4, title: "Four charts, 2 × 2" },
-];
-const DEFAULT_TFS = ["1H", "15M", "4H", "5M"];
-const MIN_SPLIT = 0.15;
-const clampSplit = (v: number) => Math.min(1 - MIN_SPLIT, Math.max(MIN_SPLIT, v));
-
-interface Split {
-  x: number; // share of the width taken by the left column
-  y: number; // share of the height taken by the top row (2 × 2 only)
-}
+const DEFAULT_TFS = ["1H", "15M", "4H", "5M", "30M", "4H"];
 
 /**
- * A draggable line between panes. Arrow keys move it too; double-click
- * puts it back in the middle.
+ * A draggable line between two tracks, at `value` (a share of the grid from its start). Arrow
+ * keys move it too; double-click shares the two tracks evenly. `from` insets it along its
+ * length (a row line beside the big pane starts after that pane).
  */
-function Splitter({ axis, value, onChange, onDone }: {
+function Splitter({ axis, value, from = 0, label, onChange, onDone, onReset }: {
   axis: "x" | "y";
   value: number;
+  from?: number;
+  label: string;
   onChange: (v: number) => void;
-  onDone: (v: number) => void;
+  onDone: () => void;
+  onReset: () => void;
 }) {
   const [dragging, setDragging] = useState(false);
-  const last = useRef(value);
-  last.current = value;
   const at = (e: React.PointerEvent) => {
     const grid = (e.currentTarget as HTMLElement).parentElement!.getBoundingClientRect();
-    return clampSplit(axis === "x" ? (e.clientX - grid.left) / grid.width : (e.clientY - grid.top) / grid.height);
+    return axis === "x" ? (e.clientX - grid.left) / grid.width : (e.clientY - grid.top) / grid.height;
   };
   const step = (d: number) => {
-    const v = clampSplit(value + d);
-    onChange(v);
-    onDone(v);
+    onChange(value + d);
+    onDone();
   };
+  const style = { "--at": value, "--from": from } as CSSProperties;
   return (
     <div
       className={`splitter splitter-${axis}${dragging ? " is-dragging" : ""}`}
+      style={style}
       role="separator"
       aria-orientation={axis === "x" ? "vertical" : "horizontal"}
-      aria-label={axis === "x" ? "Resize columns" : "Resize rows"}
-      aria-valuemin={MIN_SPLIT * 100}
-      aria-valuemax={(1 - MIN_SPLIT) * 100}
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={100}
       aria-valuenow={Math.round(value * 100)}
       tabIndex={0}
-      title="Drag to resize, double-click to reset"
+      title="Drag to resize, double-click to share evenly"
       onPointerDown={(e) => {
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -77,9 +68,9 @@ function Splitter({ axis, value, onChange, onDone }: {
         if (!dragging) return;
         e.currentTarget.releasePointerCapture(e.pointerId);
         setDragging(false);
-        onDone(last.current);
+        onDone();
       }}
-      onDoubleClick={() => step(0.5 - value)}
+      onDoubleClick={onReset}
       onKeyDown={(e) => {
         const back = axis === "x" ? "ArrowLeft" : "ArrowUp";
         const fwd = axis === "x" ? "ArrowRight" : "ArrowDown";
@@ -110,12 +101,14 @@ interface Props {
   palette: ChartPalette;
   quarters: QuartersResponse | null;
   showQuarters: boolean;
+  showNews: boolean;
+  allDetectors: DetectorInfo[];
   toggles: Toggle[];
   tf: string; // the first chart follows the dashboard's timeframe
   onTf: (tf: string) => void;
   status: { cls: string; text: string };
   bias: TradeBias | null;
-  news: NewsMark[];
+  news: NewsMark[]; // every high-impact release, whether the News toggle is on or not
   live: LiveFeed | null; // live ticks
   drawings: Drawings;
   upcomingNews: CalendarEvent[];
@@ -123,16 +116,24 @@ interface Props {
 }
 
 /**
- * Full-screen charts, TradingView style: one, two side by side or four in a
- * grid, each with its own timeframe. Uses the browser's full screen when it is
- * allowed; leaving it (Esc) closes the view.
+ * Full-screen charts, TradingView style: one to six charts in a grid (columns, rows, 2 × 2,
+ * 3 × 2, or a big chart with two or three stacked beside it), each with its own timeframe and,
+ * if you like, its own layers. Uses the browser's full screen when it is allowed; leaving it
+ * (Esc) closes the view.
  */
-export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, toggles, tf, onTf, status, bias, news, live, drawings, upcomingNews, onClose }: Props) {
+export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, showNews, allDetectors, toggles, tf, onTf, status, bias, news, live, drawings, upcomingNews, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const [layout, setLayout] = usePref<Layout>("wed.focusLayout", 2);
+  const [savedLayout, setLayoutId] = usePref<LayoutId | number>("wed.focusLayout", "2"); // 1 / 2 / 4 before more layouts
+  const spec = layoutOf(savedLayout);
+  const layout = paneCount(spec);
   const [tfs, setTfs] = usePref<string[]>("wed.focusTfs", DEFAULT_TFS);
-  const [savedSplit, saveSplit] = usePref<Split>("wed.focusSplit", { x: 0.5, y: 0.5 });
-  const [split, setSplit] = useState<Split>(savedSplit); // follows the drag; saved when it ends
+  // Track sizes per layout. The old one split (2 and 2 × 2) seeds those two.
+  const [oldSplit] = usePref<{ x: number; y: number } | null>("wed.focusSplit", null);
+  const [savedSizes, saveSizes] = usePref<Partial<Record<LayoutId, Sizes>>>("wed.focusSizes",
+    oldSplit ? { "2": { cols: [oldSplit.x, 1 - oldSplit.x], rows: [1] }, "4": { cols: [oldSplit.x, 1 - oldSplit.x], rows: [oldSplit.y, 1 - oldSplit.y] } } : {});
+  const [dragSizes, setDragSizes] = useState<Sizes | null>(null); // follows a drag; saved when it ends
+  const sizes = dragSizes ?? sizesFor(spec, savedSizes);
+  const [paneLayers, setPaneLayers] = usePref<Record<number, PaneLayers>>("wed.focusPaneLayers", {});
   const bus = useMemo(() => new CrosshairBus(), []);
   const [focused, setFocused] = useState(0); // the pane the keyboard shortcuts act on
   const navs = useRef<(ChartNav | null)[]>([]);
@@ -167,6 +168,21 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
     if (i === 0) onTf(value);
     else setTfs(DEFAULT_TFS.map((d, j) => (j === i ? value : tfs[j] ?? d)));
   };
+  const cells = paneCells(spec);
+  const resize = (axis: "cols" | "rows", i: number, at: number) =>
+    setDragSizes({ ...sizes, [axis]: moveBoundary(sizes[axis], i, at) });
+  const saveDrag = () => {
+    if (dragSizes) saveSizes({ ...savedSizes, [spec.id]: dragSizes });
+    setDragSizes(null);
+  };
+  const even = (axis: "cols" | "rows", i: number) => {
+    const shares = sizes[axis];
+    const half = (shares[i] + shares[i + 1]) / 2;
+    const next = { ...sizes, [axis]: shares.map((v, j) => (j === i || j === i + 1 ? half : v)) };
+    saveSizes({ ...savedSizes, [spec.id]: next });
+  };
+  // A row line beside the big pane starts after it, at the first column line.
+  const rowFrom = spec.big ? boundaries(sizes.cols)[0] : 0;
   const known = timeframes.length ? timeframes : ["4H", "1H", "30M", "15M", "5M"];
 
   return (
@@ -186,9 +202,9 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
           <DrawingToolbar ctl={drawings} row />
           <div className="segmented" role="group" aria-label="Layout">
             {LAYOUTS.map((l) => (
-              <button key={l.panes} type="button" className="seg" aria-pressed={layout === l.panes} title={l.title} aria-label={l.title}
-                onClick={() => setLayout(l.panes)}>
-                <LayoutIcon panes={l.panes} size={15} />
+              <button key={l.id} type="button" className="seg" aria-pressed={spec.id === l.id} title={l.title} aria-label={l.title}
+                onClick={() => setLayoutId(l.id)}>
+                <LayoutIcon cols={l.cols} rows={l.rows} big={l.big} size={15} />
               </button>
             ))}
           </div>
@@ -205,22 +221,27 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
           </button>
         </div>
       </header>
-      <div className={`focus-grid layout-${layout}${layout > 1 ? " has-focus" : ""}`}
-        style={{ "--split-x": split.x, "--split-y": split.y } as CSSProperties}>
-        {Array.from({ length: layout }, (_, i) => (
+      <div className={`focus-grid${layout > 1 ? " is-split has-focus" : ""}`}
+        style={{ "--cols": template(sizes.cols), "--rows": template(sizes.rows) } as CSSProperties}>
+        {cells.map((c, i) => (
           <ChartPane key={i} label={`Chart ${i + 1}`} tf={paneTf(i)} onTf={(v) => setPaneTf(i, v)} timeframes={known}
             scan={scan} version={version} lookback={lookback} rail={rail} layers={layers} palette={palette}
-            quarters={quarters} showQuarters={showQuarters} sync={{ bus, id: i }} news={news} live={live} drawings={drawings}
+            quarters={quarters} showQuarters={showQuarters} showNews={showNews} allDetectors={allDetectors}
+            own={paneLayers[i]} onOwn={(o) => {
+              const { [i]: _old, ...rest } = paneLayers;
+              setPaneLayers(Object.keys(o).length ? { ...rest, [i]: o } : rest);
+            }}
+            cell={c} sync={{ bus, id: i }} news={news} live={live} drawings={drawings}
             nav={(h) => { navs.current[i] = h; }} focused={i === pane} onFocus={() => setFocused(i)} />
         ))}
-        {layout > 1 && (
-          <Splitter axis="x" value={split.x} onChange={(x) => setSplit((s) => ({ ...s, x }))}
-            onDone={(x) => saveSplit({ ...split, x })} />
-        )}
-        {layout === 4 && (
-          <Splitter axis="y" value={split.y} onChange={(y) => setSplit((s) => ({ ...s, y }))}
-            onDone={(y) => saveSplit({ ...split, y })} />
-        )}
+        {boundaries(sizes.cols).map((at, i) => (
+          <Splitter key={`x${i}`} axis="x" value={at} label="Resize columns" onChange={(v) => resize("cols", i, v)}
+            onDone={saveDrag} onReset={() => even("cols", i)} />
+        ))}
+        {boundaries(sizes.rows).map((at, i) => (
+          <Splitter key={`y${i}`} axis="y" value={at} from={rowFrom} label="Resize rows" onChange={(v) => resize("rows", i, v)}
+            onDone={saveDrag} onReset={() => even("rows", i)} />
+        ))}
       </div>
       <DrawingStyleBar ctl={drawings} />
       <NewsAlert events={upcomingNews} />

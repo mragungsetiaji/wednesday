@@ -11,7 +11,7 @@ export interface Shortcut {
 
 export const SHORTCUTS: Shortcut[] = [
   { keys: "5, 15, 1h, 4h … then Enter", action: "Switch the focused chart's timeframe" },
-  { keys: "Alt+1 … Alt+4", action: "Focus chart 1 to 4", where: "Full screen" },
+  { keys: "Alt+1 … Alt+6", action: "Focus chart 1 to 6", where: "Full screen" },
   { keys: "Alt+R", action: "Reset the zoom and scroll to the live candle" },
   { keys: "Alt+G", action: "Go to a date and time (New York or feed clock)" },
   { keys: "Alt+H", action: "Horizontal line tool" },
