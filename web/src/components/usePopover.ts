@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 
-/** A small menu's open state: a press outside or Esc closes it (Esc returns focus to its button). */
+/**
+ * A small menu's open state: a press outside or Esc closes it (Esc returns focus to its button).
+ * `popRef` is for a menu rendered elsewhere (a portal): presses in it don't count as outside.
+ */
 export function usePopover<T extends HTMLElement>() {
   const [open, setOpen] = useState(false);
   const ref = useRef<T>(null);
+  const popRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !popRef.current?.contains(t)) setOpen(false);
     };
     const esc = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -23,5 +28,5 @@ export function usePopover<T extends HTMLElement>() {
       document.removeEventListener("keydown", esc, true);
     };
   }, [open]);
-  return { open, setOpen, ref };
+  return { open, setOpen, ref, popRef };
 }

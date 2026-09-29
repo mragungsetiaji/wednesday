@@ -393,8 +393,9 @@ export interface AlertRow {
   entry: number;
   price: number;
   sent_at: string;
-  status: "sent" | "failed";
+  status: "sent" | "failed" | "logged"; // logged: a drawing alert that fired without Telegram set up
   error: string | null;
+  summary?: string | null; // drawing alerts: what happened
 }
 
 export interface AlertsResponse {
@@ -450,8 +451,30 @@ export interface Drawing {
   updated_at?: string;
 }
 
+export type AlertCondition = "cross_up" | "cross_down" | "cross" | "enter" | "exit";
+
+/** A price alert on a line, trendline or rectangle, checked by the server on closed M1 bars. */
+export interface DrawingAlert {
+  drawing_id: string;
+  condition: AlertCondition;
+  mode: "once" | "every"; // once: fires then turns off until re-armed
+  note: string | null;
+  expires_at: string | null; // ISO UTC
+  intrabar: boolean; // also on the live tick
+  armed: boolean;
+  armed_bar: number | null;
+  fired_at: string | null;
+  fired_price: number | null;
+  fires: number;
+  created_at: string;
+}
+export type DrawingAlertInput = Pick<DrawingAlert, "condition" | "mode" | "note" | "expires_at" | "intrabar">;
+
 export const fetchDrawings = () =>
-  getJson<{ source: string; symbol: string; drawings: Drawing[] }>("/api/drawings");
+  getJson<{ source: string; symbol: string; drawings: Drawing[]; alerts: DrawingAlert[] }>("/api/drawings");
+export const fetchDrawingAlerts = () => getJson<{ alerts: DrawingAlert[] }>("/api/drawings/alerts");
+export const putDrawingAlert = (id: string, a: DrawingAlertInput) => send<DrawingAlert>("PUT", `/api/drawings/${id}/alert`, a);
+export const deleteDrawingAlert = (id: string) => send<{ deleted: string }>("DELETE", `/api/drawings/${id}/alert`);
 export const putDrawing = (d: Drawing) => send<Drawing>("PUT", `/api/drawings/${d.id}`, d);
 export const deleteDrawing = (id: string) => send<{ deleted: string }>("DELETE", `/api/drawings/${id}`);
 

@@ -17,6 +17,7 @@ import pandas as pd
 
 from .llm_usage import UsageLog
 from .bias import BIAS_KEY, TradeBias, active
+from .drawing_alerts import DrawingAlerts
 from .feeds import DataFeed, M1Buffer, build_feed
 from .plugins import Hooks
 from .scanner import ScanConfig, ScanResult, scan
@@ -72,6 +73,7 @@ class Engine:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._tasks: queue.Queue = queue.Queue()  # work that must run on the feed's thread (see call)
+        self.on_tick = None  # called with (price, time) after each live price, outside the state lock
 
     def _record_error(self, exc: Exception) -> None:
         with self.state.lock:
@@ -133,6 +135,11 @@ class Engine:
                 bar = {"time": minute, "open": price, "high": price, "low": price, "close": price}
             self.state.live = {"price": price, "time": at, "bar": bar}
             self.state.tick += 1
+        if self.on_tick is not None:
+            try:
+                self.on_tick(price, at)
+            except Exception:  # noqa: BLE001 - a tick listener must never stop the feed
+                log.exception("tick listener failed")
 
     def snapshot(self) -> tuple[int, ScanResult | None, pd.DataFrame | None]:
         with self.state.lock:
@@ -268,6 +275,7 @@ class Runtime:
         self.delay = delay
         self.on_result = on_result
         self.alerts = alerts  # AlertManager or None
+        self.drawing_alerts = DrawingAlerts(store) if store else None  # alerts on the trader's drawings
         self.brief = brief  # BriefRunner or None
         # LLM usage log and budget, shared by the brief and plugins' LLM features.
         self.usage = brief.usage if brief is not None else UsageLog(store)
@@ -283,8 +291,10 @@ class Runtime:
 
     def _build(self, settings: DataSettings) -> Engine:
         feed = build_feed(settings, self.mt5_password_for(settings)[0])
-        return Engine(feed, self.cfg, settings.resolved_symbol, self.store, tick_seconds=settings.resolved_tick,
-                      poll=self.poll)
+        engine = Engine(feed, self.cfg, settings.resolved_symbol, self.store, tick_seconds=settings.resolved_tick,
+                        poll=self.poll)
+        engine.on_tick = lambda price, at: self._on_tick(engine, price, at)
+        return engine
 
     def mt5_password_for(self, settings: DataSettings) -> tuple[str | None, str | None]:
         """The MT5 password for the settings' account and where it came from: saved, session or env."""
@@ -335,9 +345,23 @@ class Runtime:
                 log.exception("alert check failed")
             else:
                 self.hooks.run_on_alert(sent, result)
+        if self.drawing_alerts is not None:
+            try:
+                self.drawing_alerts.check(self.settings.source, engine.symbol, engine.state.m1, self.telegram_send())
+            except Exception:  # noqa: BLE001 - never stop scanning over an alert
+                log.exception("drawing alert check failed")
         self.hooks.run_after_scan(result, engine)
         if self.on_result:
             self.on_result(result)
+
+    def telegram_send(self):
+        """Telegram's send when alerts are set up and on; None otherwise (drawing alerts are then only logged)."""
+        a = self.alerts
+        return a.client.send if a is not None and a.configured and a.settings.enabled else None
+
+    def _on_tick(self, engine: Engine, price: float, at) -> None:
+        if self.drawing_alerts is not None and engine is self.engine:
+            self.drawing_alerts.check_tick(self.settings.source, engine.symbol, price, at, self.telegram_send())
 
     def start(self) -> None:
         self.engine.start(self.delay, self._after_scan)

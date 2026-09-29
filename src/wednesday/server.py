@@ -26,6 +26,7 @@ from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .llm_usage import BudgetExceeded
 from .news import CALENDAR_KEY, CalendarSettings
 from .drawings import clean_drawing, drawing_payload
+from .drawing_alerts import clean_alert
 from .engine import RECONNECT_ATTEMPTS, Engine, Runtime
 from .lab.api import lab_router
 from .journal.api import journal_router
@@ -209,10 +210,51 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             raise HTTPException(409, "Drawings need a database")
         return store
 
+    def drawings_changed() -> None:
+        if runtime and runtime.drawing_alerts:
+            runtime.drawing_alerts.invalidate()
+
+    def alert_payload(row: dict) -> dict:
+        return {k: v for k, v in row.items() if k not in ("source", "symbol")}
+
     @app.get("/api/drawings")
     def get_drawings() -> dict:
-        rows = drawing_store().drawings(current_source(), current().symbol)
-        return {"source": current_source(), "symbol": current().symbol, "drawings": [drawing_payload(r) for r in rows]}
+        store = drawing_store()
+        rows = store.drawings(current_source(), current().symbol)
+        alerts = store.drawing_alerts(current_source(), current().symbol)
+        return {"source": current_source(), "symbol": current().symbol, "drawings": [drawing_payload(r) for r in rows],
+                "alerts": [alert_payload(a) for a in alerts]}
+
+    @app.get("/api/drawings/alerts")
+    def get_drawing_alerts() -> dict:
+        """Just the alerts, polled after each scan so a fired one greys out on the chart."""
+        alerts = drawing_store().drawing_alerts(current_source(), current().symbol)
+        return {"alerts": [alert_payload(a) for a in alerts]}
+
+    @app.put("/api/drawings/{drawing_id}/alert")
+    def put_drawing_alert(drawing_id: str, body: dict = Body(...)) -> dict:
+        """Set (or re-arm) a drawing's alert: only closed bars from now on count."""
+        store = drawing_store()
+        drawing = next((d for d in store.drawings(current_source(), current().symbol) if d["id"] == drawing_id), None)
+        if drawing is None:
+            raise HTTPException(404, "No such drawing: save it first")
+        _, _, m1 = current().snapshot()
+        armed_bar = int(m1.index[-1].timestamp()) if m1 is not None and len(m1) else None
+        try:
+            row = clean_alert(drawing["kind"], body, armed_bar)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        row = {"drawing_id": drawing_id, "source": current_source(), "symbol": current().symbol, **row}
+        store.drawing_alert_put(row)
+        drawings_changed()
+        return alert_payload(row)
+
+    @app.delete("/api/drawings/{drawing_id}/alert")
+    def delete_drawing_alert(drawing_id: str) -> dict:
+        if not drawing_store().drawing_alert_delete(drawing_id, current_source(), current().symbol):
+            raise HTTPException(404, "That drawing has no alert")
+        drawings_changed()
+        return {"deleted": drawing_id}
 
     @app.put("/api/drawings/{drawing_id}")
     def put_drawing(drawing_id: str, body: dict = Body(...)) -> dict:
@@ -221,12 +263,14 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
         drawing_store().drawing_put({**row, "source": current_source(), "symbol": current().symbol})
+        drawings_changed()  # a moved drawing moves its alert
         return row
 
     @app.delete("/api/drawings/{drawing_id}")
     def delete_drawing(drawing_id: str) -> dict:
         if not drawing_store().drawing_delete(drawing_id, current_source(), current().symbol):
             raise HTTPException(404, "No such drawing")
+        drawings_changed()
         return {"deleted": drawing_id}
 
     @app.get("/api/candles")
@@ -564,7 +608,8 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             "chat_id_set": bool(client and client.chat_id),
             "configured": bool(alerts and alerts.configured),
             "settings": alerts.settings.to_dict() if alerts else None,
-            "last_error": alerts.last_error if alerts else None,
+            "last_error": (alerts.last_error if alerts else None) or (runtime.drawing_alerts.last_error
+                                                                  if runtime and runtime.drawing_alerts else None),
             "recent": store.recent_alerts(20) if store else [],
         }
 

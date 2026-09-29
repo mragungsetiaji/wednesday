@@ -1,6 +1,6 @@
 import type { IChartApi, ISeriesApi, Logical, SeriesType } from "lightweight-charts";
 
-import type { Candle, Drawing, DrawingKind, DrawingPoint, Sizing } from "./api";
+import type { Candle, Drawing, DrawingAlert, DrawingKind, DrawingPoint, Sizing } from "./api";
 import { logicalOfTime, timeOfLogical } from "./timeMap.ts";
 
 export type DrawTool = "cursor" | DrawingKind;
@@ -18,7 +18,22 @@ export interface DrawingCtl {
   remove: (id: string) => void;
   sizing: Sizing | null; // lot size and money at risk on positions; null without Settings > Risk
   editText: (id: string) => void; // select a text drawing and put the cursor in its text field
+  alerts: Record<string, DrawingAlert>; // by drawing id
 }
+
+/**
+ * Right-clicking a drawing asks for its alert form. The style bar that holds the form may not
+ * be on screen yet (the drawing is only now selected), so the request waits here too.
+ */
+export const OPEN_DRAWING_ALERT = "wed:drawing-alert";
+export const alertFormRequest: { id: string | null } = { id: null };
+export function requestAlertForm(id: string) {
+  alertFormRequest.id = id;
+  window.dispatchEvent(new CustomEvent(OPEN_DRAWING_ALERT, { detail: id }));
+}
+
+/** The drawings that can carry a price alert. */
+export const canAlert = (d: Drawing) => d.kind === "hline" || d.kind === "trendline" || d.kind === "rect";
 
 export const newId = (): string =>
   typeof crypto !== "undefined" && "randomUUID" in crypto

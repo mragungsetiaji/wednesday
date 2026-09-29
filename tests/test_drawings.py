@@ -93,7 +93,7 @@ def test_store_keeps_drawings_per_source_and_symbol(store):
 
 def test_drawings_api(store, tmp_path):
     client = app_for(store, tmp_path)
-    assert client.get("/api/drawings").json() == {"source": "synthetic", "symbol": "XAUUSD", "drawings": []}
+    assert client.get("/api/drawings").json() == {"source": "synthetic", "symbol": "XAUUSD", "drawings": [], "alerts": []}
     saved = client.put(f"/api/drawings/{ID}", json=LINE).json()
     assert saved["id"] == ID and saved["kind"] == "trendline"
     [listed] = client.get("/api/drawings").json()["drawings"]

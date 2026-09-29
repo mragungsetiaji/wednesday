@@ -71,8 +71,9 @@ alerts_table = Table(
     Column("entry", Float, nullable=False),
     Column("price", Float, nullable=False),
     Column("sent_at", String(40), nullable=False),  # ISO UTC
-    Column("status", String(16), nullable=False),  # "sent" or "failed"
+    Column("status", String(16), nullable=False),  # "sent", "failed" or (no Telegram set up) "logged"
     Column("error", Text, nullable=True),
+    Column("summary", Text, nullable=True),  # drawing alerts: what happened, e.g. "Crossed above your line 'Asia high'"
 )
 
 
@@ -262,6 +263,28 @@ drawings_table = Table(
 )
 _DRAWING_JSON = ("points", "style", "props", "timeframes")
 
+# A price alert on a drawing (see drawing_alerts.py): one per drawing, kept apart from the
+# drawing so saving a moved drawing never re-arms or resets it.
+drawing_alerts_table = Table(
+    "drawing_alerts",
+    metadata,
+    Column("drawing_id", String(36), primary_key=True),
+    Column("source", String(32), nullable=False),
+    Column("symbol", String(64), nullable=False),
+    Column("condition", String(16), nullable=False),  # cross_up, cross_down, cross, enter, exit
+    Column("mode", String(8), nullable=False),  # once or every
+    Column("note", Text, nullable=True),
+    Column("expires_at", String(40), nullable=True),  # ISO UTC
+    Column("intrabar", Boolean, nullable=False, default=False),
+    Column("armed", Boolean, nullable=False, default=True),
+    Column("armed_bar", BigInteger, nullable=True),  # only closed M1 bars after this one (feed-clock unix) count
+    Column("fired_at", String(40), nullable=True),
+    Column("fired_price", Float, nullable=True),
+    Column("fires", Integer, nullable=False, default=0),
+    Column("created_at", String(40), nullable=False),
+    Index("ix_drawing_alerts_source_symbol", "source", "symbol"),
+)
+
 
 class Store:
     def __init__(self, url: str = DEFAULT_DB_URL):
@@ -443,6 +466,12 @@ class Store:
             row = conn.execute(select(t.c.status).where(t.c.key == key)).first()
         return bool(row and row[0] == "sent")
 
+    def alert_logged(self, key: str) -> bool:
+        """Whether this key was logged at all, sent or not (drawing alerts never retry an old bar)."""
+        t = alerts_table
+        with self.engine.connect() as conn:
+            return conn.execute(select(t.c.key).where(t.c.key == key)).first() is not None
+
     def log_alert(self, row: dict) -> None:
         self._upsert(alerts_table, [row], ["key"])
 
@@ -544,6 +573,25 @@ class Store:
         t = drawings_table
         with self.engine.begin() as conn:
             cond = (t.c.id == drawing_id, t.c.source == source, t.c.symbol == symbol)
+            return conn.execute(t.delete().where(*cond)).rowcount > 0
+
+    def drawing_alerts(self, source: str, symbol: str) -> list[dict]:
+        t = drawing_alerts_table
+        with self.engine.connect() as conn:
+            return [dict(r._mapping) for r in conn.execute(select(t).where(t.c.source == source, t.c.symbol == symbol))]
+
+    def drawing_alert_put(self, row: dict) -> None:
+        self._upsert(drawing_alerts_table, [row], ["drawing_id"])
+
+    def drawing_alert_update(self, drawing_id: str, values: dict) -> None:
+        t = drawing_alerts_table
+        with self.engine.begin() as conn:
+            conn.execute(t.update().where(t.c.drawing_id == drawing_id).values(**values))
+
+    def drawing_alert_delete(self, drawing_id: str, source: str, symbol: str) -> bool:
+        t = drawing_alerts_table
+        with self.engine.begin() as conn:
+            cond = (t.c.drawing_id == drawing_id, t.c.source == source, t.c.symbol == symbol)
             return conn.execute(t.delete().where(*cond)).rowcount > 0
 
     # ---- journal --------------------------------------------------------

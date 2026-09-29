@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { deleteDrawing, fetchDrawings, putDrawing, type Drawing, type Sizing } from "./api";
+import {
+  deleteDrawing,
+  deleteDrawingAlert,
+  fetchDrawingAlerts,
+  fetchDrawings,
+  putDrawing,
+  putDrawingAlert,
+  type Drawing,
+  type DrawingAlert,
+  type DrawingAlertInput,
+  type Sizing,
+} from "./api";
 import type { DrawingCtl, DrawTool } from "./drawings";
 import { usePref } from "./prefs";
 
@@ -24,7 +35,11 @@ export type Drawings = DrawingCtl & {
   canUndo: boolean;
   canRedo: boolean;
   textFocus: number; // bumps when a text drawing's field should take the cursor
+  setAlert: (id: string, a: DrawingAlertInput) => Promise<void>; // set or re-arm
+  removeAlert: (id: string) => Promise<void>;
 };
+
+const byDrawing = (xs: DrawingAlert[]) => Object.fromEntries(xs.map((a) => [a.drawing_id, a]));
 
 /**
  * The chart drawings of the running source and symbol, shared by every chart on screen.
@@ -35,8 +50,9 @@ export type Drawings = DrawingCtl & {
  * takes Esc), Delete removes the selected drawing, Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or
  * Ctrl+Y redoes.
  */
-export function useDrawings(source: string | undefined, symbol: string | undefined, sizing: Sizing | null): Drawings {
+export function useDrawings(source: string | undefined, symbol: string | undefined, sizing: Sizing | null, version = 0): Drawings {
   const [items, setItems] = useState<Drawing[]>([]);
+  const [alerts, setAlerts] = useState<Record<string, DrawingAlert>>({});
   const [available, setAvailable] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tool, setTool] = useState<DrawTool>("cursor");
@@ -54,10 +70,12 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
     fetchDrawings()
       .then((r) => {
         setItems(r.drawings);
+        setAlerts(byDrawing(r.alerts ?? []));
         setAvailable(true);
       })
       .catch((e) => {
         setItems([]);
+        setAlerts({});
         setAvailable(!String(e).includes("database"));
       });
   }, []);
@@ -70,6 +88,21 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
     setHistoryVersion((v) => v + 1);
     reload();
   }, [source, symbol, reload]);
+
+  // After each scan: an alert that fired greys out.
+  useEffect(() => {
+    if (!version || !source) return;
+    fetchDrawingAlerts().then((r) => setAlerts(byDrawing(r.alerts))).catch(() => {});
+  }, [version, source]);
+
+  const setAlert = useCallback(async (id: string, a: DrawingAlertInput) => {
+    const saved = await putDrawingAlert(id, a);
+    setAlerts((xs) => ({ ...xs, [id]: saved }));
+  }, []);
+  const removeAlert = useCallback(async (id: string) => {
+    await deleteDrawingAlert(id);
+    setAlerts(({ [id]: _gone, ...rest }) => rest);
+  }, []);
 
   const failed = useCallback((what: string) => (e: unknown) => {
     setError(`Couldn't ${what} the drawing: ${e instanceof Error ? e.message : e}`);
@@ -173,7 +206,7 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
   const canRedo = history.current.redo.length > 0;
   return useMemo(() => ({
     items, hidden, tool, setTool, selected, select, create, change, remove, available, error,
-    setHidden, sizing, editText, undo, redo, canUndo, canRedo, textFocus,
+    setHidden, sizing, editText, undo, redo, canUndo, canRedo, textFocus, alerts, setAlert, removeAlert,
   }), [items, hidden, tool, selected, create, change, remove, available, error, setHidden, sizing, editText, undo, redo,
-    canUndo, canRedo, textFocus]);
+    canUndo, canRedo, textFocus, alerts, setAlert, removeAlert]);
 }

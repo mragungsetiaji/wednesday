@@ -105,7 +105,7 @@ export function AlertsSettings() {
     <form className="settings-form" onSubmit={save} aria-labelledby="alerts-h">
       <div className="settings-intro">
         <h2 id="alerts-h">Telegram alerts</h2>
-        <p>A message when price trades into an active order block, with the limit entry and stop. Each order block alerts once.</p>
+        <p>A message when price trades into an active order block, with the limit entry and stop (each order block alerts once), or when it crosses a line or enters a zone you set an alert on: select the drawing on the chart and press the bell.</p>
       </div>
 
       <fieldset className="fields" disabled={locked}>
@@ -204,13 +204,13 @@ export function AlertsSettings() {
       <div>
         <h3 className="subhead">Recent alerts</h3>
         {data.recent.length === 0 ? (
-          <p className="empty">None yet. Alerts appear here as they are sent.</p>
+          <p className="empty">None yet. Order block alerts and the alerts on your drawings appear here as they fire.</p>
         ) : (
           <table className="data compact">
             <thead>
               <tr>
-                <th scope="col">Order block</th>
-                <th scope="col" className="end">Entry</th>
+                <th scope="col">Alert</th>
+                <th scope="col" className="end">Level</th>
                 <th scope="col" className="end">Price</th>
                 <th scope="col" className="end">Sent</th>
               </tr>
@@ -219,8 +219,13 @@ export function AlertsSettings() {
               {data.recent.map((a) => (
                 <tr key={a.key}>
                   <td>
-                    {a.timeframe} {a.kind === "bullish" ? "bull" : "bear"} OB <span className="muted">· {a.priority === "extreme" ? "extreme" : "mid"}</span>
+                    {a.kind === "drawing" ? (
+                      <>{a.summary ?? "Drawing alert"}</>
+                    ) : (
+                      <>{a.timeframe} {a.kind === "bullish" ? "bull" : "bear"} OB <span className="muted">· {a.priority === "extreme" ? "extreme" : "mid"}</span></>
+                    )}
                     {a.status === "failed" && <span className="text-error"> · not delivered</span>}
+                    {a.status === "logged" && <span className="muted"> · not sent (Telegram off)</span>}
                   </td>
                   <td className="end num">{fmtPrice(a.entry)}</td>
                   <td className="end num">{fmtPrice(a.price)}</td>

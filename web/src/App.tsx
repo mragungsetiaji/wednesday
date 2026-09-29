@@ -148,7 +148,7 @@ export default function App() {
   const scan = data?.scan ?? null;
   // The live price stays out of this component's state: a tick re-renders only what shows it.
   const live = useLiveFeed(data?.tick_seconds ?? 0, data?.version ?? 0, refreshScan);
-  const drawings = useDrawings(data?.source, data?.symbol, scan?.sizing ?? null);
+  const drawings = useDrawings(data?.source, data?.symbol, scan?.sizing ?? null, data?.version ?? 0);
 
   useEffect(() => {
     if (timeframes.length && !timeframes.includes(tf)) setTf(timeframes[0]);

@@ -119,7 +119,11 @@ Points snap to the candle under the pointer. With the cursor, click a drawing to
 select it, drag it to move it, or drag a handle to reshape it; double-click a text
 to edit it. A bar above the chart styles the selected drawing: color, line width,
 solid, dashed or dotted line, a text's words and size, plus **Lock** (it can't be
-moved or deleted) and **Delete** (or the Delete key).
+moved or deleted) and **Delete** (or the Delete key). On a horizontal line,
+trendline or rectangle the bell sets a price alert (right-clicking the drawing opens
+it too): see [Alerts on your drawings](alerts.md#alerts-on-your-drawings). A drawing
+with an alert carries a small bell, filled while it is on and struck through once it
+fired.
 
 Below the tools, **Undo** and **Redo** (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; Cmd on a
 Mac) step back through the last 100 changes; a drag counts as one. The eye hides

@@ -152,6 +152,14 @@ export const EyeIcon = ({ off, ...p }: IconProps & { off?: boolean }) => (
   </Svg>
 );
 
+export const BellIcon = ({ off, ...p }: IconProps & { off?: boolean }) => (
+  <Svg {...p}>
+    <path d="M4 11.5V7.5a4 4 0 0 1 8 0v4l1 1H3l1-1z" />
+    <path d="M6.5 14a1.5 1.5 0 0 0 3 0" />
+    {off && <path d="M2.5 2.5l11 11" />}
+  </Svg>
+);
+
 /** Drawing tools. */
 export const CursorIcon = (p: IconProps) => (
   <Svg {...p}>

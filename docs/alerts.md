@@ -56,3 +56,43 @@ With **Settings > Risk** on, each alert has a size line, e.g.
   already taken by the time the scan runs, so it does not alert.
 
 Alerts run in both dashboard (`--serve`) and console mode.
+
+## Alerts on your drawings
+
+A horizontal line, trendline or rectangle you drew can alert too. Select it and
+press the bell in the bar above the chart, or right-click it:
+
+| Drawing | Conditions |
+| --- | --- |
+| Horizontal line, trendline | Crossing, crossing up, crossing down |
+| Rectangle | Entering, leaving |
+
+- **Fires**: *once, then off* (the bell on the chart turns into a struck-through
+  outline until you **Re-arm** it), or *every time*, at most once per bar.
+- **Name**: shown in the message, e.g. *Asia high*. **Expires**: in 1 hour, 4
+  hours, a day or a week, or never.
+- **How it's checked**: after every scan, on the closed M1 bars since the last
+  check and only bars that closed after you set it. A line is crossed up when a
+  bar's high reaches it and the close before was below it (down the other way
+  round). A trendline's price is taken at the bar's time, on the line through its
+  two points extended to the right. A rectangle is entered when the close before
+  was outside its prices and the bar's range reaches into them, and left when the
+  close before was inside and the bar closes outside; bars before its left edge
+  don't count.
+- **Also on the live price (intrabar)**: checks each live tick too (it needs a
+  live price interval in Settings), so it can fire before the bar closes. The
+  message says so.
+- The alert reads the drawing each time, so **moving the drawing moves the
+  alert**. Deleting the drawing stops it (Undo brings both back). Alerts live in
+  the database (`drawing_alerts`) and survive restarts; every firing is logged
+  under its own key first, so a bar never fires twice.
+
+```
+XAUUSD crossed above 2,476.30, your line 'Asia high'
+Price 2,476.90 · On the closed M1 bar of 2026-09-24 08:32 (chart time)
+The alert is now off; re-arm it on the chart.
+```
+
+Without Telegram set up (or with alerts paused) a drawing alert still fires on
+the chart and is listed under **Recent alerts** as *not sent*. Messages say what
+price did; what to do about it is your call.

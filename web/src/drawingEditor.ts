@@ -11,8 +11,9 @@ import type {
   Time,
 } from "lightweight-charts";
 
-import type { Candle, Drawing, DrawingKind, DrawingPoint, Sizing } from "./api";
+import type { Candle, Drawing, DrawingAlert, DrawingKind, DrawingPoint, Sizing } from "./api";
 import {
+  canAlert,
   HANDLE_HIT,
   RECT_CORNERS,
   handlesOf,
@@ -21,6 +22,7 @@ import {
   newId,
   positionBox,
   positionOf,
+  requestAlertForm,
   setTextFont,
   TEXT_SIZE,
   textBox,
@@ -42,12 +44,42 @@ const TRACK_LABEL: Record<PositionTrack["state"], string> = {
   waiting: "Waiting", missed: "Missed", open: "Open", target: "Target hit", stop: "Stop hit", ended: "Closed",
 };
 
+/**
+ * A small bell at (cx, cy) in bitmap pixels: a drawing with a price alert. Armed it is filled in
+ * the drawing's colour; once fired (off until re-armed) it is an outline, struck through.
+ */
+function bell(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string, armed: boolean) {
+  const s = 5 * r; // half its width
+  ctx.save();
+  ctx.lineWidth = Math.max(1, Math.round(1.3 * r));
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cx - s, cy + s * 0.6);
+  ctx.quadraticCurveTo(cx - s * 0.7, cy + s * 0.3, cx - s * 0.7, cy - s * 0.2);
+  ctx.arc(cx, cy - s * 0.2, s * 0.7, Math.PI, 0);
+  ctx.quadraticCurveTo(cx + s * 0.7, cy + s * 0.3, cx + s, cy + s * 0.6);
+  ctx.closePath();
+  if (armed) ctx.fill();
+  else ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx, cy + s * 0.85, s * 0.25, 0, Math.PI * 2);
+  ctx.fill();
+  if (!armed) {
+    ctx.beginPath();
+    ctx.moveTo(cx - s, cy - s);
+    ctx.lineTo(cx + s, cy + s);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /** Draws the drawings (and the one being placed) above the candles, handles on the selected one. */
 class DrawingsRenderer implements IPrimitivePaneRenderer {
   constructor(private readonly source: DrawingsPrimitive) {}
 
   draw(target: CanvasRenderingTarget2D): void {
-    const { chart, series, times, shown, selected, hovered, palette, font, sizing, candles, live } = this.source;
+    const { chart, series, times, shown, selected, hovered, palette, font, sizing, candles, live, alerts } = this.source;
     if (!chart || !series || !times.length || !shown.length) return;
     const yOf = (p: number) => series.priceToCoordinate(p);
 
@@ -176,6 +208,12 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
           ctx.moveTo(pts[0].x, pts[0].y);
           for (const q of pts.slice(1)) ctx.lineTo(q.x, q.y);
           ctx.stroke();
+          const al = d.kind === "trendline" ? alerts[d.id] : undefined;
+          if (al) {
+            ctx.setLineDash([]);
+            const end = pts[0].x > pts[1].x ? pts[0] : pts[1];
+            bell(ctx, end.x + 12 * hr, end.y - 10 * vr, hr, al.armed ? color : palette.muted, al.armed);
+          }
         } else if (d.kind === "text") {
           const size = d.style.size ?? TEXT_SIZE;
           ctx.font = textFontOf(Math.round(size * vr));
@@ -206,6 +244,7 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
           ctx.fillRect(W - w - 4 * hr, y - h / 2, w, h);
           ctx.fillStyle = palette.surface;
           ctx.fillText(text, W - w + 1 * hr, y);
+          if (alerts[d.id]) bell(ctx, W - w - 14 * hr, y, hr, alerts[d.id].armed ? color : palette.muted, alerts[d.id].armed);
         } else {
           const x = Math.min(pts[0].x, pts[1].x);
           const y = Math.min(pts[0].y, pts[1].y);
@@ -214,6 +253,11 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
           ctx.fillStyle = withAlpha(color, 0.14);
           ctx.fillRect(x, y, w, h);
           ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w), Math.round(h));
+          const al = alerts[d.id];
+          if (al) {
+            ctx.setLineDash([]);
+            bell(ctx, x + w - 10 * hr, y + 10 * vr, hr, al.armed ? color : palette.muted, al.armed);
+          }
         }
 
         if (d.id === selected) {
@@ -254,6 +298,7 @@ class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   candles: Candle[] = []; // to track positions: filled, and where price stands
   live: Candle | null = null; // the forming candle
   sizing: Sizing | null = null;
+  alerts: Record<string, DrawingAlert> = {};
   font = "system-ui, sans-serif";
   private requestUpdate?: () => void;
   private readonly views = [new DrawingsView(this)];
@@ -275,7 +320,7 @@ class DrawingsPrimitive implements ISeriesPrimitive<Time> {
     return this.views;
   }
 
-  update(patch: Partial<Pick<DrawingsPrimitive, "times" | "shown" | "selected" | "hovered" | "candles" | "live" | "palette" | "font" | "sizing">>): void {
+  update(patch: Partial<Pick<DrawingsPrimitive, "times" | "shown" | "selected" | "hovered" | "candles" | "live" | "palette" | "font" | "sizing" | "alerts">>): void {
     Object.assign(this, patch);
     this.requestUpdate?.();
   }
@@ -325,6 +370,7 @@ export class DrawingEditor {
     el.addEventListener("pointermove", this.onHover);
     el.addEventListener("pointerleave", this.onLeave);
     el.addEventListener("dblclick", this.onDoubleClick, true);
+    el.addEventListener("contextmenu", this.onContextMenu, true);
     window.addEventListener("keydown", this.onKey);
   }
 
@@ -334,6 +380,7 @@ export class DrawingEditor {
     this.el.removeEventListener("pointermove", this.onHover);
     this.el.removeEventListener("pointerleave", this.onLeave);
     this.el.removeEventListener("dblclick", this.onDoubleClick, true);
+    this.el.removeEventListener("contextmenu", this.onContextMenu, true);
     window.removeEventListener("keydown", this.onKey);
     this.series.detachPrimitive(this.primitive);
   }
@@ -372,6 +419,7 @@ export class DrawingEditor {
       shown: this.draft ? [...shown, this.draft] : shown,
       selected: this.draft ? this.draft.id : ctl?.selected ?? null,
       sizing: ctl?.sizing ?? null,
+      alerts: ctl?.alerts ?? {},
     });
   }
 
@@ -637,6 +685,19 @@ export class DrawingEditor {
       e.stopPropagation();
       ctl.editText(hit.d.id);
     }
+  };
+
+  /** Right-clicking a line, trendline or rectangle selects it and opens its price alert. */
+  private readonly onContextMenu = (e: MouseEvent) => {
+    const ctl = this.ctl;
+    if (!ctl || ctl.tool !== "cursor" || ctl.hidden) return;
+    const r = this.el.getBoundingClientRect();
+    const hit = this.hitTest({ x: e.clientX - r.left, y: e.clientY - r.top });
+    if (!hit || !canAlert(hit.d)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    ctl.select(hit.d.id);
+    requestAlertForm(hit.d.id);
   };
 
   private cancelPlacing(): void {

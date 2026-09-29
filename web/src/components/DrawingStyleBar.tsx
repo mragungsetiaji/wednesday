@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { Drawing, DrawingDash } from "../api";
-import { isPosition, TEXT_SIZE } from "../drawings";
+import { canAlert, isPosition, TEXT_SIZE } from "../drawings";
 import type { Drawings } from "../drawingsData";
 import { LockIcon, TrashIcon } from "../icons";
+import { DrawingAlertButton } from "./DrawingAlertForm";
 
 // Fixed hues that read on both themes; the first swatch (null) is the theme's drawing colour.
 const COLORS: (string | null)[] = [null, "#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#ec4899", "#9ca3af"];
@@ -17,7 +18,8 @@ const SIZES = [10, 12, 14, 16, 20, 24, 32];
 
 /**
  * The selected drawing's controls, floating over the top of the chart: colour, line width
- * and style (text: its text and size), lock and delete. A position has only lock and delete.
+ * and style (text: its text and size), a price alert (lines and rectangles), lock and delete.
+ * A position has only lock and delete.
  */
 export function DrawingStyleBar({ ctl }: { ctl: Drawings }) {
   const d = ctl.hidden ? null : ctl.items.find((x) => x.id === ctl.selected) ?? null;
@@ -57,6 +59,7 @@ export function DrawingStyleBar({ ctl }: { ctl: Drawings }) {
       )}
       {d.kind === "text" && <TextFields d={d} ctl={ctl} />}
       <span className="draw-sep" aria-hidden="true" />
+      {canAlert(d) && <DrawingAlertButton key={d.id} d={d} ctl={ctl} />}
       <button type="button" className="draw-tool" aria-pressed={d.locked}
         title={d.locked ? "Unlock" : "Lock: no moving or deleting"} aria-label={d.locked ? "Unlock the drawing" : "Lock the drawing"}
         onClick={() => ctl.change({ ...d, locked: !d.locked }, true)}>
