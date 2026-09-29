@@ -3934,3 +3934,79 @@ fieldset:disabled .switch {
   align-items: center;
   gap: var(--s1);
 }
+
+/* ---------- Move distribution ---------- */
+.dist-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s4);
+  margin-bottom: var(--s3);
+}
+.dist-seg .seg-text {
+  width: auto;
+  padding-inline: var(--s2);
+  font-size: var(--text-sm);
+}
+.dist-headline {
+  margin: 0 0 var(--s2);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  text-wrap: pretty;
+}
+.dist-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s6);
+  margin: 0 0 var(--s2);
+  font-size: var(--text-sm);
+}
+.dist-stats div {
+  display: flex;
+  gap: var(--s1);
+}
+.dist-stats dt {
+  color: var(--text-3);
+}
+.dist-stats dd {
+  margin: 0;
+}
+.dist-chart {
+  display: block;
+  width: 100%;
+  max-width: 760px;
+  height: auto;
+  font-size: 11px;
+}
+.dist-bar {
+  fill: color-mix(in srgb, var(--text-3) 55%, transparent);
+}
+.dist-bar:hover {
+  fill: var(--text-2);
+}
+.dist-axis,
+.dist-zero {
+  stroke: var(--line-strong);
+}
+.dist-zero {
+  stroke-dasharray: 2 3;
+}
+.dist-tick {
+  fill: var(--text-3);
+}
+.dist-normal {
+  fill: none;
+  stroke: var(--liquidity);
+  stroke-width: 1.5;
+}
+.dist-marker line {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.dist-marker text {
+  fill: var(--accent);
+  font-weight: 700;
+}
+.dist details {
+  margin-top: var(--s2);
+}

@@ -236,6 +236,33 @@ export interface QuartersResponse {
 
 export const fetchQuarters = () => getJson<QuartersResponse>("/api/quarters");
 
+export type DistPeriod = "day" | "week" | "session" | "q90";
+export type DistMeasure = "change" | "range_pct" | "range_atr";
+export type DistLookback = "1y" | "5y" | "all";
+
+/** How unusual the current period's move is against past closed ones (/api/distribution). */
+export interface Distribution {
+  period: DistPeriod;
+  measure: DistMeasure;
+  unit: string; // "%" or "×ATR"
+  lookback: DistLookback;
+  samples: number;
+  min_samples: number; // under this, no percentile or z-score
+  current: { day: string; label: string; value: number | null; forming: boolean; start_unix: number } | null;
+  stats: { mean: number; median: number; std: number; min: number; max: number } | null;
+  percentile: { below: number; above: number; tail: number; side: "low" | "high" } | null;
+  z: number | null;
+  histogram: { edges: number[]; counts: number[] };
+  like_this: { day: string; label: string; value: number; next: number | null }[];
+  filters: { weekday: string | null; session: string | null };
+  coverage: { from: string | null; to: string | null } | null;
+}
+
+export const fetchDistribution = (q: { period: DistPeriod; measure: DistMeasure; lookback: DistLookback; weekday: boolean; session: boolean }) =>
+  getJson<Distribution>(`/api/distribution?${new URLSearchParams({
+    period: q.period, measure: q.measure, lookback: q.lookback, weekday: String(q.weekday), session: String(q.session),
+  })}`);
+
 /** A New York wall time ("2026-09-24T09:30") as the chart's feed-clock unix seconds. */
 export const nyToFeed = (ny: string) =>
   getJson<{ ny: string; feed: string; feed_unix: number }>(`/api/clock/feed?ny=${encodeURIComponent(ny)}`);

@@ -6,8 +6,10 @@ snapshots, so they never touch the data feed (MT5) directly.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,7 +33,8 @@ from .features import catalog as feature_catalog
 from .history import older_candles
 from . import plugin_install
 from .plugins import PLUGIN_API, features, load_new_plugins, load_plugins
-from .quarters import NEW_YORK, quarters_payload, utc_to_feed
+from .quarters import NEW_YORK, quarter_blocks, quarters_payload, utc_to_feed
+from .distribution import distribution as move_distribution, tables as distribution_tables_of
 from .mt5_terminals import find_terminals
 from .secret_store import get_secret, update_secrets
 from .sizing import RiskSettings, pip_size
@@ -58,6 +61,13 @@ def _candle_rows(candles: pd.DataFrame) -> list[dict]:
 
 def _iso(dt) -> str | None:
     return dt.isoformat() if dt is not None else None
+
+
+log = logging.getLogger(__name__)
+
+DIST_TTL = 6 * 3600  # seconds the stored history's periods are kept; the live buffer's are fresh
+DIST_BARS = 2_000_000  # stored M1 bars read for the distribution: about five years
+DIST_DAYS = 3000  # daily bars asked of the feed, for lookbacks past the M1 history
 
 
 def clock_offset(clock: str) -> int:
@@ -256,6 +266,46 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         if quarters_cache.get("key") != key:
             quarters_cache.update(key=key, value=quarters_payload(m1, current_clock()))
         return quarters_cache["value"]
+
+    # ---- move distribution: stored history's periods (slow to read, kept a while) + the live buffer's ----
+    dist_cache: dict = {}
+
+    def distribution_tables():
+        engine = current()
+        _, _, m1 = engine.snapshot()
+        if m1 is None or m1.empty:
+            raise HTTPException(503, "no data yet")
+        clock, key = current_clock(), (current_source(), engine.symbol, current_clock())
+        base = dist_cache.get(key)
+        if base is None or time.monotonic() - base["at"] > DIST_TTL:
+            store = runtime.store if runtime else target.store
+            stored = store.load_bars(current_source(), engine.symbol, DIST_BARS) if store and engine.feed.persist else None
+            union = pd.concat([stored[stored.index < m1.index[0]], m1]) if stored is not None and len(stored) else m1
+            try:
+                d1 = engine.call(lambda feed: feed.daily_history(clock, DIST_DAYS), timeout=60)
+            except Exception:  # noqa: BLE001 - the M1 history alone still works
+                log.debug("no daily history", exc_info=True)
+                d1 = None
+            base = {"at": time.monotonic(), "blocks": quarter_blocks(union, clock), "d1": d1}
+            dist_cache.clear()
+            dist_cache[key] = base
+        # Closed history from the cache, the recent days (from the second one the buffer holds whole) fresh.
+        fresh = quarter_blocks(m1, clock)
+        days = fresh["week"]
+        cutoff = days[1].day if len(days) > 1 else (days[0].day if days else None)
+        merged = {row: [b for b in base["blocks"][row] if cutoff is None or b.day < cutoff] +
+                  [b for b in fresh[row] if cutoff is not None and b.day >= cutoff] for row in fresh}
+        return distribution_tables_of(merged, base["d1"])
+
+    @app.get("/api/distribution")
+    def get_distribution(period: str = Query("day"), measure: str = Query("change"), lookback: str = Query("1y"),
+                         weekday: bool = Query(False), session: bool = Query(False),
+                         bins: int = Query(40, ge=10, le=80)) -> dict:
+        """How unusual the current period's move is against past closed periods (see distribution.py)."""
+        try:
+            return move_distribution(distribution_tables(), period, measure, lookback, weekday, session, bins)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     @app.get("/api/clock/feed")
     def ny_to_feed(ny: str = Query(..., description="New York wall time, e.g. 2026-09-24T09:30")) -> dict:

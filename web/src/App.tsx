@@ -4,6 +4,7 @@ import { fetchQuarters, fetchScan, type QuartersResponse, type ScanResponse } fr
 import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
 import { ChartFocus } from "./components/ChartFocus";
+import { DistributionPanel } from "./components/DistributionPanel";
 import { Dock } from "./components/Dock";
 import { DrawingStyleBar } from "./components/DrawingStyleBar";
 import { DrawingToolbar } from "./components/DrawingToolbar";
@@ -406,6 +407,7 @@ export default function App() {
                     ),
                   },
                   ...(quarters ? [{ id: "quarters", label: "Quarters", content: <QuartersPanel quarters={quarters} /> }] : []),
+                  { id: "distribution", label: "Distribution", content: <DistributionPanel version={version} /> },
                   ...(showMl && ml ? [{
                     id: "ml",
                     label: "Model",

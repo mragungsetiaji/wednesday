@@ -60,6 +60,12 @@ class DataFeed(ABC):
         """Account balance and the symbol's contract spec, for position sizing; None when the feed has none."""
         return None
 
+    def daily_history(self, clock: str, count: int) -> pd.DataFrame | None:
+        """Up to ``count`` closed daily bars indexed by New York trading day (the day a
+        17:00 New York close ends), for the move distribution's long lookbacks. None when
+        the feed has none, or its days don't end at the New York close."""
+        return None
+
     def fetch_history(self, tf: Timeframe, before: pd.Timestamp, count: int) -> pd.DataFrame:
         """Up to ``count`` closed ``tf`` candles opening before ``before`` (oldest first).
 
@@ -178,6 +184,20 @@ class MT5Feed(DataFeed):
                 "lot_step": float(sym.volume_step), "max_lot": float(sym.volume_max) or None,
                 "point": float(sym.point), "digits": int(sym.digits)}
 
+    def daily_history(self, clock: str, count: int) -> pd.DataFrame | None:
+        # A D1 bar runs from the broker's midnight; only on a New York +7 clock is that the
+        # 17:00 New York close, so the bar is one trading day.
+        if clock != "NY+7":
+            return None
+        if self._mt5 is None:
+            self.reconnect()
+        rates = self._mt5.copy_rates_from_pos(self.symbol, self._mt5.TIMEFRAME_D1, 1, count)  # 1: skip today's
+        if rates is None or len(rates) == 0:
+            return None
+        df = pd.DataFrame(rates)
+        df.index = pd.to_datetime(df["time"], unit="s").normalize()
+        return normalize_ohlcv(df.rename(columns={"tick_volume": "volume"}))
+
     def fetch_history(self, tf: Timeframe, before: pd.Timestamp, count: int) -> pd.DataFrame:
         """The terminal's own ``tf`` candles, so scrolling back needs no M1 history."""
         if self._mt5 is None:
@@ -284,6 +304,18 @@ class YFinanceFeed(DataFeed):
         now = pd.Timestamp.now(tz="UTC").tz_localize(None).floor("min")
         df = df[df.index < now]
         return df.tail(count)
+
+    def daily_history(self, clock: str, count: int) -> pd.DataFrame | None:
+        # Yahoo dates a futures daily bar by its session, which ends at the 17:00 New York close.
+        import yfinance as yf
+
+        df = yf.Ticker(self.symbol).history(period="max", interval="1d", auto_adjust=False)
+        if df.empty:
+            return None
+        df = df.copy()
+        df.index = (df.index.tz_convert("America/New_York").tz_localize(None) if df.index.tz is not None
+                    else df.index).normalize()
+        return normalize_ohlcv(df).iloc[:-1].tail(count)  # the last one may still be forming
 
     def last_tick(self) -> tuple[pd.Timestamp, float] | None:
         # The forming minute's close. Its bar time also says when the price is from, so a

@@ -263,7 +263,40 @@ the open tab again to close it):
 
 - **All timeframes**: the nearest level above and below per detector and timeframe.
 - **Quarters**: how often each weekday, session and 90-minute quarter closed green.
+- **Distribution**: how unusual the current move is (below).
 - **Model**: the active model's blocks, when **ML** is on.
+
+### Move distribution
+
+The **Distribution** tab puts the current day, week, session or 90-minute block
+against the same periods in the past, as a histogram with the current one marked.
+
+- **Measure**: the change in % (close to the previous close for a day or week,
+  open to close for a session or block), the range (high minus low) in % of the
+  open, or the range in daily ATR(14), taken from the 14 days *before* that day.
+- **Lookback**: 1 year, 5 years or all the history there is. **Same weekday**
+  compares a Wednesday only with Wednesdays; **Same session** compares NY AM only
+  with NY AM (for 90-minute blocks, the same quarter of the same session).
+- Periods follow New York time, like the quarters pane: the trading day starts
+  18:00 New York the evening before, so boundaries stay put through DST whatever
+  the feed's clock. Only closed periods are samples; the current one is the
+  marker, "so far" while it runs.
+
+The headline gives the **percentile** first ("−1.80% so far: lower than 97.1% of
+252 days, about 1 in 34") and the z-score second. Gold's moves have fat tails:
+big days happen more often than a normal curve says, so a z-score read as a
+probability understates them, while the percentile just counts past periods. Tick
+**Normal curve** to see the gap. Under 30 samples neither number is shown, only
+the move and the sample count.
+
+**Periods like this** lists up to 20 past periods that moved at least as far, and
+what the next one did: facts about the history, not a forecast or advice.
+
+History: the stored M1 bars and the live window. Days and weeks reach further back
+with the feed's daily bars when it has them: Yahoo's daily history, or MT5's D1
+when the broker's clock is New York +7 (its daily candles then match the New York
+day; on other clocks they don't, so they're left out). The tables are rebuilt at
+most every 6 hours; the current period updates with every scan.
 
 ## Light theme and mobile
 
