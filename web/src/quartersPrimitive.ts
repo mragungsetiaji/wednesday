@@ -36,6 +36,9 @@ class QuartersRenderer implements IPrimitivePaneRenderer {
       const pad = Math.round(4 * vr);
       const gap = Math.round(3 * vr);
       const rowH = Math.floor((H - 2 * pad - gap * (rows.length - 1)) / rows.length);
+      // The grid is chart-wide; cover it in this pane so it doesn't show through the translucent blocks.
+      ctx.fillStyle = palette.surface;
+      ctx.fillRect(0, 0, W, H);
       // logicalToCoordinate only takes whole bars; interpolate between bar 0 and bar 1 instead.
       const x0Bar = timeScale.logicalToCoordinate(0 as Logical);
       const x1Bar = timeScale.logicalToCoordinate(1 as Logical);
@@ -91,7 +94,7 @@ class QuartersRenderer implements IPrimitivePaneRenderer {
         const y = pad + r * (rowH + gap);
         const title = ROW_TITLES[row];
         const tw = ctx.measureText(title).width + 10 * hr;
-        ctx.fillStyle = withAlpha(palette.surface, 0.9);
+        ctx.fillStyle = palette.surface;
         ctx.fillRect(0, y, tw, rowH);
         ctx.fillStyle = palette.muted;
         ctx.fillText(title, 5 * hr, y + rowH / 2);
@@ -102,8 +105,9 @@ class QuartersRenderer implements IPrimitivePaneRenderer {
 
 class QuartersView implements IPrimitivePaneView {
   constructor(private readonly source: QuartersPrimitive) {}
-  zOrder(): "bottom" {
-    return "bottom";
+  // Above the grid ("bottom" draws under it); the pane's only series is an invisible line.
+  zOrder(): "normal" {
+    return "normal";
   }
   renderer(): IPrimitivePaneRenderer {
     return new QuartersRenderer(this.source);
