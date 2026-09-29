@@ -10,6 +10,8 @@
    results, so a trade that sat deep in loss before coming back still counts.
    Deal prices are checked against the bars too, which catches a report that
    doesn't match the market.
+3. **Sample** (:mod:`.sample`): a made-up portfolio with its own M1 bars, shown
+   until the user deletes it.
 
-One journal is free; more need the ``journal.multi`` feature.
+One journal is free (the sample doesn't count); more need the ``journal.multi`` feature.
 """

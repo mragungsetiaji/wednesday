@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  createJournal, deleteJournal, fetchJournal, fetchJournals, fetchTerminalAccount, importReport, journalCsvUrl, saveTradeNote,
+  createJournal, deleteJournal, fetchJournal, fetchJournals, fetchTerminalAccount, importReport, journalCsvUrl, restoreSample, saveTradeNote,
   syncJournal, updateJournal, type Journal, type JournalStats, type JournalTrade, type JournalsResponse, type TerminalAccount,
   detachSnapshot,
   snapshotUrl,
@@ -122,7 +122,13 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
     await deleteJournal(j.id);
     if (j.id === selected?.id) setCurrent(null);
     await loadList();
-    return `Removed ${j.name}.`;
+    return j.sample ? "Deleted the sample portfolio. Journals, Show the sample brings it back." : `Removed ${j.name}.`;
+  });
+
+  const restore = () => run(async () => {
+    const j = await restoreSample();
+    setCurrent(j.id);
+    await loadList();
   });
 
   if (!list) {
@@ -150,6 +156,11 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
             </p>
           </div>
           <NewJournal journals={journals} busy={busy} onCreate={create} />
+          <p className="field-note">
+            To see a filled journal first:{" "}
+            <button type="button" className="link-button" disabled={busy} onClick={restore}>show the sample portfolio</button>{" "}
+            (made-up trades, deletable).
+          </p>
           {(error || notice) && <p className={error ? "text-error" : "journal-notice"} role={error ? "alert" : "status"}>{error ?? notice}</p>}
         </div>
       </main>
@@ -162,6 +173,7 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
         onPick={setCurrent}
         onCreate={create}
         onRemove={remove}
+        onRestore={restore}
         onSync={() => run(async () => {
           const r = await syncJournal(selected.id);
           await refresh(selected.id);
@@ -212,10 +224,10 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
 
 // ---- head: pick, sync, import, settings, the list of journals -------------------------------
 
-function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onRemove, onSync, onImport, onUpdate }: {
+function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onRemove, onRestore, onSync, onImport, onUpdate }: {
   journal: Journal; journals: Journal[]; multi: boolean; busy: boolean;
   onPick: (id: string) => void; onCreate: (d: NewDraft) => Promise<boolean>; onRemove: (j: Journal) => Promise<boolean>;
-  onSync: () => void; onImport: (f: File) => void; onUpdate: (patch: { name?: string; time_offset?: number | null }) => void;
+  onRestore: () => void; onSync: () => void; onImport: (f: File) => void; onUpdate: (patch: { name?: string; time_offset?: number | null }) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<"journals" | "settings" | null>(null);
@@ -226,23 +238,39 @@ function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onRemov
     setOffset(journal.time_offset === null ? "" : String(journal.time_offset));
   }, [journal]);
   const toggle = (p: "journals" | "settings") => setPanel(panel === p ? null : p);
+  const own = journals.filter((j) => !j.sample).length; // the sample doesn't count toward the free journal
 
   return (
     <div className="journal-head">
       <div className="journal-title">
         {journals.length > 1 ? (
           <select aria-label="Journal" value={journal.id} onChange={(e) => onPick(e.target.value)}>
-            {journals.map((j) => <option key={j.id} value={j.id}>{j.name}</option>)}
+            {journals.map((j) => <option key={j.id} value={j.id}>{j.sample ? `${j.name} (sample)` : j.name}</option>)}
           </select>
         ) : (
           <h2>{journal.name}</h2>
         )}
         <p className="meta">
-          {journal.login ? <span className="num">#{journal.login}{journal.server ? ` · ${journal.server}` : ""}</span> : <span>No account yet</span>}
-          <span>{syncedText(journal)}</span>
+          {journal.sample ? (
+            <>
+              <SampleBadge long />
+              <span>Generated trades and prices, to show what the journal does</span>
+            </>
+          ) : (
+            <>
+              {journal.login ? <span className="num">#{journal.login}{journal.server ? ` · ${journal.server}` : ""}</span> : <span>No account yet</span>}
+              <span>{syncedText(journal)}</span>
+            </>
+          )}
         </p>
       </div>
       <div className="journal-actions">
+        {journal.sample ? (
+          <button type="button" className="button secondary" disabled={busy}
+            onClick={() => window.confirm("Delete the sample portfolio? It doesn't come back on its own; Journals, Show the sample restores it.") && onRemove(journal)}>
+            Delete sample
+          </button>
+        ) : <>
         <button type="button" className="button primary" disabled={busy} onClick={onSync}
           title={journal.login ? `Read every deal of account ${journal.login} from the MT5 terminal` : "Read every deal from the MT5 terminal the scanner is connected to"}>
           {busy ? "Working…" : "Sync from MT5"}
@@ -257,6 +285,7 @@ function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onRemov
           title="The terminal's history report: History tab, right click, Report, HTML">
           Import report
         </button>
+        </>}
         <a className="button quiet" href={journalCsvUrl(journal.id)} download>Export CSV</a>
         <button type="button" className="button quiet" aria-expanded={panel === "settings"} aria-controls="journal-panel"
           onClick={() => toggle("settings")}>Settings</button>
@@ -269,9 +298,17 @@ function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onRemov
         <div id="journal-panel" className="journal-panel journal-manage">
           <JournalList journals={journals} current={journal.id} busy={busy}
             onOpen={(id) => { onPick(id); setPanel(null); }} onRemove={onRemove} />
+          {!journals.some((j) => j.sample) && (
+            <p className="field-note">
+              <button type="button" className="link-button" disabled={busy} onClick={() => { onRestore(); setPanel(null); }}>
+                Show the sample
+              </button>{" "}
+              portfolio again: made-up trades that show every panel, and don't count as a journal.
+            </p>
+          )}
           <section className="journal-new" aria-labelledby="journal-new-h">
             <h3 id="journal-new-h">New journal</h3>
-            {!multi && journals.length >= 1 ? (
+            {!multi && own >= 1 ? (
               <p className="field-note">
                 One journal is free. More than one, say one per MT5 account, comes with a plan that includes{" "}
                 <strong>Multiple journals</strong> (Settings, Plan).
@@ -312,6 +349,15 @@ function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onRemov
   );
 }
 
+/** Marks the sample portfolio's numbers as made up. */
+function SampleBadge({ long = false }: { long?: boolean }) {
+  return (
+    <span className="badge sample" title="Sample data: not a real account. Generated trades and prices, no results anyone got.">
+      {long ? "Sample data: not a real account" : "Sample data"}
+    </span>
+  );
+}
+
 function syncedText(j: Journal) {
   if (!j.synced_at) return "not synced yet";
   return `${j.source === "mt5" ? "synced" : "imported"} ${new Date(j.synced_at).toLocaleString()}`;
@@ -328,8 +374,10 @@ function JournalList({ journals, current, busy, onOpen, onRemove }: {
           <div className="journal-list-main">
             <b>{j.name}</b>
             <span className="meta">
-              {j.login ? <span className="num">#{j.login}{j.server ? ` · ${j.server}` : ""}</span> : <span>No account yet</span>}
-              <span>{syncedText(j)}</span>
+              {j.sample ? <SampleBadge long /> : <>
+                {j.login ? <span className="num">#{j.login}{j.server ? ` · ${j.server}` : ""}</span> : <span>No account yet</span>}
+                <span>{syncedText(j)}</span>
+              </>}
             </span>
           </div>
           <div className="journal-list-actions">
@@ -337,8 +385,10 @@ function JournalList({ journals, current, busy, onOpen, onRemove }: {
               ? <span className="badge">Open</span>
               : <button type="button" className="button quiet" onClick={() => onOpen(j.id)}>Open</button>}
             <button type="button" className="link link-danger" disabled={busy}
-              onClick={() => window.confirm(`Remove ${j.name}? Its trades and notes are deleted from Wednesday. Nothing changes in MT5.`) && onRemove(j)}>
-              Remove<span className="sr-only"> {j.name}</span>
+              onClick={() => window.confirm(j.sample
+                ? "Delete the sample portfolio? It doesn't come back on its own; Show the sample restores it."
+                : `Remove ${j.name}? Its trades and notes are deleted from Wednesday. Nothing changes in MT5.`) && onRemove(j)}>
+              {j.sample ? "Delete" : "Remove"}<span className="sr-only"> {j.name}</span>
             </button>
           </div>
         </li>
@@ -446,12 +496,14 @@ function Summary({ stats }: { stats: JournalStats }) {
   const t = stats.trading;
   const cur = stats.journal.currency ?? "";
   const rebuilt = stats.verification.basis === "ohlc";
+  const sample = stats.journal.sample;
   return (
     <section className="journal-stats" aria-label="Account">
       <div className="journal-hero">
         <div>
           <span className="stat-label">Gain</span>
           <b className={`stat-big num ${tone(s.gain) ?? ""}`}>{pct(s.gain)}</b>
+          {sample && <SampleBadge />}
         </div>
         <div>
           <span className="stat-label">Drawdown</span>
@@ -460,6 +512,7 @@ function Summary({ stats }: { stats: JournalStats }) {
             title={rebuilt ? "Rebuilt from the price every minute a trade was open" : "From closed results only: no prices for these trades"}>
             {rebuilt ? "from price" : "closed only"}
           </span>
+          {sample && <SampleBadge />}
         </div>
       </div>
       <dl className="stat-list num">

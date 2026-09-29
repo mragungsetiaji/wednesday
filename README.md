@@ -96,9 +96,9 @@ Click candles and tag them, mark the stretches you've fully reviewed, and train 
 
 ### Journal
 
-Sync an MT5 account, or import the terminal's history report, and get the numbers of a public track record: gain (time-weighted), absolute gain, drawdown, balance, equity, deposits, withdrawals and the growth curve. The drawdown is rebuilt from M1 prices minute by minute, and every deal price is checked against its bar, so a trade that sat deep in loss before closing green still counts. More in [docs/journal.md](docs/journal.md).
+Sync an MT5 account, or import the terminal's history report, and get the numbers of a public track record: gain (time-weighted), absolute gain, drawdown, balance, equity, deposits, withdrawals and the growth curve. The drawdown is rebuilt from M1 prices minute by minute, and every deal price is checked against its bar, so a trade that sat deep in loss before closing green still counts. It opens on a sample portfolio of made-up trades, so every panel is filled before you connect an account; delete it with one click. More in [docs/journal.md](docs/journal.md).
 
-<img src="docs/images/journal.png" alt="The journal: account numbers on the left, the growth curve on the right" width="100%">
+<img src="docs/images/journal.png" alt="The journal on the sample portfolio: account numbers on the left, the growth curve on the right" width="100%">
 
 ## Why "Wednesday"
 

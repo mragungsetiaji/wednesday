@@ -194,6 +194,7 @@ journals_table = Table(
     Column("time_offset", Integer, nullable=True),  # seconds from deal clock to price clock; null = detect
     Column("created_at", String(40), nullable=False),
     Column("synced_at", String(40), nullable=True),
+    Column("sample", Boolean, nullable=True),  # the made-up sample portfolio (journal/sample.py)
 )
 
 journal_trades_table = Table(
@@ -431,6 +432,15 @@ class Store:
         df.index = pd.to_datetime(df.pop("time"), unit="s")
         df.index.name = None
         return df.astype(float)
+
+    def delete_bars(self, source: str, symbol: str | None = None) -> int:
+        """Drop a stored bar stream (every symbol of ``source`` when ``symbol`` is None)."""
+        t = bars_table
+        q = t.delete().where(t.c.source == source)
+        if symbol is not None:
+            q = q.where(t.c.symbol == symbol)
+        with self.engine.begin() as conn:
+            return conn.execute(q).rowcount
 
     def bar_bounds(self, source: str, symbol: str) -> tuple[int, int | None, int | None]:
         """Stored M1 bars of one stream: count, first and last open time (unix seconds)."""

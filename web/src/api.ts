@@ -1096,6 +1096,7 @@ export interface Journal {
   time_offset: number | null; // hours from the deal clock to the price clock; null = detected
   created_at: string;
   synced_at: string | null;
+  sample: boolean; // the made-up sample portfolio: free, can't be synced or imported into
 }
 
 export interface JournalsResponse {
@@ -1201,6 +1202,8 @@ export type TerminalAccount =
 export const fetchTerminalAccount = () => getJson<TerminalAccount>("/api/journals/terminal");
 export const updateJournal = (id: string, patch: { name?: string; time_offset?: number | null }) =>
   send<Journal>("PATCH", `/api/journals/${encodeURIComponent(id)}`, patch);
+/** Bring the sample portfolio back after it was deleted. */
+export const restoreSample = () => send<Journal>("POST", "/api/journals/sample");
 export const deleteJournal = (id: string) => send<{ deleted: boolean }>("DELETE", `/api/journals/${encodeURIComponent(id)}`);
 export const syncJournal = (id: string) =>
   send<{ trades: number; cash: number; journal: Journal }>("POST", `/api/journals/${encodeURIComponent(id)}/sync`);

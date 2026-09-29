@@ -47,6 +47,11 @@ def journal_router(get_journals: Callable[[], Journals | None], get_engine: Call
         except JournalError as exc:
             raise HTTPException(422, str(exc)) from exc
 
+    @r.post("/sample")
+    def restore_sample() -> dict:
+        """Bring back the sample portfolio after it was deleted."""
+        return svc().restore_sample()
+
     @r.get("/terminal")
     def terminal() -> dict:
         """The account the MT5 terminal is logged in to, so a new journal can be tied to it."""
@@ -87,7 +92,10 @@ def journal_router(get_journals: Callable[[], Journals | None], get_engine: Call
     @r.post("/{journal_id}/sync")
     def sync(journal_id: str) -> dict:
         """Read the full deal history from the MT5 terminal the scanner is connected to."""
-        one(journal_id)
+        try:
+            Journals.check_writable(one(journal_id))
+        except JournalError as exc:
+            raise HTTPException(409, str(exc)) from exc
         engine = get_engine()
         if not hasattr(engine.feed, "account_history"):
             raise HTTPException(409, "Syncing reads the MT5 terminal, and the data source isn't MT5. "
@@ -106,7 +114,10 @@ def journal_router(get_journals: Callable[[], Journals | None], get_engine: Call
     @r.post("/{journal_id}/import")
     async def import_report(journal_id: str, request: Request) -> dict:
         """Upload the terminal's history report (raw body, HTML)."""
-        one(journal_id)
+        try:
+            Journals.check_writable(one(journal_id))
+        except JournalError as exc:
+            raise HTTPException(409, str(exc)) from exc
         data = await request.body()
         if len(data) > MAX_REPORT_BYTES:
             raise HTTPException(413, "The report is larger than 50 MB")

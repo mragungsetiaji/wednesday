@@ -52,7 +52,7 @@ src/wednesday/
   storage.py      SQLAlchemy store: settings, M1 history, alert log, Lab labels, journals (SQLite / PostgreSQL)
   lab/            machine learning: tags, per-minute dataset + causal features, trade outcomes,
                   training, model files (zip + safe unpickler), the /api/lab routes
-  journal/        MT5 accounts: deal/report import, gain and drawdown rebuilt from M1 bars, /api/journals
+  journal/        MT5 accounts: deal/report import, gain and drawdown rebuilt from M1 bars, the sample portfolio, /api/journals
   plugins.py      loads plugins (entry point group wednesday.plugins): routes, hooks, jobs
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)

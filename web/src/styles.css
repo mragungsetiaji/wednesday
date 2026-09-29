@@ -1811,6 +1811,10 @@ p {
   border-color: var(--accent);
   color: var(--text);
 }
+.badge.sample {
+  border-color: var(--warn);
+  color: var(--warn);
+}
 .badge.inside {
   display: block;
   width: max-content;

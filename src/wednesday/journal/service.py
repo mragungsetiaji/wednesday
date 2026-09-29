@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timezone
 
 from ..storage import Store, journal_cash_table, journal_notes_table, journal_trades_table
+from . import sample as sample_data
 from .imports import ReportError, from_deals, parse_report
 from .stats import analyse
 
@@ -19,6 +20,9 @@ MARGIN = 15 * 3600  # load bars this far past a trade's ends: the deal and price
 MAX_IMAGES = 12  # chart snapshots per trade
 CACHE_TTL = 120  # seconds; the stats also refresh at once when the journal's data changes
 GOLD = {"XAUUSD", "XAU", "GOLD"}
+SAMPLE_KEY = "journal.sample"  # setting: {"deleted": true} once the user deleted the sample portfolio
+SAMPLE_ID = "sample"
+SAMPLE_NAME = "Sample portfolio"
 
 
 class JournalError(ValueError):
@@ -37,15 +41,54 @@ def canonical(symbol: str) -> str:
 
 
 class Journals:
-    def __init__(self, store: Store):
+    def __init__(self, store: Store, sample: bool = False):
+        """``sample``: add the sample portfolio the first time the journals are listed, unless it was deleted."""
         self.store = store
+        self.sample = sample
         self._cache: dict[str, tuple[float, int, dict]] = {}
         self._version: dict[str, int] = {}
         self._lock = threading.Lock()
+        self._sample_lock = threading.Lock()
+        self._sample_checked = False
 
     # ---- journals ----
     def list(self) -> list[dict]:
+        if self.sample:
+            self.ensure_sample()
         return [self._public(j) for j in self.store.journals()]
+
+    # ---- the sample portfolio ----
+    def ensure_sample(self) -> dict | None:
+        """Make the sample portfolio (trades, cash and its own M1 bars) unless it's there or was deleted."""
+        with self._sample_lock:
+            if self._sample_checked:
+                return None
+            self._sample_checked = True
+            if (self.store.get_setting(SAMPLE_KEY) or {}).get("deleted"):
+                return None
+            have = next((j for j in self.store.journals() if j.get("sample")), None)
+            if have and self.store.bar_bounds(sample_data.SOURCE, sample_data.SYMBOL)[0]:
+                return None
+            data = sample_data.generate()
+            self.store.delete_bars(sample_data.SOURCE)
+            self.store.save_bars(sample_data.SOURCE, sample_data.SYMBOL, data["bars"])
+            if have:
+                return None
+            row = {"id": SAMPLE_ID, "name": SAMPLE_NAME, "login": None, "server": None, "company": None,
+                   "currency": "USD", "source": None, "account": None, "time_offset": None, "created_at": _now(),
+                   "synced_at": None, "sample": True}
+            self.store.journal_put(row)
+            self.store.journal_fill(SAMPLE_ID, data["trades"], data["cash"], replace=True)
+            self._changed(SAMPLE_ID)
+            return self._public(row)
+
+    def restore_sample(self) -> dict:
+        """Bring the sample portfolio back after it was deleted."""
+        self.store.delete_setting(SAMPLE_KEY)
+        with self._sample_lock:
+            self._sample_checked = False
+        self.ensure_sample()
+        return self._public(self.get(SAMPLE_ID))
 
     def get(self, journal_id: str) -> dict:
         for j in self.store.journals():
@@ -56,7 +99,7 @@ class Journals:
     @staticmethod
     def _public(j: dict) -> dict:
         off = j.get("time_offset")
-        return {**j, "time_offset": None if off is None else off / 3600}
+        return {**j, "time_offset": None if off is None else off / 3600, "sample": bool(j.get("sample"))}
 
     def create(self, name: str, features: list[str], login: str | None = None) -> dict:
         """A new journal, tied to its MT5 account number from the start when one is given."""
@@ -67,7 +110,7 @@ class Journals:
         if login is not None and not login.isdigit():
             raise JournalError("The account number is the digits MT5 shows for the login, e.g. 51234567")
         existing = self.store.journals()
-        if existing and MULTI_FEATURE not in features:
+        if any(not j.get("sample") for j in existing) and MULTI_FEATURE not in features:  # the sample is free
             raise PermissionError("One journal is free. More than one needs a plan with multiple journals")
         taken = next((j for j in existing if login and str(j.get("login") or "") == login), None)
         if taken:
@@ -99,8 +142,20 @@ class Journals:
         return self._public(j)
 
     def delete(self, journal_id: str) -> bool:
+        """Delete a journal; the sample takes its bars along and stays deleted after a restart."""
+        was_sample = bool(self.get(journal_id).get("sample"))
         self._changed(journal_id)
-        return self.store.journal_delete(journal_id)
+        deleted = self.store.journal_delete(journal_id)
+        if was_sample:
+            self.store.delete_bars(sample_data.SOURCE)
+            self.store.set_setting(SAMPLE_KEY, {"deleted": True})
+        return deleted
+
+    @staticmethod
+    def check_writable(j: dict) -> None:
+        if j.get("sample"):
+            raise JournalError("The sample portfolio is made-up data, so it can't be synced or imported into. "
+                               "Make a journal of your own for your account")
 
     # ---- imports ----
     def _check_account(self, j: dict, login: str | None, terminal: bool = False) -> None:
@@ -115,6 +170,7 @@ class Journals:
     def sync(self, journal_id: str, history: dict) -> dict:
         """Replace the journal's trades with the terminal's full history (see ``MT5Feed.account_history``)."""
         j = self.get(journal_id)
+        self.check_writable(j)
         acc = history.get("account") or {}
         self._check_account(j, acc.get("login"), terminal=True)
         trades, cash = from_deals(history.get("deals") or [], history.get("positions") or [])
@@ -129,6 +185,7 @@ class Journals:
 
     def import_report(self, journal_id: str, data: bytes) -> dict:
         j = self.get(journal_id)
+        self.check_writable(j)
         try:
             parsed = parse_report(data)
         except ReportError as exc:
@@ -185,9 +242,10 @@ class Journals:
         with self._lock:
             self._version[journal_id] = self._version.get(journal_id, 0) + 1
 
-    def price_bars(self, trades: list[dict]) -> tuple[dict, dict]:
-        """(symbol -> M1 bars, symbol -> "source:symbol" they came from) for the trades' symbols."""
-        stored = self.store.bar_stats()
+    def price_bars(self, trades: list[dict], sample: bool = False) -> tuple[dict, dict]:
+        """(symbol -> M1 bars, symbol -> "source:symbol" they came from) for the trades' symbols.
+        The sample portfolio reads its own bars only, and real journals never read them."""
+        stored = [s for s in self.store.bar_stats() if (s["source"] == sample_data.SOURCE) == sample]
         found, used = {}, {}
         for sym in sorted({t["symbol"] for t in trades}):
             want = canonical(sym)
@@ -212,7 +270,7 @@ class Journals:
         trades = self.store.journal_rows(journal_trades_table, journal_id)
         cash = self.store.journal_rows(journal_cash_table, journal_id)
         notes = {n["trade_id"]: n for n in self.store.journal_rows(journal_notes_table, journal_id)}
-        bars, used = self.price_bars(trades)
+        bars, used = self.price_bars(trades, bool(j.get("sample")))
         result = analyse(trades, cash, bars, j.get("time_offset"))
         for t in result["trades"]:
             n = notes.get(t["id"])

@@ -273,7 +273,7 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
     brief = BriefRunner(store, BriefSettings.from_dict(store.get_setting(BRIEF_KEY) if store else None))
     calendar = Calendar(store, CalendarSettings.from_dict(store.get_setting(CALENDAR_KEY) if store else None))
     lab = Lab(store, _env("XAU_MODELS_DIR") or "data/models", cfg.params) if store else None
-    journals = Journals(store) if store else None
+    journals = Journals(store, sample=True) if store else None
     runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts, brief, calendar, lab, journals,
                       poll=args.poll)
     engine = runtime.engine
