@@ -109,6 +109,18 @@ git push origin v0.2.0
 ```
 
 The installer and the zip are attached to a GitHub release named after the tag.
+Once the build passes, the workflow commits `Version 0.2.0` to `main`: the tag's
+version written into every file that carries it (`pyproject.toml`,
+`src/wednesday/__init__.py`, `uv.lock`, `web/package.json` and
+`web/package-lock.json`), so running from source shows it too. It never moves the
+version backwards. To set it by hand, or check the files agree:
+
+```bash
+python scripts/set_version.py 0.2.0
+python scripts/set_version.py --check
+```
+
+`tests/test_version.py` fails when the files disagree.
 **Actions > Release Windows > Run workflow** builds without releasing; the files
 are kept as the run's artifact.
 
