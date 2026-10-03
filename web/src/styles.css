@@ -3496,6 +3496,7 @@ fieldset:disabled .switch {
   position: relative;
   flex: 1;
   min-height: 200px;
+  max-height: 280px; /* a few months don't stretch to the calendar's height */
 }
 .journal-monthly-plot svg {
   position: absolute;

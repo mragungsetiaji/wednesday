@@ -38,7 +38,7 @@ export function MonthlyBars({ stats, currency }: { stats: JournalStats; currency
   const rows = useMemo(() => stats.monthly.filter((m) => m.gain !== null).slice(-MAX_BARS), [stats.monthly]);
   const [ref, width, height] = useSize<HTMLDivElement>();
   const [hot, setHot] = useState<number | null>(null);
-  const H = Math.max(height, 180); // fills the panel, as tall as the calendar beside it
+  const H = Math.max(height, 180); // fills the plot box, capped in CSS so a few months stay compact
   const top = 22;
   const values = rows.map((m) => m.gain as number);
   const bottom = Math.min(0, ...values) < 0 ? 40 : 24; // room for a label under a red bar, above the months
