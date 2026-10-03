@@ -28,7 +28,7 @@ from ..detectors.base import DetectorParams
 from ..detectors.orderblock import OrderBlockDetector
 from ..structure import Context
 from ..timeframes import TIMEFRAMES_BY_NAME, Timeframe
-from .dataset import FeatureParams, _atr, feature_names, label_matrix, timeframe_features, ts, unix
+from .dataset import FAMILIES, FeatureParams, _atr, feature_names, label_matrix, timeframe_features, ts, unix
 from .explain import contributions, importance, medians
 from .model import ModelBundle
 from .outcome import TradePlan, plan_levels, simulate
@@ -55,6 +55,8 @@ class TrainParams:
     outcome_from_detector: bool = True
     test_fraction: float = 0.2
     folds: int = 4  # walk-forward folds; 1 = a single time split
+    families: list[str] = field(default_factory=list)  # optional feature families (dataset.FAMILIES)
+    clock: str = "UTC"  # the bars' clock (the feed's), set by the server, not the form
     name: str = ""
     author: str = ""
     note: str = ""
@@ -78,6 +80,8 @@ class TrainParams:
             errors.append("Test share must be 5% to 50%")
         if not 1 <= self.folds <= 8:
             errors.append("Folds must be 1 to 8")
+        if any(f not in FAMILIES for f in self.families):
+            errors.append(f"Pick feature families from {', '.join(FAMILIES)}")
         return errors
 
     @classmethod
@@ -88,7 +92,7 @@ class TrainParams:
 
     @property
     def features(self) -> FeatureParams:
-        return FeatureParams(lookback=self.lookback, confirm=self.confirm)
+        return FeatureParams(lookback=self.lookback, confirm=self.confirm, families=tuple(self.families), clock=self.clock)
 
     @property
     def gap(self) -> pd.Timedelta:
@@ -351,7 +355,8 @@ def train_bundle(m1: pd.DataFrame, labels: dict[str, list[dict]], reviewed: dict
         "outcome": outcome_metrics and {**outcome_metrics, "trained": outcome_model is not None},
         "params": {"lookback": params.lookback, "confirm": params.confirm, "rr": params.rr,
                    "horizon_hours": params.horizon_hours, "max_sl": detector.max_sl, "folds": params.folds,
-                   "gap_minutes": int(params.gap.total_seconds() // 60)},
+                   "gap_minutes": int(params.gap.total_seconds() // 60), "families": list(params.families),
+                   "clock": params.clock},
         "data": {"first": m1.index[0].isoformat(), "last": m1.index[-1].isoformat(), "m1_bars": len(m1),
                  "labels": sum(len(v) for v in labels.values())},
         "inputs": input_quantiles(frames),
@@ -399,7 +404,7 @@ def predict_blocks(bundle: ModelBundle, m1: pd.DataFrame, tf: Timeframe, limit: 
     ``why``: the three feature families that moved its probability most (empty for model
     files without training medians)."""
     p = bundle.manifest["params"]
-    fp = FeatureParams(lookback=int(p["lookback"]), confirm=int(p["confirm"]))
+    fp = FeatureParams.of(p)
     # Enough M1 for the candles, their lookback and two higher timeframes of context.
     need = (limit + fp.lookback + fp.confirm + 20) * tf.minutes + 3 * 240
     fr = frames_for(m1.tail(need), tf, fp)
@@ -447,7 +452,7 @@ def queue_scores(bundle: ModelBundle, m1: pd.DataFrame, tf: Timeframe) -> pd.Dat
     (candle, tag) with the probability, the tag's cut and ``distance`` = |prob - cut|, the
     smallest first. Labels near the cut teach the model the most."""
     p = bundle.manifest["params"]
-    fp = FeatureParams(lookback=int(p["lookback"]), confirm=int(p["confirm"]))
+    fp = FeatureParams.of(p)
     fr = frames_for(m1, tf, fp)
     feats = fr.feats
     cols = ["time_unix", "tag", "prob", "cut", "distance"]
@@ -507,7 +512,7 @@ def score_window(bundles: list[ModelBundle], m1: pd.DataFrame, labels: dict[str,
     labelled = 0
     for b in bundles:
         p = b.manifest["params"]
-        fp = FeatureParams(lookback=int(p["lookback"]), confirm=int(p["confirm"]))
+        fp = FeatureParams.of(p)
         frames = []
         for name in shared:
             key = (name, fp)

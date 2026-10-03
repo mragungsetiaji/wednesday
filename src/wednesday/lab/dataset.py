@@ -14,6 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from ..quarters import DAY_SHIFT, to_new_york
 from ..timeframes import OHLCV_COLUMNS, TIMEFRAMES, Timeframe, resample_ohlcv
 
 # Low to high: the next entry is the higher timeframe used as context.
@@ -72,11 +73,28 @@ def minute_dataset(m1: pd.DataFrame, labels: dict[str, list[dict]], reviewed: di
 
 # ---- per-candle features -------------------------------------------------------
 
+# Optional feature families, switched on per model in the Train form. A model's manifest lists the
+# ones it was trained with and prediction builds exactly those (none for models made before them).
+FAMILIES = {
+    "quarters": "Session and quarter: Tokyo / London / NY AM / NY PM, the 90-minute quarter, the trading "
+                "weekday, and how far price has moved since the week and the session opened (New York time)",
+}
+
+
 @dataclass(frozen=True)
 class FeatureParams:
     lookback: int = 10  # candles before the candidate
     confirm: int = 3  # candles after it that must have closed before it is judged
     atr_length: int = 14
+    families: tuple[str, ...] = ()  # optional families (FAMILIES)
+    clock: str = "UTC"  # the bars' clock, for the families in New York time
+
+    @classmethod
+    def of(cls, params: dict) -> FeatureParams:
+        """From a model manifest's ``params``."""
+        return cls(lookback=int(params["lookback"]), confirm=int(params["confirm"]),
+                   families=tuple(f for f in params.get("families") or () if f in FAMILIES),
+                   clock=str(params.get("clock") or "UTC"))
 
 
 def _atr(c: pd.DataFrame, n: int) -> pd.Series:
@@ -115,6 +133,8 @@ def candle_features(candles: pd.DataFrame, tf: Timeframe, p: FeatureParams,
     cols["hour_cos"] = np.cos(2 * np.pi * hour / 24)
     cols["weekday"] = pd.Series(c.index.weekday, index=c.index).astype(float)
     cols["tf_minutes"] = pd.Series(float(tf.minutes), index=c.index)
+    if "quarters" in p.families:
+        cols.update(_quarter_features(c, atr, p.clock))
     feats = pd.DataFrame(cols)
 
     last = c.index.to_series().shift(-p.confirm)
@@ -128,6 +148,27 @@ def candle_features(candles: pd.DataFrame, tf: Timeframe, p: FeatureParams,
         for k in ("close", "high", "low", "body"):
             feats[f"htf{n}_{k}"] = np.nan
     return feats
+
+
+def _quarter_features(c: pd.DataFrame, atr: pd.Series, clock: str) -> dict[str, pd.Series]:
+    """Where the candle sits in the quarterly cycle, from its open time in New York, and its close
+    against the week's and the session's open. Causal: both opens are at or before the candle."""
+    shifted = to_new_york(c.index, clock) + DAY_SHIFT  # 18:00 New York starts the trading day
+    minutes = shifted.hour * 60 + shifted.minute
+    day = shifted.normalize()
+    week = day - pd.to_timedelta(day.weekday, unit="D")
+    session = minutes // 360  # Tokyo, London, NY AM, NY PM
+    idx = c.index
+    open_ = c["open"]
+    week_open = open_.groupby(np.asarray(week)).transform("first")
+    session_open = open_.groupby([np.asarray(day), np.asarray(session)]).transform("first")
+    return {
+        "q_session": pd.Series(session.astype(float), index=idx),
+        "q_q90": pd.Series(((minutes % 360) // 90).astype(float), index=idx),
+        "q_weekday": pd.Series(day.weekday.astype(float), index=idx),
+        "q_week_move": (c["close"] - week_open) / atr,
+        "q_session_move": (c["close"] - session_open) / atr,
+    }
 
 
 def _with_context(feats: pd.DataFrame, htf: Timeframe, hc: pd.DataFrame, close: pd.Series, atr: pd.Series, name: str) -> pd.DataFrame:

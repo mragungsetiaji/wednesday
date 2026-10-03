@@ -89,7 +89,7 @@ def win_chances(bundle, m1: pd.DataFrame, tf: Timeframe, blocks: list[Block], ma
     if bundle is None or bundle.outcome is None:
         return {}
     p = bundle.manifest["params"]
-    fr = frames_for(m1, tf, FeatureParams(lookback=int(p["lookback"]), confirm=int(p["confirm"])))
+    fr = frames_for(m1, tf, FeatureParams.of(p))
     rows, keys = [], []
     for b in blocks:
         if b.time not in fr.feats.index:

@@ -90,7 +90,7 @@ def input_shift(bundle, m1: pd.DataFrame | None) -> list[dict] | None:
     if m1 is None or m1.empty:
         return []
     p = bundle.manifest["params"]
-    fp = FeatureParams(lookback=int(p["lookback"]), confirm=int(p["confirm"]))
+    fp = FeatureParams.of(p)
     out = []
     for name, q in trained.items():
         tf = TIMEFRAMES_BY_NAME.get(name)

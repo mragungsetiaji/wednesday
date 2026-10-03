@@ -879,6 +879,7 @@ export interface TrainParams {
   outcome_from_detector: boolean;
   test_fraction: number;
   folds: number;
+  families: string[]; // optional feature families, e.g. "quarters"
   name: string;
   author: string;
   note: string;
@@ -891,6 +892,7 @@ export interface LabStatus {
   symbol?: string;
   history?: { first_unix: number; last_unix: number; bars: number } | null;
   tags?: LabTag[];
+  families?: { id: string; title: string }[]; // optional feature families the Train form offers
   counts?: Record<string, { tags: Record<string, { yes: number; no: number }>; reviewed: number }>;
   training?: {
     running: boolean; stage: string | null; error: string | null; last: ModelManifest | null; started_at: string | null;
