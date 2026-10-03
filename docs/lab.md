@@ -91,9 +91,16 @@ above only.
 | Family | What it adds |
 | --- | --- |
 | Session and quarter | The session (Tokyo, London, NY AM, NY PM), its 90-minute quarter and the trading weekday, all in New York time from the feed's clock, plus how far the candle closed from the week's and the session's open, in ATRs. |
+| Structure | The latest break of structure on this timeframe (up or down, BOS or change of character, candles since) and on the next one up, the last swing's label (HH, HL, LH, LL), and the distance to the swing high and low that haven't been broken, in ATRs. Swings use 5 candles each side, like the detectors. |
+| Liquidity | Whether a swing high or low was swept (wick through, close back) by one of the last 5 candles, and the distance to the nearest equal highs and lows still standing (two swings within 0.1 ATR). |
+| News | Minutes from the candle to the next high-impact USD release and since the last one, from the calendar stored in the database. Release times are published ahead, so the next one is known at the time. Candles outside the stored calendar (more than a week before its first week or after its last) have no value, rather than a wrong one. |
 
-Every family is causal: it only reads the candle and earlier ones, like the rest.
-Structure, liquidity sweeps, news and bias families are planned.
+Every family is causal. Structure and liquidity describe the market as it stood
+when the last confirming candle closed, the moment the sample is judged; a test
+rewrites everything after that moment and checks nothing changes. A bias family
+needs the history of the bias, which isn't stored yet. Which families help is
+for you to measure: train the same tags with and without one and compare the
+fold scores.
 
 **Scores.** Everything is split by time, never at random, by the moment each
 sample became known. With a few hundred labels one test window is noisy (a calm

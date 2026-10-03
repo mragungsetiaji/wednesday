@@ -4,7 +4,11 @@ import pandas as pd
 import pytest
 
 from wednesday.detectors import DetectorParams
-from wednesday.lab.dataset import FAMILIES, FeatureParams, candle_features
+import numpy as np
+
+from wednesday.lab import dataset
+from wednesday.lab.dataset import FAMILIES, STRUCTURE_LENGTH, FeatureParams, candle_features, higher_candles
+from wednesday.structure import analyze_structure
 from wednesday.lab.explain import describe
 from wednesday.lab.model import load_bytes
 from wednesday.lab.train import TrainParams, predict_blocks, train_bundle
@@ -65,9 +69,65 @@ def test_manifest_lists_the_families_and_prediction_builds_them():
 
 def test_unknown_family_is_refused():
     assert TrainParams(families=["astrology"]).validate()
-    assert set(FAMILIES) == {"quarters"}
+    assert set(FAMILIES) == {"quarters", "structure", "liquidity", "news"}
 
 
 @pytest.mark.parametrize("params", [{"lookback": 10, "confirm": 3}, {"lookback": 4, "confirm": 1, "families": None}])
 def test_models_from_before_families_build_the_old_features(params):
     assert FeatureParams.of(params).families == ()
+
+
+S = ["s_break_dir", "s_break_choch", "s_since_break", "s_swing_label", "s_dist_high", "s_dist_low",
+     "s_htf_break_dir", "s_htf_since_break"]
+L = ["l_swept_high", "l_swept_low", "l_dist_eq_high", "l_dist_eq_low"]
+
+
+@pytest.mark.parametrize("family,cols", [("structure", S), ("liquidity", L)])
+def test_structure_and_liquidity_never_look_ahead(family, cols):
+    m1 = synthetic(9000)
+    c = resample_ohlcv(m1, M5)
+    fp = FeatureParams(lookback=5, confirm=2, families=(family,))
+    base = candle_features(c, M5, fp, higher_candles(m1, M5))
+    i = 900
+    t = c.index[i]
+    cut = c.index[i + fp.confirm] + M5.delta  # available_at
+    changed = m1.copy()
+    changed.loc[changed.index >= cut, ["open", "high", "low", "close"]] *= 1.03
+    c2 = resample_ohlcv(changed, M5)
+    again = candle_features(c2, M5, fp, higher_candles(changed, M5))
+    pd.testing.assert_series_equal(base.loc[t, cols], again.loc[t, cols])
+    assert base[cols].notna().any().all()  # every column says something somewhere
+
+
+def test_structure_matches_the_detector_structure():
+    c = resample_ohlcv(synthetic(6000), M5)
+    fp = FeatureParams(lookback=5, confirm=2, families=("structure",))
+    f = candle_features(c, M5, fp)
+    st = analyze_structure(c["high"].to_numpy(), c["low"].to_numpy(), c["close"].to_numpy(), STRUCTURE_LENGTH)
+    for b in st.breaks[5:15]:
+        k = b.index  # the break is known at its own close: candidate k - confirm sees it
+        row = f.loc[c.index[k - fp.confirm]]
+        assert row["s_break_dir"] == (1.0 if b.direction == "bullish" else -1.0)
+        assert row["s_since_break"] == 0
+
+
+def test_news_minutes_and_unknown_outside_the_calendar():
+    idx = pd.date_range("2026-03-04 13:00", periods=4, freq="5min")  # feed clock UTC
+    c = pd.DataFrame({"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5}, index=idx)
+    release = int(pd.Timestamp("2026-03-04 13:30", tz="UTC").timestamp())
+    try:
+        dataset.use_news(lambda: ([release - 86400, release], release - 86400, release))
+        f = candle_features(c, M5, FeatureParams(lookback=0, confirm=0, atr_length=1, families=("news",)))
+        assert f["n_to_next"].tolist()[:2] == [30.0, 25.0]
+        assert f["n_since_last"].iloc[0] == 24 * 60 - 30
+        dataset.use_news(lambda: ([release], release + 30 * 86400, release + 40 * 86400))  # calendar starts later
+        f = candle_features(c, M5, FeatureParams(lookback=0, confirm=0, atr_length=1, families=("news",)))
+        assert f["n_to_next"].isna().all()
+    finally:
+        dataset.use_news(None)
+
+
+def test_every_new_feature_has_a_readable_name():
+    for name in S + L + ["n_to_next", "n_since_last"]:
+        family, label = describe(name)
+        assert family in {"structure", "liquidity", "news"} and label != name, name
