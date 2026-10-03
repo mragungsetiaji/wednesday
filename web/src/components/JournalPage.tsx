@@ -600,12 +600,13 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
     setPage(Math.max(0, Math.min(n, pages - 1)));
     setOpen(null);
   };
-  const pager = <Pager page={current} pages={pages} total={rows.length} onGo={go} />;
+  const from = rows.length ? current * PAGE + 1 : 0;
+  const to = Math.min(rows.length, (current + 1) * PAGE);
   return (
     <section className="journal-trades" aria-labelledby="trades-h">
       <div className="journal-section-head">
         <h3 id="trades-h">Trades</h3>
-        {pager}
+        <span className="pager-range num">{from}–{to} of {rows.length}</span>
       </div>
       <div className="table-scroll">
         <table className="data journal-table num">
@@ -628,7 +629,7 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
               <tr key={t.id} className={open === t.id ? "is-selected" : undefined} onClick={() => setOpen(open === t.id ? null : t.id)}>
                 <td>{t.close_time ? fmtUnix(t.close_time) : <span className="badge accent">open</span>}</td>
                 <td>{t.symbol}</td>
-                <td className={t.side === "buy" ? "pos" : "neg"}>{t.side}</td>
+                <td>{t.side === "buy" ? "↑ Buy" : "↓ Sell"}</td>
                 <td className="end">{t.volume.toFixed(2)}</td>
                 <td className="end">{fmtPrice(t.open_price)} → {t.close_price === null ? "—" : fmtPrice(t.close_price)}</td>
                 <td className={`end ${tone(t.close_time ? t.net : t.floating) ?? ""}`}>{signed(t.close_time ? t.net : t.floating)}</td>
@@ -659,7 +660,7 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
           </tbody>
         </table>
       </div>
-      {pages > 1 && <div className="journal-pager-foot">{pager}</div>}
+      {pages > 1 && <div className="journal-pager-foot"><Pager page={current} pages={pages} onGo={go} /></div>}
     </section>
   );
 }
@@ -675,24 +676,18 @@ function pageList(page: number, pages: number): (number | null)[] {
   return out;
 }
 
-function Pager({ page, pages, total, onGo }: { page: number; pages: number; total: number; onGo: (n: number) => void }) {
-  const from = total ? page * PAGE + 1 : 0;
-  const to = Math.min(total, (page + 1) * PAGE);
+/** Page buttons under the table; the range ("1–25 of 165") sits in the section header. */
+function Pager({ page, pages, onGo }: { page: number; pages: number; onGo: (n: number) => void }) {
   return (
     <nav className="pager num" aria-label="Trade pages">
-      <span className="pager-range">{from}–{to} of {total}</span>
-      {pages > 1 && (
-        <>
-          <button type="button" className="pager-btn" aria-label="Previous page" disabled={page === 0} onClick={() => onGo(page - 1)}>‹</button>
-          {pageList(page, pages).map((n, i) =>
-            n === null ? <span key={`gap${i}`} className="pager-gap">…</span> : (
-              <button key={n} type="button" className="pager-btn" aria-current={n === page ? "page" : undefined} onClick={() => onGo(n)}>
-                {n + 1}
-              </button>
-            ))}
-          <button type="button" className="pager-btn" aria-label="Next page" disabled={page === pages - 1} onClick={() => onGo(page + 1)}>›</button>
-        </>
-      )}
+      <button type="button" className="pager-btn" aria-label="Previous page" disabled={page === 0} onClick={() => onGo(page - 1)}>‹</button>
+      {pageList(page, pages).map((n, i) =>
+        n === null ? <span key={`gap${i}`} className="pager-gap">…</span> : (
+          <button key={n} type="button" className="pager-btn" aria-current={n === page ? "page" : undefined} onClick={() => onGo(n)}>
+            {n + 1}
+          </button>
+        ))}
+      <button type="button" className="pager-btn" aria-label="Next page" disabled={page === pages - 1} onClick={() => onGo(page + 1)}>›</button>
     </nav>
   );
 }

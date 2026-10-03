@@ -32,6 +32,9 @@
   /* Data colors (validated for colour-vision deficiency with labels as secondary encoding). */
   --bull: #199e70;
   --bear: #e66767;
+  /* Text in the bull and bear colours: the fills above are too light for text in the light theme. */
+  --bull-text: var(--bull);
+  --bear-text: var(--bear);
   --liquidity: #3987e5;
   --idm: #c3c2b7;
 
@@ -64,6 +67,8 @@
     --text-3: #6b6a63;
     --bull: #1baf7a;
     --bear: #e34948;
+    --bull-text: #007040; /* >= 4.7:1 on bg, surface and the 16% tint */
+    --bear-text: #b81824;
     --liquidity: #2a78d6;
     --idm: #52514e;
     --accent: #8f5b00;
@@ -221,19 +226,19 @@ p {
   transition-duration: 0s;
 }
 .ticker-price.is-flash.up {
-  color: var(--bull);
+  color: var(--bull-text);
   background: color-mix(in srgb, var(--bull) 16%, transparent);
 }
 .ticker-price.is-flash.down {
-  color: var(--bear);
+  color: var(--bear-text);
   background: color-mix(in srgb, var(--bear) 16%, transparent);
 }
 .tick-dir {
   display: inline-flex;
   width: 13px; /* reserved, so the first tick doesn't shift the status beside it */
 }
-.ticker-price.up .tick-dir { color: var(--bull); }
-.ticker-price.down .tick-dir { color: var(--bear); }
+.ticker-price.up .tick-dir { color: var(--bull-text); }
+.ticker-price.down .tick-dir { color: var(--bear-text); }
 
 /* Live status as a quiet pill, apart from the price. */
 .ticker > .live {
@@ -2989,8 +2994,8 @@ fieldset:disabled .switch {
 .journal-page {
   max-width: 1280px;
 }
-.journal-page .pos { color: var(--bull); }
-.journal-page .neg { color: var(--bear); }
+.journal-page .pos { color: var(--bull-text); }
+.journal-page .neg { color: var(--bear-text); }
 .journal-head {
   display: flex;
   flex-wrap: wrap;
@@ -3452,6 +3457,14 @@ fieldset:disabled .switch {
   display: flex;
   flex-direction: column;
 }
+.journal-monthly-detail {
+  /* one line that is always there, so hovering a month never moves the plot */
+  flex-wrap: nowrap;
+  min-height: 1.5em;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
 .journal-monthly-plot {
   position: relative;
   flex: 1;
@@ -3474,7 +3487,7 @@ fieldset:disabled .switch {
   margin-inline-start: auto;
 }
 .pager-range {
-  margin-inline-end: var(--s2);
+  margin-inline-start: auto;
   font-size: var(--text-sm);
   color: var(--text-3);
 }
@@ -3617,8 +3630,8 @@ fieldset:disabled .switch {
   border: 1px solid var(--line);
   align-content: center;
 }
-.cal-week .cal-money.pos { color: var(--bull); }
-.cal-week .cal-money.neg { color: var(--bear); }
+.cal-week .cal-money.pos { color: var(--bull-text); }
+.cal-week .cal-money.neg { color: var(--bear-text); }
 .cal-short {
   display: none;
 }

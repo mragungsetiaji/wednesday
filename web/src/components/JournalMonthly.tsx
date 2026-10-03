@@ -7,7 +7,8 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MAX_BARS = 24;
 
-const pct = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}%`;
+// one precision for the bar labels, the axis and the details line
+const pct = (v: number) => (v === 0 ? "0%" : `${v > 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}%`);
 const money = (v: number) => `${v >= 0 ? "+" : "−"}${fmtPrice(Math.abs(v))}`;
 const short = (v: number) => {
   const a = Math.abs(v);
@@ -31,7 +32,8 @@ function useSize<T extends HTMLElement>() {
   return [ref, size.width, size.height] as const;
 }
 
-/** Gain per month as bars from zero: green up, red down. Hover a month for money and pips. */
+/** Gain per month as bars from zero: green up, red down. Hover or focus a month for money and pips.
+ * The details line is always there (the latest month at rest), so hovering never resizes the plot. */
 export function MonthlyBars({ stats, currency }: { stats: JournalStats; currency: string }) {
   const rows = useMemo(() => stats.monthly.filter((m) => m.gain !== null).slice(-MAX_BARS), [stats.monthly]);
   const [ref, width, height] = useSize<HTMLDivElement>();
@@ -50,7 +52,8 @@ export function MonthlyBars({ stats, currency }: { stats: JournalStats; currency
   const step = rows.length ? plotW / rows.length : plotW;
   const barW = Math.max(Math.min(step * 0.62, 44), 3);
   const labels = rows.length <= 12 && barW >= 22;
-  const ticks = [hi, 0, lo].filter((v, i, a) => a.indexOf(v) === i);
+  // labelled bars carry their own values, so the axis keeps only 0% rather than repeat the tallest and lowest
+  const ticks = (labels ? [0] : [hi, 0, lo]).filter((v, i, a) => a.indexOf(v) === i);
 
   const bar = (i: number, v: number) => {
     const x = left + i * step + (step - barW) / 2;
@@ -64,23 +67,26 @@ export function MonthlyBars({ stats, currency }: { stats: JournalStats; currency
       : `M${x},${y0} V${y1 - r} Q${x},${y1} ${x + r},${y1} H${x + barW - r} Q${x + barW},${y1} ${x + barW},${y1 - r} V${y0} Z`;
   };
 
-  const h = hot === null ? null : rows[hot];
+  const h = hot === null ? rows[rows.length - 1] : rows[hot];
   return (
     <section className="journal-monthly" aria-labelledby="monthly-h">
       <div className="journal-section-head">
         <h3 id="monthly-h">Monthly gain</h3>
+        <span className="meta" title="Each month's gain with deposits and withdrawals taken out, so cash moves don't count as profit">
+          time-weighted
+        </span>
+      </div>
+      <p className="meta num journal-monthly-detail" aria-live="polite">
         {h ? (
-          <p className="meta num">
+          <>
             <span>{monthName(h.month)}</span>
             <span className={tone(h.gain ?? 0)}>{pct(h.gain ?? 0)}</span>
             <span>{money(h.profit)} {currency}</span>
             <span>{pips(h.pips)} pips</span>
             <span>{h.trades} trades</span>
-          </p>
-        ) : (
-          <p className="meta">Time-weighted. Hover a month for money and pips.</p>
-        )}
-      </div>
+          </>
+        ) : "\u00a0"}
+      </p>
       <div ref={ref} className="journal-monthly-plot" onMouseLeave={() => setHot(null)}>
         {rows.length === 0 ? (
           <p className="empty">No closed month yet.</p>
@@ -89,7 +95,7 @@ export function MonthlyBars({ stats, currency }: { stats: JournalStats; currency
             {ticks.map((v) => (
               <g key={v}>
                 <line x1={left} x2={width - right} y1={y(v)} y2={y(v)} className={v === 0 ? "axis-zero" : "axis-grid"} />
-                <text x={width - right + 6} y={y(v) + 4} className="axis-label">{v === 0 ? "0%" : `${v > 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}%`}</text>
+                <text x={width - right + 6} y={y(v) + 4} className="axis-label">{pct(v)}</text>
               </g>
             ))}
             {rows.map((m, i) => {
@@ -97,13 +103,13 @@ export function MonthlyBars({ stats, currency }: { stats: JournalStats; currency
               const x = left + i * step;
               const showMonth = rows.length <= 12 || i % Math.ceil(rows.length / 8) === 0;
               return (
-                <g key={m.month} onMouseEnter={() => setHot(i)} onFocus={() => setHot(i)} tabIndex={0}
+                <g key={m.month} onMouseEnter={() => setHot(i)} onFocus={() => setHot(i)} onBlur={() => setHot(null)} tabIndex={0}
                   aria-label={`${monthName(m.month)}: ${pct(v)}, ${money(m.profit)} ${currency}, ${pips(m.pips)} pips`}>
                   <rect x={x} y={top - 4} width={step} height={H - top - bottom + 8} className="hit" />
                   {v !== 0 && <path d={bar(i, v)} className={`bar ${v > 0 ? "up" : "down"}${hot === i ? " is-hot" : ""}`} />}
                   {labels && (
                     <text x={x + step / 2} y={v >= 0 ? y(v) - 6 : y(v) + 13} textAnchor="middle" className="bar-label">
-                      {v.toFixed(1)}%
+                      {pct(v)}
                     </text>
                   )}
                   {showMonth && (
