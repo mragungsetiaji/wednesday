@@ -124,11 +124,25 @@ export const InfoIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Link: charts that follow each other. */
+export const LinkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 013.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 014.5 9l1-1" />
+  </Svg>
+);
+
+/** Pop out: open in its own window. */
+export const PopOutIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9.5 2.5h4v4M13.5 2.5L8 8M11.5 9.5v3a1 1 0 01-1 1h-7a1 1 0 01-1-1v-7a1 1 0 011-1h3" />
+  </Svg>
+);
+
 /** Gear: settings. */
 export const GearIcon = (p: IconProps) => (
   <Svg {...p}>
-    <circle cx="8" cy="8" r="2.25" />
-    <path d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05" />
+    <circle cx="8" cy="8" r="2" />
+    <path d="M14.37 6.71 L14.37 9.29 L12.65 9.54 L12.38 10.20 L13.42 11.59 L11.59 13.42 L10.20 12.38 L9.54 12.65 L9.29 14.37 L6.71 14.37 L6.46 12.65 L5.80 12.38 L4.41 13.42 L2.58 11.59 L3.62 10.20 L3.35 9.54 L1.63 9.29 L1.63 6.71 L3.35 6.46 L3.62 5.80 L2.58 4.41 L4.41 2.58 L5.80 3.62 L6.46 3.35 L6.71 1.63 L9.29 1.63 L9.54 3.35 L10.20 3.62 L11.59 2.58 L13.42 4.41 L12.38 5.80 L12.65 6.46 Z" />
   </Svg>
 );
 

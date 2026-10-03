@@ -17,7 +17,8 @@ import { createContext, useContext, useEffect, useImperativeHandle, useMemo, use
 
 import type { Candle, QuarterBlock, QuarterRow, QuartersResponse, SwingPoint } from "../api";
 import { countdown, measure, PRESETS, presetStart, type Preset } from "../chartNav";
-import type { CrosshairBus } from "../crosshairSync";
+import type { CrosshairLink } from "../crosshairSync";
+import { linkBus, type LinkGroup } from "../windowLink";
 import { DrawingEditor } from "../drawingEditor";
 import type { DrawingCtl } from "../drawings";
 import { useLiveTick, type LiveFeed } from "../liveData";
@@ -82,7 +83,7 @@ interface Props {
   loading: boolean;
   quarters: QuartersResponse | null;
   quarterRows: QuarterRow[]; // rows of the quarterly pane, [] hides it
-  sync?: { bus: CrosshairBus; id: number }; // crosshair linked with other charts
+  sync?: { bus: CrosshairLink; id: number }; // crosshair linked with other charts
   swings?: SwingPoint[]; // HH / LH / HL / LL labels at swing points, [] hides them
   news?: NewsMark[]; // high-impact releases as vertical lines, [] hides them
   ml?: LabMark[]; // the active model's blocks, [] hides them
@@ -93,6 +94,7 @@ interface Props {
   drawings?: DrawingCtl | null; // the trader's drawings, shown and edited here
   nav?: Ref<ChartNav | null>; // for the keyboard shortcuts
   timeframe?: string; // named in a snapshot's footer; resetKey when not given
+  rangeLink?: { group: LinkGroup; id: string } | null; // scroll and zoom shared with a link group (windowLink.ts)
 }
 
 const ROW_PX = 22;
@@ -158,7 +160,7 @@ function candleAt(times: number[], t: number): number {
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
-  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe }: Props) {
+  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe, rangeLink = null }: Props) {
   const liveBar = useLiveTick(live)?.bar ?? null; // only the chart re-renders on a tick, not its parent
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -175,6 +177,10 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const candlesRef = useRef<Candle[]>([]);
   const syncRef = useRef(sync);
   syncRef.current = sync;
+  const rangeLinkRef = useRef(rangeLink);
+  rangeLinkRef.current = rangeLink;
+  const userAt = useRef(0); // when the trader last scrolled or zoomed this chart (performance.now)
+  const applying = useRef(false); // setting a range that came from the link group
   const needOlderRef = useRef(onNeedOlder);
   needOlderRef.current = onNeedOlder;
   const fittedKey = useRef<string | null>(null);
@@ -236,7 +242,21 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       if (range && range.from < 10) needOlderRef.current?.();
       const n = timesOf(candlesRef.current, liveRef.current).length;
       setOffLive(!!range && n > 0 && range.to < n - 1);
+      // Pass on a scroll or zoom the trader made here, not new data or a linked chart's range.
+      const link = rangeLinkRef.current;
+      if (link && !applying.current && performance.now() - userAt.current < 400) {
+        const vis = chart.timeScale().getVisibleRange();
+        if (vis) linkBus().publish(link.group, `${link.id}:r`, { kind: "range", from: vis.from as number, to: vis.to as number });
+      }
     });
+    const touched = () => {
+      userAt.current = performance.now();
+    };
+    for (const type of ["wheel", "pointerdown", "pointermove", "keydown", "touchmove"] as const) {
+      containerRef.current!.addEventListener(type, (e) => {
+        if (type !== "pointermove" || (e as PointerEvent).buttons) touched();
+      }, { passive: true });
+    }
     // Shift-drag measures: price change, pips, %, bars and time. It goes away on release.
     const el = containerRef.current!;
     const measureDown = (e: PointerEvent) => {
@@ -543,6 +563,24 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   }, [sync]);
 
   const onLeave = () => sync?.bus.publish(sync.id, null);
+
+  // Scroll and zoom with the link group: the same stretch of time, whatever the timeframe.
+  useEffect(() => {
+    if (!rangeLink) return;
+    return linkBus().subscribe(`${rangeLink.id}:r`, rangeLink.group, (m) => {
+      const chart = chartRef.current;
+      if (m.kind !== "range" || !chart || !candlesRef.current.length) return;
+      applying.current = true;
+      try {
+        chart.timeScale().setVisibleRange({ from: m.from as UTCTimestamp, to: m.to as UTCTimestamp });
+      } catch {
+        /* outside this chart's candles: stay put */
+      }
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        applying.current = false;
+      }));
+    });
+  }, [rangeLink?.group, rangeLink?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Quarterly pane: an empty series whose only job is to host the blocks primitive; its
   // invisible points on the candle times keep it on the shared time scale. Removing the
