@@ -442,10 +442,6 @@ function DataSourceSettings() {
               ) : (
                 <p className="empty">No bars stored yet. Demo data is never stored.</p>
               )}
-              <p className="field-note">
-                To use PostgreSQL, set <code>XAU_DB_URL=postgresql+psycopg://user:pass@host/db</code> in <code>.env</code>, run{" "}
-                <code>uv sync --extra postgres</code> and restart.
-              </p>
             </>
           ) : (
             <p className="empty">Storage is off (started with <code>--db none</code>).</p>
