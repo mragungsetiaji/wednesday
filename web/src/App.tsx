@@ -5,6 +5,7 @@ import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
 import { ChartFocus } from "./components/ChartFocus";
 import { ChartPopOut } from "./components/ChartPopOut";
+import { PerfOverlay } from "./components/PerfOverlay";
 import { LinkMenu, useChartLink } from "./components/LinkMenu";
 import { openChartWindow, useDesktopApi } from "./desktop";
 import type { LinkGroup } from "./windowLink";
@@ -279,6 +280,7 @@ export default function App() {
             scannedAt={data?.scanned_at ?? null} barTime={scan?.time ?? null} />
           <NewsAlert events={upcomingNews} />
           <Toasts />
+          <PerfOverlay />
         </div>
       </ChartMarket.Provider>
     );
@@ -536,6 +538,7 @@ export default function App() {
       {/* Full screen renders its own copy: the browser only shows the full screen element. */}
       {!(focus && scan && data) && <NewsAlert events={upcomingNews} />}
       {!focus && <Toasts />}
+      <PerfOverlay />
 
       {focus && scan && data && (
         <ChartFocus
