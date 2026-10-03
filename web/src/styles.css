@@ -94,6 +94,14 @@ html {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   scrollbar-color: var(--line-strong) transparent;
+  /* Keep the scrollbar's space even on a page too short to scroll, so switching between a long and a
+     short page (Settings > Lab, Access, Plugins) doesn't shift everything sideways (#76). */
+  scrollbar-gutter: stable;
+}
+/* Views that never scroll fill the whole window instead. */
+html:has(.app-popout),
+html:has(.focus) {
+  scrollbar-gutter: auto;
 }
 
 body {
