@@ -78,6 +78,9 @@ class DataFeed(ABC):
         return {"feed": self.name}
 
 
+TICK_BATCH = 5000  # most ticks read per poll; a gold symbol rarely has more than a few hundred a second
+
+
 class MT5Feed(DataFeed):
     """MetaTrader 5 terminal (Windows, ``uv sync --extra mt5``).
 
@@ -224,6 +227,31 @@ class MT5Feed(DataFeed):
         if not tick or not tick.bid:
             return None
         return pd.Timestamp(int(tick.time), unit="s"), float(tick.bid)  # broker server time, like the bars
+
+    def new_ticks(self) -> list[tuple[pd.Timestamp, float]]:
+        """Every tick since the last call (``copy_ticks_from`` after the last ``time_msc`` seen), so
+        the forming candle's high and low are exact however slowly it's polled. The first call, or
+        a terminal that returns nothing, falls back to the latest tick."""
+        mt5 = self._mt5
+        if mt5 is None:
+            return []
+        last = getattr(self, "_last_msc", None)
+        if last is not None and hasattr(mt5, "copy_ticks_from"):
+            got = mt5.copy_ticks_from(self.symbol, int(last // 1000), TICK_BATCH, mt5.COPY_TICKS_INFO)
+            if got is not None and len(got):
+                fresh = [t for t in got if int(t["time_msc"]) > last and float(t["bid"]) > 0]
+                if fresh:
+                    self._last_msc = int(fresh[-1]["time_msc"])
+                    return [(pd.Timestamp(int(t["time_msc"]), unit="ms"), float(t["bid"])) for t in fresh]
+                return []
+        tick = mt5.symbol_info_tick(self.symbol)
+        if not tick or not tick.bid:
+            return []
+        msc = int(getattr(tick, "time_msc", 0) or int(tick.time) * 1000)
+        if last is not None and msc <= last:
+            return []
+        self._last_msc = msc
+        return [(pd.Timestamp(msc, unit="ms"), float(tick.bid))]
 
     def account_summary(self) -> dict:
         """The logged-in account's number, server and company (no history). Runs on the scan thread."""

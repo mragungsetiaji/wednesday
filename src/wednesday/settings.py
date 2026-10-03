@@ -36,8 +36,8 @@ SOURCES = {
         "description": "Your broker's XAUUSD from a running MT5 terminal on the same Windows machine. Candles match the MT5 chart.",
         "default_symbol": "XAUUSD",
         "default_clock": "NY+7",
-        "default_tick": 1,
-        "min_tick": 0.5,
+        "default_tick": 0.25,  # every tick between polls is read (copy_ticks_from), so this is latency, not accuracy
+        "min_tick": 0.1,
     },
     "csv": {
         "title": "CSV file",

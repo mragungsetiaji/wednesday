@@ -47,7 +47,7 @@ The entry point can name any object with `register(ctx)` and `api`; `name`,
 | Member | What it is |
 | --- | --- |
 | `ctx.add_router(router)` | Mount a FastAPI router under `/api/ee/<plugin name>` |
-| `ctx.on_after_scan(fn)` | `fn(result, engine)` after every scan (after alerts) |
+| `ctx.on_after_scan(fn)` | `fn(result, engine)` after every scan (after alerts), on the scan worker thread: use `engine.call(lambda feed: ...)` for anything that reads MT5 |
 | `ctx.on_alert(fn)` | `fn(keys, result)` when order block alerts were just sent |
 | `ctx.add_job(name, every_seconds, fn)` | Run `fn` on its own thread every N seconds (≥ 1) until shutdown |
 | `ctx.provide(*features)` | Add feature ids at runtime |

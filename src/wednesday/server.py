@@ -6,6 +6,8 @@ snapshots, so they never touch the data feed (MT5) directly.
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 import sys
@@ -15,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
@@ -69,6 +71,8 @@ def _iso(dt) -> str | None:
 
 
 log = logging.getLogger(__name__)
+STREAM_POLL = 0.05  # seconds between looks at the engine's state for /api/stream (a dict read under a short lock)
+STREAM_SECONDS = 600  # a stream's lifetime; EventSource reconnects by itself
 
 DIST_TTL = 6 * 3600  # seconds the stored history's periods are kept; the live buffer's are fresh
 DIST_BARS = 2_000_000  # stored M1 bars read for the distribution: about five years
@@ -205,6 +209,34 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             "time": _unix(live["time"]) if live else None,
             "bar": {"time": _unix(bar["time"]), **{k: bar[k] for k in ("open", "high", "low", "close")}} if bar else None,
         }
+
+    @app.get("/api/stream")
+    async def stream(request: Request, limit: int = Query(0, ge=0)) -> StreamingResponse:
+        """Server-sent events: ``tick`` (the /api/tick body) whenever the price or the scan changes,
+        so the dashboard doesn't poll. A comment every 15 s keeps proxies from closing it. The stream
+        ends after 10 minutes (the browser reconnects on its own) or after ``limit`` events (scripts, tests)."""
+
+        async def events():
+            yield "retry: 2000\n\n"
+            last, sent, quiet = None, 0, 0.0
+            ends = time.monotonic() + STREAM_SECONDS
+            while time.monotonic() < ends and not await request.is_disconnected():
+                body = get_tick()
+                key = (body["tick"], body["version"])
+                if key != last:
+                    last, quiet = key, 0.0
+                    yield f"event: tick\ndata: {json.dumps(body)}\n\n"
+                    sent += 1
+                    if limit and sent >= limit:
+                        return
+                elif quiet >= 15:
+                    quiet = 0.0
+                    yield ": ping\n\n"
+                await asyncio.sleep(STREAM_POLL)
+                quiet += STREAM_POLL
+
+        return StreamingResponse(events(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     # ---- drawings: per source and symbol, so they follow a data source switch ----
     def drawing_store():
