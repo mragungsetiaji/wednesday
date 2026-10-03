@@ -1,6 +1,8 @@
 # Windows desktop app: builds the WednesdaySetup-<version>.exe installer.
 # Push a tag like v0.2.0 to publish it on a GitHub release; run it by hand
 # (Actions > Release Windows > Run workflow) for a test build kept as a workflow artifact.
+# After a tagged build, the bump-main job writes the tag's version into pyproject.toml,
+# src/wednesday/__init__.py, uv.lock and web/package(-lock).json on main (scripts/set_version.py).
 name: Release Windows
 
 on:
@@ -28,9 +30,9 @@ jobs:
             $version = "$base-dev.$env:GITHUB_RUN_NUMBER"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
-          # The app shows this in its status bar.
-          (Get-Content src/wednesday/__init__.py) -replace '^__version__ = ".*"', "__version__ = `"$version`"" |
-            Set-Content src/wednesday/__init__.py
+          # Every file that carries the version, for this build (the app shows it in its status bar).
+          python scripts/set_version.py $version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - uses: actions/setup-node@v4
         with:
@@ -75,3 +77,27 @@ jobs:
           files: |
             dist/WednesdaySetup-*.exe
           generate_release_notes: true
+
+  # Keep main's files on the released version, so running from source shows it too.
+  bump-main:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Write the version on main
+        run: |
+          python3 scripts/set_version.py "$GITHUB_REF_NAME" --if-newer
+          if git diff --quiet; then
+            echo "main already has ${GITHUB_REF_NAME#v} or newer"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Version ${GITHUB_REF_NAME#v}"
+          git pull --rebase origin main
+          git push origin HEAD:main

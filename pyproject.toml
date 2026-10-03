@@ -1,6 +1,6 @@
 [project]
 name = "wednesday"
-version = "0.1.6"
+version = "0.2.0"
 description = "Wednesday: Smart Money Concepts screener for XAUUSD (order blocks, liquidity, inducement, quarterly theory) with a web dashboard and Telegram alerts."
 readme = "README.md"
 license = { file = "LICENSE" }
