@@ -263,6 +263,37 @@ at once. **Esc** or **Exit** goes back. On a phone the charts stack and scroll.
 
 ![Two charts side by side, light theme](images/fullscreen-2.png)
 
+## Charts in their own windows
+
+For a second or third monitor, a chart can open in a window of its own: the
+**pop-out** button at the bottom right of the main chart (next to full screen),
+or the same button at the right of a full screen chart's tabs. It opens that
+timeframe, with the layers and session levels of the main window's toggles.
+
+A popped-out chart is bare: timeframe tabs, the live price, the bias, the drawing
+tools, a link button and the status bar (with the TradingView notice). No dock and
+no rail. Every window reads the same local server, so it updates with the same
+ticks and scans. A drawing made or changed in one window shows in the others at
+once. In a browser it's a popup window (allow popups for the dashboard); in the
+desktop app it's a native window that closes with the main one. Its address is
+`#popout/5M` (with `/A` for a link group), so it can be bookmarked.
+
+### Link groups
+
+The link button (beside pop-out, and in a popped-out window's bar) puts a chart in
+group **A**, **B** or **C**. Charts in the same group, in any window, follow each
+other:
+
+- the **crosshair** always: hovering one moves the others to the candle that
+  holds the same moment on their timeframe;
+- **scroll and zoom** (on by default): the same stretch of time, whatever the
+  timeframe;
+- **timeframe** (off by default): switching one switches the others.
+
+The two options belong to the group, so they're the same in every window. An
+unlinked chart doesn't follow anything. The charts inside full screen are already
+linked with each other.
+
 ## Quarterly theory pane
 
 Under the candles, a pane splits time the way quarterly theory does, in New

@@ -1141,6 +1141,17 @@ export interface Journal {
   created_at: string;
   synced_at: string | null;
   sample: boolean; // the made-up sample portfolio: free, can't be synced or imported into
+  auto_sync: boolean; // sync from MT5 after each scan when something changed
+  show_weekends: boolean; // Saturday and Sunday columns in the calendar
+  sync: JournalSync;
+}
+
+/** Where auto-sync stands; `at` is the last sync or import (ISO, UTC). */
+export interface JournalSync {
+  auto: boolean;
+  state: "ok" | "syncing" | "waiting" | "error" | "off";
+  at: string | null;
+  error: string | null;
 }
 
 export interface JournalsResponse {
@@ -1237,14 +1248,16 @@ export interface JournalStats {
 
 export const fetchJournals = () => getJson<JournalsResponse>("/api/journals");
 export const fetchJournal = (id: string) => getJson<JournalStats>(`/api/journals/${encodeURIComponent(id)}`);
-export const createJournal = (name: string, login: string | null) => send<Journal>("POST", "/api/journals", { name, login });
+export const createJournal = (name: string, login: string | null, autoSync = false) =>
+  send<Journal>("POST", "/api/journals", { name, login, auto_sync: autoSync });
 
 /** The account the MT5 terminal is logged in to; `connected: false` with why when there's none to read. */
 export type TerminalAccount =
   | { connected: true; login: string; server: string | null; company: string | null }
   | { connected: false; detail: string };
 export const fetchTerminalAccount = () => getJson<TerminalAccount>("/api/journals/terminal");
-export const updateJournal = (id: string, patch: { name?: string; time_offset?: number | null }) =>
+export type JournalPatch = { name?: string; time_offset?: number | null; auto_sync?: boolean; show_weekends?: boolean };
+export const updateJournal = (id: string, patch: JournalPatch) =>
   send<Journal>("PATCH", `/api/journals/${encodeURIComponent(id)}`, patch);
 /** Bring the sample portfolio back after it was deleted. */
 export const restoreSample = () => send<Journal>("POST", "/api/journals/sample");

@@ -995,6 +995,86 @@ p {
   align-items: center;
   gap: 6px;
 }
+
+/* A chart in its own window (#popout/5M): the bar, one pane, the status bar. */
+.app-popout {
+  height: 100dvh;
+  min-height: 0;
+}
+.popout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.popout-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+  min-height: 44px;
+  padding: var(--s1) var(--s3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-sm);
+}
+.popout-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.popout-chart {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  padding: var(--s1);
+}
+.popout-chart > .empty {
+  place-self: center;
+}
+
+/* Link groups: one colour each, the same in every window. */
+.link-menu {
+  position: relative;
+}
+.link-btn {
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+.link-A { --link: #2f80ed; }
+.link-B { --link: #d97706; }
+.link-C { --link: #9b51e0; }
+.link-btn.link-A,
+.link-btn.link-B,
+.link-btn.link-C {
+  color: var(--link);
+  border-color: var(--link);
+}
+.link-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--link);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+.link-pop {
+  min-width: 200px;
+}
+.popout-tools .link-pop {
+  inset-block-start: calc(100% + 4px);
+  inset-block-end: auto;
+}
+.chart-foot-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
 .segmented {
   display: flex;
   gap: 2px;
@@ -2044,6 +2124,15 @@ p {
 .button.quiet:hover:not(:disabled) {
   background: var(--hover);
 }
+/* Destructive: outlined in the error colour, so it never reads as the main action. */
+.button.danger {
+  background: transparent;
+  border: 1px solid var(--error);
+  color: var(--error);
+}
+.button.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+}
 
 input[type="text"],
 input[type="password"],
@@ -3017,25 +3106,6 @@ fieldset:disabled .switch {
   font-size: var(--text-lg);
   font-weight: 600;
 }
-.journal-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s2);
-}
-.journal-actions a.button {
-  text-decoration: none;
-}
-.journal-lock {
-  margin-inline-start: 6px;
-}
-.journal-panel {
-  flex-basis: 100%;
-  padding: var(--s3) var(--s4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-}
 .journal-inline {
   display: flex;
   flex-wrap: wrap;
@@ -3046,10 +3116,6 @@ fieldset:disabled .switch {
   flex: 1;
   min-width: 200px;
   max-width: 360px;
-}
-.journal-manage {
-  display: grid;
-  gap: var(--s4);
 }
 .journal-list {
   display: grid;
@@ -3078,6 +3144,36 @@ fieldset:disabled .switch {
   display: flex;
   align-items: center;
   gap: var(--s3);
+}
+.journal-head > a.icon-button {
+  text-decoration: none;
+}
+.journal-head .meta a {
+  color: inherit;
+  text-decoration: underline;
+}
+.journal-head .meta a.text-error {
+  color: var(--error);
+}
+.journal-settings a.button {
+  text-decoration: none;
+}
+.journal-settings .journal-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--s2) var(--s4);
+  margin: 0;
+}
+.journal-facts dt {
+  font-size: var(--text-xs);
+  color: var(--text-2);
+}
+.journal-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.journal-settings .journal-list-actions .button.danger {
+  padding-block: 2px;
 }
 .journal-new {
   display: grid;
@@ -3229,34 +3325,48 @@ fieldset:disabled .switch {
 .journal-verify {
   display: grid;
   gap: var(--s2);
-  padding: var(--s3) var(--s4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-}
-.journal-verify h3 {
-  margin: 0;
   font-size: var(--text-sm);
-  font-weight: 600;
   color: var(--text-2);
 }
+.journal-verify p,
 .journal-verify ul {
   margin: 0;
+}
+.journal-verify ul {
   padding: 0;
   list-style: none;
   display: grid;
   gap: var(--s1);
-  font-size: var(--text-sm);
 }
+.journal-verify-line,
 .journal-verify li {
   display: flex;
   gap: var(--s2);
   align-items: baseline;
 }
-.journal-verify li > .icon {
+.journal-verify .icon {
   flex: none;
   position: relative;
   top: 2px;
+}
+/* Real problems only: deal prices outside their bars, a balance that doesn't match. */
+.journal-verify-problems {
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--bear);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.journal-verify-problems .icon {
+  color: var(--bear-text);
+}
+.journal-verify-details summary {
+  cursor: pointer;
+  width: max-content;
+  color: var(--accent);
+}
+.journal-verify-details[open] {
+  display: grid;
+  gap: var(--s2);
 }
 
 .journal-trades {
@@ -3334,9 +3444,6 @@ fieldset:disabled .switch {
   }
 }
 @media (max-width: 520px) {
-  .journal-actions .button {
-    padding-inline: var(--s3);
-  }
   .journal-page .fields-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -3611,6 +3718,15 @@ fieldset:disabled .switch {
   grid-template-columns: repeat(7, minmax(0, 1fr)) minmax(0, 1.1fr);
   gap: 4px;
 }
+.cal-grid.is-weekdays .cal-row {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.1fr);
+}
+.cal-weekend {
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .cal-names span {
   font-size: var(--text-xs);
   font-weight: 600;
@@ -3670,6 +3786,7 @@ fieldset:disabled .switch {
   .cal-long,
   .cal-pips { display: none; }
   .cal-short { display: inline; }
+  .cal-grid.is-weekdays .cal-pips { display: inline; } /* five day columns leave room for the pips */
   .cal-cell {
     min-height: 52px;
     padding: 4px 3px;
@@ -3692,6 +3809,7 @@ fieldset:disabled .switch {
 }
 @container (max-width: 480px) {
   .cal-cell { padding-inline: 3px; }
+  .cal-unit { display: none; } /* the column says what it is; the number has to fit */
   .cal-money { font-size: var(--text-xs); letter-spacing: -0.02em; }
 }
 .journal-table td.journal-note-cell {
