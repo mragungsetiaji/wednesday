@@ -28,7 +28,7 @@ class SessionsRenderer implements IPrimitivePaneRenderer {
   constructor(private readonly source: SessionsPrimitive) {}
 
   draw(target: CanvasRenderingTarget2D): void {
-    const { chart, series, view, times, palette, font, formatPrice } = this.source;
+    const { chart, series, view, times, palette, font, formatPrice, zoneNames } = this.source;
     if (!chart || !series || times.length < 2 || (!view.killzones.length && !view.lines.length)) return;
     const ts = chart.timeScale();
     const a = ts.logicalToCoordinate(0 as Logical);
@@ -43,7 +43,8 @@ class SessionsRenderer implements IPrimitivePaneRenderer {
       ctx.font = `600 ${fontPx}px ${font}`;
       ctx.textBaseline = "middle";
 
-      // Killzones: a band the height of the pane, named at the bottom when it fits.
+      // Killzones: a band the height of the pane, named at the bottom when it fits (unless
+      // the quarter pane's session row, right below, names the sessions already).
       for (const k of view.killzones) {
         const x0 = Math.max(0, xOf(k.start_unix));
         const x1 = Math.min(W, xOf(k.end_unix));
@@ -51,7 +52,7 @@ class SessionsRenderer implements IPrimitivePaneRenderer {
         ctx.fillStyle = withAlpha(palette.muted, palette.mode === "dark" ? 0.09 : 0.08);
         ctx.fillRect(x0, 0, x1 - x0, H);
         const w = ctx.measureText(k.name).width;
-        if (w + 8 * hr <= x1 - x0) {
+        if (zoneNames && w + 8 * hr <= x1 - x0) {
           ctx.fillStyle = withAlpha(palette.muted, 0.8);
           ctx.textAlign = "left";
           ctx.fillText(k.name, x0 + 4 * hr, H - 9 * vr);
@@ -117,6 +118,7 @@ export class SessionsPrimitive implements ISeriesPrimitive<Time> {
   series: ISeriesApi<SeriesType> | null = null;
   view: LevelView = NO_LEVELS;
   times: number[] = [];
+  zoneNames = true;
   font = "system-ui, sans-serif";
   formatPrice: (p: number) => string = (p) => p.toFixed(2);
   private requestUpdate?: () => void;
@@ -139,7 +141,7 @@ export class SessionsPrimitive implements ISeriesPrimitive<Time> {
     return this.views;
   }
 
-  update(patch: Partial<Pick<SessionsPrimitive, "view" | "times" | "palette" | "font" | "formatPrice">>): void {
+  update(patch: Partial<Pick<SessionsPrimitive, "view" | "times" | "zoneNames" | "palette" | "font" | "formatPrice">>): void {
     Object.assign(this, patch);
     this.requestUpdate?.();
   }

@@ -512,8 +512,8 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   }, [news, candles]);
 
   useEffect(() => {
-    sessionsRef.current?.update({ view: levels, times: candles.map((c) => c.time) });
-  }, [levels, candles]);
+    sessionsRef.current?.update({ view: levels, times: candles.map((c) => c.time), zoneNames: !quarterRows.includes("session") });
+  }, [levels, candles, quarterRows]);
 
   useEffect(() => {
     mlRef.current?.update({ marks: ml, highlight: mlHighlight, times: candles.map((c) => c.time) });
