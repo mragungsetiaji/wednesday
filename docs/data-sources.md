@@ -72,6 +72,11 @@ forming candle's high and low are exact and the interval only sets how quickly
 the price moves on screen. Ticks are polled on the feed thread, which never runs
 the scan, so a slow scan doesn't freeze the price.
 
+The dashboard gets the price pushed over `/api/stream` (server-sent events) the
+moment it changes, at most once per screen frame, instead of asking for it. While
+the stream reconnects it falls back to polling `/api/tick`, and a hidden tab stops
+both until it's shown again.
+
 Set the interval in **Settings > Data source > Live price every**, `XAU_TICK` in
 `.env`, or leave it empty for the source's default:
 

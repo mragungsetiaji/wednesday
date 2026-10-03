@@ -1,5 +1,7 @@
 """Live price between the minute scans: settings, the forming candle, and /api/tick."""
 
+import json
+import threading
 import time
 
 import pandas as pd
@@ -137,3 +139,18 @@ def test_no_poll_scans_once():
     engine.stop()
     assert not engine._thread.is_alive()
     assert len(scans) == 1
+
+
+def test_stream_pushes_a_tick_when_the_price_changes(engine, tmp_path):
+    engine.step()
+    engine.tick()
+    client = TestClient(create_app(engine, source="synthetic", ui_dir=tmp_path))
+    later = threading.Timer(0.3, engine.tick)  # a new price while the stream is open
+    later.start()
+    with client.stream("GET", "/api/stream?limit=2") as res:
+        assert res.headers["content-type"].startswith("text/event-stream")
+        events = [json.loads(line[6:]) for line in res.iter_lines() if line.startswith("data: ")]
+    later.join()
+    assert len(events) == 2
+    assert events[0]["version"] == 1 and events[1]["tick"] == events[0]["tick"] + 1
+    assert events[1]["price"] is not None
