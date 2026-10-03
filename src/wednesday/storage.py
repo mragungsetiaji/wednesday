@@ -255,6 +255,24 @@ journal_notes_table = Table(
 )
 
 
+# Journal entries that aren't a trade: free notes, session reviews and setups journalled from the
+# ladder, each with the market frozen as it was when written (journal/market.py).
+journal_entries_table = Table(
+    "journal_entries",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("journal_id", String(36), nullable=False, index=True),
+    Column("kind", String(16), nullable=False),  # note / review / setup
+    Column("created_at", String(40), nullable=False),
+    Column("updated_at", String(40), nullable=True),
+    Column("text", Text, nullable=False),
+    Column("tags", Text, nullable=False),  # JSON list
+    Column("mood", Integer, nullable=True),  # 1-5
+    Column("setup", Text, nullable=True),  # JSON: the ladder row, for kind setup
+    Column("market", Text, nullable=True),  # JSON: the frozen snapshot
+)
+
+
 # ---- Chart drawings: trendlines, horizontal lines, rectangles, ... ---------------------------
 # Anchored to (time, price), not pixels, so one drawing shows on every timeframe. Kept per
 # source and symbol: MT5 times are the broker's clock and Yahoo's GC=F isn't spot XAUUSD.
@@ -664,7 +682,7 @@ class Store:
 
     def journal_delete(self, journal_id: str) -> bool:
         with self.engine.begin() as conn:
-            for t in (journal_trades_table, journal_cash_table, journal_notes_table):
+            for t in (journal_trades_table, journal_cash_table, journal_notes_table, journal_entries_table):
                 conn.execute(t.delete().where(t.c.journal_id == journal_id))
             return conn.execute(journals_table.delete().where(journals_table.c.id == journal_id)).rowcount > 0
 
@@ -692,6 +710,28 @@ class Store:
             rows = [{**r, "journal_id": journal_id} for r in rows]
             for i in range(0, len(rows), 2000):
                 self._upsert(table, rows[i : i + 2000], ["journal_id", "id"])
+
+    def journal_entry_put(self, row: dict) -> None:
+        row = {**row, **{k: json.dumps(row[k]) if row.get(k) is not None else None for k in ("setup", "market")},
+               "tags": json.dumps(row.get("tags") or [])}
+        self._upsert(journal_entries_table, [row], ["id"])
+
+    def journal_entries(self, journal_id: str) -> list[dict]:
+        """A journal's entries, newest first."""
+        t = journal_entries_table
+        with self.engine.connect() as conn:
+            rows = [dict(r._mapping) for r in conn.execute(
+                select(t).where(t.c.journal_id == journal_id).order_by(t.c.created_at.desc()))]
+        for r in rows:
+            r["tags"] = json.loads(r["tags"])
+            for k in ("setup", "market"):
+                r[k] = json.loads(r[k]) if r[k] else None
+        return rows
+
+    def journal_entry_delete(self, journal_id: str, entry_id: str) -> bool:
+        t = journal_entries_table
+        with self.engine.begin() as conn:
+            return conn.execute(t.delete().where(t.c.journal_id == journal_id, t.c.id == entry_id)).rowcount > 0
 
     def journal_note(self, journal_id: str, trade_id: str, note: str, tags: list[str], updated_at: str,
                      images: list[str] | None = None) -> None:

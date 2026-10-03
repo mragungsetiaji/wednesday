@@ -11,6 +11,7 @@ import { CameraIcon, CheckIcon, CrossIcon, GearIcon, InfoIcon, TrashIcon } from 
 import { usePref } from "../prefs";
 import type { ChartPalette } from "../theme";
 import { JournalChart, type JournalView } from "./JournalChart";
+import { JournalEntries } from "./JournalEntries";
 import { MonthlyBars, PnlCalendar } from "./JournalMonthly";
 import { JOURNAL_PREF, JOURNAL_SETTINGS, NewJournal, SampleBadge, syncText, type NewDraft } from "./JournalSettings";
 
@@ -180,7 +181,10 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
       {!stats ? (
         <p className="empty">Working out the numbers…</p>
       ) : stats.trades.length === 0 && stats.cash.length === 0 ? (
-        <EmptyJournal journal={selected} />
+        <>
+          <EmptyJournal journal={selected} />
+          {!selected.sample && <JournalEntries journalId={selected.id} />}
+        </>
       ) : (
         <>
           <div className="journal-grid">
@@ -201,6 +205,7 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
             <MonthlyBars stats={stats} currency={selected.currency ?? ""} />
             <PnlCalendar stats={stats} currency={selected.currency ?? ""} showWeekends={selected.show_weekends} />
           </div>
+          {!selected.sample && <JournalEntries journalId={selected.id} />}
           <Trades journalId={selected.id} stats={stats} onSaved={() => loadStats(selected.id)} />
         </>
       )}
