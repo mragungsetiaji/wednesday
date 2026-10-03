@@ -42,6 +42,12 @@ A chart can open in its own window, for another monitor: the pop-out button
 under the chart (see [Charts in their own windows](dashboard.md#charts-in-their-own-windows)).
 Those windows use the same local server and close with the main window.
 
+The app remembers its windows: when it closes, each window's position, size,
+maximised state and chart are kept, and the next start puts them back. A window
+whose monitor is gone (a laptop undocked) opens on the main screen, fully
+visible. Named workspaces (see [Workspaces](dashboard.md#workspaces)) switch
+between saved window sets.
+
 The installer includes the MT5, news brief and Lab extras, so every source and
 feature works without installing Python.
 

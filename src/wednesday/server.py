@@ -25,6 +25,8 @@ from .auth import Auth, install as install_auth
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
 from .journal.market import freeze
+from .replay import ReplayCache, view as replay_view
+from .workspaces import WorkspaceError, Workspaces
 from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .llm_usage import BudgetExceeded
 from .news import CALENDAR_KEY, CalendarSettings
@@ -336,6 +338,58 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             "levels": levels,
             "swings": swings,  # confirmed swing points labelled HH / LH / HL / LL
         }
+
+    # ---- bar replay: the market as it stood at a past minute (replay.py) ----
+    replay_cache = ReplayCache()
+
+    def replay_bars(at: int) -> pd.DataFrame:
+        """M1 history reaching back far enough for one scan before ``at``: stored bars plus the live buffer."""
+        engine = current()
+        _, _, m1 = engine.snapshot()
+        store = runtime.store if runtime else target.store
+        parts = []
+        if store and engine.feed.persist:
+            span = int(engine.buffer.max_bars * 60 * 1.6) + 3 * 86400  # weekends and holidays have no bars
+            parts.append(store.load_bar_range(current_source(), engine.symbol, at - span, at))
+        if m1 is not None:
+            parts.append(m1)
+        parts = [p for p in parts if p is not None and len(p)]
+        if not parts:
+            raise HTTPException(503, "no data yet")
+        bars = pd.concat(parts)
+        return bars[~bars.index.duplicated(keep="last")].sort_index()
+
+    @app.get("/api/replay/range")
+    def replay_range() -> dict:
+        """The earliest and latest minute a replay can start at (unix, feed clock)."""
+        engine = current()
+        _, _, m1 = engine.snapshot()
+        store = runtime.store if runtime else target.store
+        first = last = None
+        if store and engine.feed.persist:
+            _, first, last = store.bar_bounds(current_source(), engine.symbol)
+        if m1 is not None and len(m1):
+            first = min(first or 10**12, int(m1.index[0].timestamp()))
+            last = max(last or 0, int(m1.index[-1].timestamp()))
+        if first is None:
+            raise HTTPException(503, "no data yet")
+        # A scan needs its lookback of history before the clock.
+        return {"first": first + engine.buffer.max_bars // 2 * 60, "last": last + 60}
+
+    @app.get("/api/replay")
+    def get_replay(at: int = Query(...), tf: str = Query("1H"), limit: int = Query(200, ge=10, le=2000)) -> dict:
+        """The scan and ``tf`` candles at the replay clock ``at`` (unix, feed clock). Nothing after it."""
+        timeframe = TIMEFRAMES_BY_NAME.get(tf.upper())
+        if timeframe is None:
+            raise HTTPException(404, f"unknown timeframe {tf!r}")
+        at = at - at % 60  # whole minutes
+        engine = current()
+        key = (id(engine), current_source(), at, timeframe.name, limit)
+        try:
+            out = replay_cache.get(key, lambda: replay_view(replay_bars(at), cfg, at, timeframe, limit))
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {**out, "candles": _candle_rows(out["candles"])}
 
     @app.get("/api/quarters")
     def get_quarters() -> dict:
@@ -779,12 +833,42 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return freeze(result.to_dict(bias) if result else None, bias.to_dict() if bias else None, news,
                       current().symbol, current_source(), live["price"] if live else None)
 
+    # ---- workspaces: named window sets and chart layouts (workspaces.py) ----
+    def workspaces() -> Workspaces:
+        store = runtime.store if runtime else target.store
+        if store is None:
+            raise HTTPException(409, "Workspaces need a database")
+        return Workspaces(store)
+
+    @app.get("/api/workspaces")
+    def list_workspaces() -> dict:
+        return {"workspaces": workspaces().list()}
+
+    @app.get("/api/workspaces/{name}")
+    def get_workspace(name: str) -> dict:
+        try:
+            return workspaces().get(name)
+        except KeyError:
+            raise HTTPException(404, "No such workspace") from None
+
+    @app.put("/api/workspaces/{name}")
+    def put_workspace(name: str, body: dict = Body(...)) -> dict:
+        try:
+            return workspaces().save(name, body.get("layout") or {}, body.get("windows") or [])
+        except WorkspaceError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.delete("/api/workspaces/{name}")
+    def delete_workspace(name: str) -> dict:
+        return {"deleted": workspaces().delete(name)}
+
     app.include_router(journal_router(lambda: runtime.journals if runtime else None, current,
                                       lambda: features(app.state.plugins), shots, market_now))
 
     # Plugins mount their routes before the dashboard's catch-all static mount below.
     plugins = load_plugins(app, runtime) if runtime else []
     app.state.plugins = plugins
+    app.state.store = runtime.store if runtime else target.store  # the desktop app keeps its windows there
 
     @app.get("/api/plugins")
     def get_plugins() -> dict:

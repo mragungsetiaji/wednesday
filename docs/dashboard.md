@@ -81,6 +81,8 @@ them.
 | Delete | Delete the selected drawing |
 | Ctrl+Z (⌘Z) | Undo a drawing change |
 | Ctrl+Shift+Z, Ctrl+Y (⌘⇧Z) | Redo |
+| Space | Play or pause, in replay |
+| ← / → | Step back or forward one candle in replay (with Shift: one minute) |
 
 Go to reads times in **New York** time by default, or on the **feed** clock (the
 chart's own times); end the text with "NY" or "feed" to pick one. A New York time
@@ -263,6 +265,30 @@ at once. **Esc** or **Exit** goes back. On a phone the charts stack and scroll.
 
 ![Two charts side by side, light theme](images/fullscreen-2.png)
 
+## Bar replay
+
+With the right side of the chart in view, every order block looks obvious.
+**Replay** (under the chart, beside the link button) hides the future: it puts
+the chart back at a past minute and plays the stored history forward, so you
+decide candle by candle as you would have live.
+
+- The clock starts a day back. Pick another time in the bar (on the feed's
+  clock) and press **Go**.
+- **‹** and **›** step one candle of the chart's timeframe, **+1m** one minute,
+  and **Play** runs at 1, 10 or 60 minutes a second. Keys: Space plays or pauses,
+  ← and → step a candle, and Shift steps a minute.
+- Only bars that had closed by the clock are used. The scan runs on them exactly
+  as it ran live, so the ladder, setups and structure are what you'd have seen
+  then; the candle still forming at the clock is built from its minutes so far.
+  Today's bias isn't applied to the past.
+- The quarters pane, killzones, session levels, news lines and the model layer
+  come from the live data, so they're off during replay. Full screen and
+  pop-out wait until you exit.
+- The status reads **Replay** instead of Live. **Exit replay** returns to the live chart.
+
+How far back it can go depends on the stored M1 history (Settings, Lab, Data
+pulls more from MT5).
+
 ## Charts in their own windows
 
 For a second or third monitor, a chart can open in a window of its own: the
@@ -293,6 +319,18 @@ other:
 The two options belong to the group, so they're the same in every window. An
 unlinked chart doesn't follow anything. The charts inside full screen are already
 linked with each other.
+
+### Workspaces
+
+**Workspace** under the chart saves the current setup under a name ("London
+prep", "NY execution"): the chart layout (timeframe, full screen layout and pane
+sizes, layer toggles, link groups) and, in the desktop app, every window with its
+position, size, monitor and chart. Opening one puts the layout back, closes the
+popped-out charts, opens the saved ones where they were, and reloads the
+dashboard. **Update** saves over a workspace, and **Remove** deletes it. Up to 20
+are kept, in the database, so clearing the browser's or the app's storage doesn't
+lose them. In a browser, opening a workspace opens its charts as popups at their
+saved positions (allow popups for the dashboard).
 
 ## Quarterly theory pane
 

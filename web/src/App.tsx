@@ -7,6 +7,7 @@ import { ChartFocus } from "./components/ChartFocus";
 import { ChartPopOut } from "./components/ChartPopOut";
 import { PerfOverlay } from "./components/PerfOverlay";
 import { LinkMenu, useChartLink } from "./components/LinkMenu";
+import { WorkspaceMenu } from "./components/WorkspaceMenu";
 import { openChartWindow, useDesktopApi } from "./desktop";
 import type { LinkGroup } from "./windowLink";
 import { DistributionPanel } from "./components/DistributionPanel";
@@ -36,8 +37,10 @@ import { useMl } from "./mlData";
 import { usePref } from "./prefs";
 import { newsMarks } from "./newsPrimitive";
 import { buildRail } from "./rail";
-import { levelGroups, levelView, DEFAULT_LEVELS, type LevelGroup } from "./refLevels";
+import { levelGroups, levelView, DEFAULT_LEVELS, NO_LEVELS, type LevelGroup } from "./refLevels";
 import { useDrawings } from "./drawingsData";
+import { useReplay } from "./replayData";
+import { ReplayBar } from "./components/ReplayBar";
 import { useLiveFeed } from "./liveData";
 import { useChartPalette } from "./theme";
 
@@ -152,16 +155,22 @@ export default function App() {
   const timeframes = useMemo(() => config?.timeframes ?? [], [config]);
   const allDetectors = useMemo(() => config?.detectors ?? [], [config]);
   const detectors = useMemo(() => allDetectors.filter((d) => !hidden.includes(d.name)), [allDetectors, hidden]);
-  const scan = data?.scan ?? null;
+  const replay = useReplay(tf, lookback);
+  const replaying = replay.on && view === "chart";
+  const liveScan = data?.scan ?? null;
+  // In replay everything on the chart page shows the market at the replay clock, never later.
+  const scan = replaying ? replay.data?.scan ?? null : liveScan;
   // The live price stays out of this component's state: a tick re-renders only what shows it.
-  const live = useLiveFeed(data?.tick_seconds ?? 0, data?.version ?? 0, refreshScan);
-  const drawings = useDrawings(data?.source, data?.symbol, scan?.sizing ?? null, data?.version ?? 0);
+  const liveFeed = useLiveFeed(data?.tick_seconds ?? 0, data?.version ?? 0, refreshScan);
+  const live = replaying ? null : liveFeed;
+  const drawings = useDrawings(data?.source, data?.symbol, liveScan?.sizing ?? null, data?.version ?? 0);
 
   useEffect(() => {
     if (timeframes.length && !timeframes.includes(tf)) setTf(timeframes[0]);
   }, [timeframes, tf, setTf]);
 
-  const [chart, loadOlder] = useCandles(tf, version, lookback, setFetchError);
+  const [liveChart, loadOlder] = useCandles(tf, version, lookback, setFetchError);
+  const chart = replaying ? replay.data : liveChart;
   const [ml, refreshMl] = useMl(tf, version, showMl && view === "chart", mlThreshold, lookback);
   const mlMarks = useMemo(() => (ml?.blocks ?? []).map(predictionMark), [ml]);
 
@@ -193,9 +202,10 @@ export default function App() {
       alive = false;
     };
   }, [version]);
-  const levels = useMemo(() => levelView(sessions, levelGroupsOn), [sessions, levelGroupsOn]);
+  // Sessions, quarters and news come from the live buffer: they'd show the future in replay.
+  const levels = useMemo(() => (replaying ? NO_LEVELS : levelView(sessions, levelGroupsOn)), [sessions, levelGroupsOn, replaying]);
 
-  const quarterRows = useMemo(() => (showQuarters ? quarterRowsFor(tf) : []), [showQuarters, tf]);
+  const quarterRows = useMemo(() => (showQuarters && !replaying ? quarterRowsFor(tf) : []), [showQuarters, tf, replaying]);
 
   const rail = useMemo(() => (scan ? buildRail(scan, detectors) : []), [scan, detectors]);
 
@@ -227,6 +237,8 @@ export default function App() {
                     ? { cls: "warn", text: "Stale" }
                     : { cls: "ok", text: "Live" };
 
+  // In replay the chart shows the past: never call it live.
+  const chartStatus = replaying ? { cls: "idle", text: "Replay" } : status;
   const toggleLayer = (name: string) => setHidden(hidden.includes(name) ? hidden.filter((n) => n !== name) : [...hidden, name]);
   const hasOb = detectors.some((d) => d.name === "ob");
   const [dockTab, setDockTab] = usePref<string | null>("wed.dockTab", null);
@@ -303,9 +315,9 @@ export default function App() {
               {data?.source && <span className="ticker-source">{SOURCES[data.source] ?? data.source}</span>}
             </div>
             <LiveTickerPrice live={live} fallback={scan?.price ?? null} />
-            <span className={`live ${status.cls}`}>
+            <span className={`live ${chartStatus.cls}`}>
               <span className="dot" aria-hidden="true" />
-              {status.text}
+              {chartStatus.text}
             </span>
           </div>
         )}
@@ -411,6 +423,7 @@ export default function App() {
                 </div>
                 </div>
               </div>
+              {replaying && <ReplayBar replay={replay} tf={tf} clockName={CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed"} />}
               <div className="chart-body">
               <DrawingToolbar ctl={drawings} />
               <DrawingStyleBar ctl={drawings} />
@@ -422,12 +435,12 @@ export default function App() {
                 palette={palette}
                 resetKey={tf}
                 loading={!chart}
-                onNeedOlder={loadOlder}
+                onNeedOlder={replaying ? undefined : loadOlder}
                 quarters={quarters}
                 quarterRows={quarterRows}
                 swings={showSwings ? chart?.swings : undefined}
-                news={news}
-                ml={showMl ? mlMarks : undefined}
+                news={replaying ? undefined : news}
+                ml={showMl && !replaying ? mlMarks : undefined}
                 mlHighlight={mlHot}
                 levels={levels}
                 live={live}
@@ -454,12 +467,18 @@ export default function App() {
                   <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
                 </ul>
                 <div className="chart-foot-tools">
+                <button type="button" className={`button quiet replay-toggle${replaying ? " is-on" : ""}`} disabled={!liveScan}
+                  aria-pressed={replaying} onClick={() => (replaying ? replay.stop() : replay.start())}
+                  title="Bar replay: play the stored history forward candle by candle, without seeing what came next">
+                  Replay
+                </button>
+                <WorkspaceMenu />
                 <LinkMenu value={mainGroup} onChange={setMainGroup} />
-                <button type="button" className="icon-button" onClick={() => openChartWindow(desktop, tf, mainGroup)} disabled={!scan}
+                <button type="button" className="icon-button" onClick={() => openChartWindow(desktop, tf, mainGroup)} disabled={!scan || replaying}
                   title={`Open ${tf} in its own window, for another monitor`} aria-label="Open the chart in its own window">
                   <PopOutIcon size={15} />
                 </button>
-                <button type="button" className="icon-button" onClick={() => setFocus(true)} disabled={!scan}
+                <button type="button" className="icon-button" onClick={() => setFocus(true)} disabled={!scan || replaying}
                   title="Full screen: one, two or four charts (F)" aria-label="Full screen charts">
                   <ExpandIcon size={15} />
                 </button>
@@ -496,7 +515,7 @@ export default function App() {
             </section>
 
             {scan ? (
-              <Rail items={rail} sizing={scan.sizing} price={scan.price} live={live} status={status} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf}
+              <Rail items={rail} sizing={scan.sizing} price={scan.price} live={live} status={chartStatus} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf}
                 bias={tradeBias} onBiasChanged={refreshScan} onOpenSettings={openSettings}
                 panels={config ? [
                   { id: "structure", label: "Structure", content: <StructurePanel scan={scan} selected={tf} onSelect={setTf} /> },
@@ -532,7 +551,7 @@ export default function App() {
         scannedAt={data?.scanned_at ?? null} barTime={scan?.time ?? null} />
 
       <ChartKeys active={view === "chart" && !focus} timeframes={timeframes} setTf={setTf} nav={() => mainNav.current}
-        setTool={drawings.available ? drawings.setTool : null} toggleFullScreen={() => scan && setFocus(true)}
+        setTool={drawings.available ? drawings.setTool : null} toggleFullScreen={() => scan && !replaying && setFocus(true)}
         clockOffset={market.clockOffset} />
 
       {/* Full screen renders its own copy: the browser only shows the full screen element. */}

@@ -1121,6 +1121,84 @@ p {
   font-size: var(--text-xs);
   pointer-events: none;
 }
+/* Bar replay: one line of controls between the toolbar and the chart. */
+.replay-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  padding: var(--s1) var(--s3);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  font-size: var(--text-sm);
+}
+.replay-clock {
+  font-weight: 600;
+  min-width: 15ch;
+}
+.replay-jump,
+.replay-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+.replay-jump input {
+  width: auto;
+  height: 30px;
+}
+.replay-speed select {
+  width: auto;
+  height: 30px;
+}
+.replay-controls .icon-button {
+  width: auto;
+  min-width: 30px;
+  padding-inline: 6px;
+  font-size: var(--text-sm);
+}
+.replay-play {
+  min-width: 64px;
+}
+.replay-note {
+  font-size: var(--text-xs);
+}
+.replay-exit {
+  margin-inline-start: auto;
+}
+.replay-toggle.is-on {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.workspace-menu {
+  position: relative;
+}
+.workspace-pop {
+  min-width: 280px;
+}
+.workspace-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.workspace-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 28px;
+}
+.workspace-list li > .link-button:first-child {
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-save {
+  display: flex;
+  gap: var(--s2);
+}
 .chart-foot-tools {
   display: flex;
   align-items: center;

@@ -5,6 +5,8 @@ export interface DesktopApi {
   pick_terminal(): Promise<string | null>;
   save_png(data: string, name: string): Promise<string | null>; // base64 PNG; the path saved to, or null (cancelled)
   open_chart(tf: string, group: string | null): Promise<boolean>; // a chart in a new native window
+  window_layout(): Promise<import("./api").WorkspaceWindow[]>; // the open windows, for a workspace
+  arrange(windows: import("./api").WorkspaceWindow[]): Promise<boolean>; // open a workspace's windows
 }
 
 declare global {
