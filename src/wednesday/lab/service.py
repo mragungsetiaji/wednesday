@@ -130,6 +130,7 @@ class Lab:
         self.history_bars = int(saved.get("history_bars") or HISTORY_BARS_DEFAULT)
         store.lab_runs_interrupted(_now())
         dataset.use_news(self.news_times)  # the news feature family reads the stored calendar
+        dataset.use_bias(store.bias_history)  # and the bias family the trader's bias history
 
     def news_times(self) -> tuple[list[int], int | None, int | None]:
         """High-impact USD release times stored so far (unix UTC, oldest first), and the calendar's span."""

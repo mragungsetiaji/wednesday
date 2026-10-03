@@ -84,6 +84,8 @@ FAMILIES = {
     "liquidity": "Liquidity: a swing high or low swept by one of the last 5 candles, and the distance to the "
                  "nearest equal highs and lows",
     "news": "News: minutes to the next and since the last high-impact USD release, from the stored calendar",
+    "bias": "Bias: the direction you had set (bullish, bearish or neutral) when the candle was judged, from "
+            "the bias history kept since this version",
 }
 STRUCTURE_LENGTH = 5  # swing length for the structure and liquidity families (the detectors' default)
 SWEEP_CANDLES = 5  # how far back a sweep counts
@@ -92,6 +94,15 @@ EQ_TOLERANCE = 0.1  # equal highs / lows: within this many ATRs (the liquidity d
 # High-impact release times (unix, UTC) and the stored calendar's first and last, for the news
 # family. Set by the Lab from its database (use_news); None leaves the news columns empty.
 _news_source = None
+
+
+_bias_source = None
+
+
+def use_bias(source) -> None:
+    """``source()`` -> [{"set_at", "direction", "expires_at"}] oldest first (ISO UTC), or None to clear."""
+    global _bias_source
+    _bias_source = source
 
 
 def use_news(source) -> None:
@@ -175,6 +186,8 @@ def candle_features(candles: pd.DataFrame, tf: Timeframe, p: FeatureParams,
     available = last + tf.delta
     feats = feats[available.notna()]
     feats["available_at"] = available[available.notna()]
+    if "bias" in p.families:
+        feats["b_bias"] = _bias_at(feats["available_at"], p.clock)
 
     for n, (htf, hc) in enumerate(higher or [], start=1):
         feats = _with_context(feats, htf, hc, cl.reindex(feats.index), atr.reindex(feats.index), f"htf{n}")
@@ -280,6 +293,33 @@ def _htf_structure(feats: pd.DataFrame, higher: tuple[Timeframe, pd.DataFrame] |
     feats["s_htf_break_dir"] = merged["d"].to_numpy()
     feats["s_htf_since_break"] = merged["since"].to_numpy()
     return feats
+
+
+_DIRECTION = {"bullish": 1.0, "bearish": -1.0, "neutral": 0.0}
+
+
+def _bias_at(when: pd.Series, clock: str) -> np.ndarray:
+    """The bias in force at each time (feed clock): +1 bullish, -1 bearish, 0 neutral; empty when none
+    was set, it had expired, or the time is before the bias history starts."""
+    rows = _bias_source() if _bias_source else None
+    out = np.full(len(when), np.nan)
+    if not rows:
+        return out
+    from ..quarters import to_utc
+
+    t = to_utc(pd.DatetimeIndex(when), clock).as_unit("ns").asi8
+    set_at = pd.to_datetime([r["set_at"] for r in rows], utc=True, format="ISO8601").as_unit("ns").asi8
+    i = np.searchsorted(set_at, t, side="right") - 1
+    for j, k in enumerate(i):
+        if k < 0:
+            continue
+        r = rows[k]
+        if r["direction"] is None:
+            continue
+        if r["expires_at"] and t[j] >= pd.Timestamp(r["expires_at"]).as_unit("ns").value:
+            continue
+        out[j] = _DIRECTION.get(r["direction"], np.nan)
+    return out
 
 
 def _news_features(c: pd.DataFrame, clock: str) -> dict[str, pd.Series]:

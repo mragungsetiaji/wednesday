@@ -26,6 +26,7 @@ FAMILIES = {
     "structure": "Structure",
     "liquidity": "Liquidity",
     "news": "News",
+    "bias": "Your bias",
 }
 TOP_FEATURES = 15
 REPEATS = 3
@@ -66,6 +67,7 @@ _NAMED = {
     "l_dist_eq_low": ("liquidity", "distance to equal lows"),
     "n_to_next": ("news", "minutes to the next high-impact release"),
     "n_since_last": ("news", "minutes since the last high-impact release"),
+    "b_bias": ("bias", "the bias you had set"),
 }
 _HTF_WHAT = {"close": "close vs candle", "high": "high vs candle", "low": "low vs candle", "body": "body"}
 

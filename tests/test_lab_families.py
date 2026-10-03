@@ -69,7 +69,7 @@ def test_manifest_lists_the_families_and_prediction_builds_them():
 
 def test_unknown_family_is_refused():
     assert TrainParams(families=["astrology"]).validate()
-    assert set(FAMILIES) == {"quarters", "structure", "liquidity", "news"}
+    assert set(FAMILIES) == {"quarters", "structure", "liquidity", "news", "bias"}
 
 
 @pytest.mark.parametrize("params", [{"lookback": 10, "confirm": 3}, {"lookback": 4, "confirm": 1, "families": None}])
@@ -131,3 +131,23 @@ def test_every_new_feature_has_a_readable_name():
     for name in S + L + ["n_to_next", "n_since_last"]:
         family, label = describe(name)
         assert family in {"structure", "liquidity", "news"} and label != name, name
+
+
+def test_bias_in_force_when_the_candle_is_judged():
+    idx = pd.date_range("2026-03-04 12:00", periods=6, freq="1h")  # feed clock UTC; judged at each close
+    c = pd.DataFrame({"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5}, index=idx)
+    h1 = TIMEFRAMES_BY_NAME["1H"]
+    history = [
+        {"set_at": "2026-03-04T13:30:00+00:00", "direction": "bullish", "expires_at": "2026-03-04T15:30:00+00:00"},
+        {"set_at": "2026-03-04T16:10:00+00:00", "direction": "neutral", "expires_at": None},
+        {"set_at": "2026-03-04T16:40:00+00:00", "direction": None, "expires_at": None},  # cleared
+    ]
+    try:
+        dataset.use_bias(lambda: history)
+        f = candle_features(c, h1, FeatureParams(lookback=0, confirm=0, atr_length=1, families=("bias",)))
+    finally:
+        dataset.use_bias(None)
+    # judged at 13:00 (before any history), 14:00 and 15:00 (bullish), 16:00 (expired), 17:00 (cleared after neutral)
+    got = f["b_bias"].tolist()
+    assert np.isnan(got[0]) and got[1:3] == [1.0, 1.0] and np.isnan(got[3]) and np.isnan(got[4])
+    assert describe("b_bias")[0] == "bias"
