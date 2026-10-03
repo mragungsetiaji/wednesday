@@ -391,18 +391,60 @@ class CSVFeed(DataFeed):
 
 
 class SyntheticFeed(DataFeed):
-    """Random-walk gold-like prices for demos and tests. Each fetch advances one minute."""
+    """Random-walk gold-like prices for demos and tests. Each fetch advances one minute.
+
+    With ``real`` (stored market bars, UTC), the demo shows those real candles and random-walks on from
+    the last real close to now (and live); before the first real bar, a made-up walk leads into its
+    open, since a scan needs more history than a few stored days. ``anchor`` (time, price) is the
+    same without the real candles: the walk passes through that price at that time."""
 
     name = "synthetic"
     persist = False  # every run is a different random walk; storing it would splice unrelated series
 
     def __init__(self, start_price: float = 2650.0, seed: int | None = 42,
-                 history: int = 60_000, end: pd.Timestamp | None = None):
+                 history: int = 60_000, end: pd.Timestamp | None = None,
+                 anchor: tuple[pd.Timestamp, float] | None = None, real: pd.DataFrame | None = None):
         self._rng = np.random.default_rng(seed)
         self._forming: dict | None = None  # the next minute, built from ticks
         end = (end or pd.Timestamp.now(tz="UTC").tz_localize(None)).floor("min") - M1
         index = pd.date_range(end=end, periods=history, freq="1min")
-        self._bars = self._generate(index, start_price)
+        if real is not None and len(real):
+            self._bars = self._with_real(index, real)
+        elif anchor is not None:
+            self._bars = self._anchored(index, *anchor)
+        else:
+            self._bars = self._generate(index, start_price)
+
+    def _with_real(self, index: pd.DatetimeIndex, real: pd.DataFrame) -> pd.DataFrame:
+        """Real candles in the window, a walk into the first one's open before them, a walk on after."""
+        real = real[(real.index >= index[0]) & (real.index <= index[-1])][OHLCV_COLUMNS].astype(float)
+        if real.empty:
+            return self._generate(index, 2650.0)
+        first, last = real.index[0], real.index[-1]
+        after = index[index > last]
+        lead = max(0, len(index) - len(real) - len(after))  # keep about ``history`` bars in all
+        before = index[index < first]
+        before = before[len(before) - lead:] if lead else before[:0]
+        parts = []
+        if len(before):
+            walk = self._generate(before, float(real["open"].iloc[0]))
+            # end the lead-in on the first real open, so the joint has no jump
+            parts.append(walk + np.array([float(real["open"].iloc[0]) - walk["close"].iloc[-1]] * 4 + [0.0]))
+        parts.append(real)
+        if len(after):
+            parts.append(self._generate(after, float(real["close"].iloc[-1])))
+        return pd.concat(parts)
+
+    def _anchored(self, index: pd.DatetimeIndex, at: pd.Timestamp, price: float) -> pd.DataFrame:
+        """A walk that passes through ``price`` at ``at``: shifted to end there, then walking on from it."""
+        before, after = index[index <= at], index[index > at]
+        parts = []
+        if len(before):
+            walk = self._generate(before, price)
+            parts.append(walk + np.array([price - walk["close"].iloc[-1]] * 4 + [0.0]))  # shift OHLC, not volume
+        if len(after):
+            parts.append(self._generate(after, price))
+        return pd.concat(parts)
 
     def _generate(self, index: pd.DatetimeIndex, start: float) -> pd.DataFrame:
         n = len(index)
@@ -479,7 +521,9 @@ class M1Buffer:
         return self.bars
 
 
-def build_feed(settings: DataSettings, mt5_password: str | None = None) -> DataFeed:
+def build_feed(settings: DataSettings, mt5_password: str | None = None,
+               real: pd.DataFrame | None = None) -> DataFeed:
+    """``real``: stored market bars (UTC) for the demo data to show and walk on from (see SyntheticFeed)."""
     source, symbol = settings.source, settings.resolved_symbol
     if source == "mt5":
         return MT5Feed(symbol, login=settings.mt5_login, password=mt5_password,
@@ -491,5 +535,5 @@ def build_feed(settings: DataSettings, mt5_password: str | None = None) -> DataF
             raise ValueError("A CSV path is required for the CSV source")
         return CSVFeed(settings.csv_path)
     if source == "synthetic":
-        return SyntheticFeed()
+        return SyntheticFeed(real=real)
     raise ValueError(f"Unknown source {source!r}")

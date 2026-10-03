@@ -10,7 +10,15 @@ them. Where those bars come from is a setting you can change live.
 | `yfinance` (default) | Free | COMEX gold futures `GC=F`, not spot; Yahoo only serves ~7 days of 1-minute bars |
 | `mt5` | Your broker | Spot XAUUSD from a running MT5 terminal on the same Windows machine |
 | `csv` | - | M1 bars from a file another process keeps appending to (`time, open, high, low, close[, volume]`) |
-| `synthetic` | - | Random-walk demo data, never stored |
+| `synthetic` | - | Demo data, never stored: the newest real bars in the database, then a random walk from them (see below) |
+
+When the database holds real bars (MT5 first, otherwise Yahoo or CSV; never the
+sample journal's), the demo shows them: the last 45 days of real candles as
+stored, then a random walk from the last real close to now, and on live. Before
+the first real bar a made-up walk leads into its open, since a scan needs more
+history than a few stored days. So the recent chart is real gold and only the
+part after the last stored bar is invented. With no real bars stored, the whole
+demo is a random walk from 2650.
 
 ```bash
 uv sync                      # default setup (Yahoo Finance + SQLite)

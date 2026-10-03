@@ -334,6 +334,58 @@ class ScanWorker:
             self._thread.join(timeout)
 
 
+REAL_SOURCES = ("mt5", "yfinance", "csv")  # stored bars that are market data (not "sample" or demo)
+
+
+DEMO_REAL_DAYS = 45  # how much real history the demo shows at most
+
+
+def _newest_real(store: Store) -> tuple[str, str, str, pd.Timestamp] | None:
+    """(source, symbol, clock, last bar in UTC) of the stored market stream to build the demo from:
+    MT5 first, then the most recent of the others. The sample journal's bars are never used."""
+    from .quarters import to_utc
+    from .settings import SOURCES
+
+    best = None
+    for row in store.bar_stats():
+        if row["source"] not in REAL_SOURCES or not row["bars"]:
+            continue
+        got = store.last_bar(row["source"], row["symbol"])
+        if got is None:
+            continue
+        clock = SOURCES[row["source"]].get("default_clock", "UTC")
+        at = to_utc(pd.DatetimeIndex([pd.Timestamp(got[0], unit="s")]), clock)[0].tz_localize(None)
+        rank = (row["source"] == "mt5", at)
+        if best is None or rank > best[0]:
+            best = (rank, (row["source"], row["symbol"], clock, at))
+    return best[1] if best else None
+
+
+def real_price(store: Store | None) -> tuple[pd.Timestamp, float] | None:
+    """The newest real close in the database and its time (UTC), or None."""
+    hist = real_history(store, days=1)
+    return (hist.index[-1], float(hist["close"].iloc[-1])) if hist is not None and len(hist) else None
+
+
+def real_history(store: Store | None, days: int = DEMO_REAL_DAYS) -> pd.DataFrame | None:
+    """The newest real stored bars (up to ``days`` before the last), in UTC, for the demo to show
+    before it random-walks on. None without stored market bars."""
+    if store is None:
+        return None
+    found = _newest_real(store)
+    if found is None:
+        return None
+    from .quarters import convert_clock
+
+    source, symbol, clock, _ = found
+    last = store.last_bar(source, symbol)[0]
+    bars = store.load_bar_range(source, symbol, last - days * 86400, last)
+    if bars.empty:
+        return None
+    bars.index = convert_clock(bars.index, clock, "UTC")
+    return bars[~bars.index.isna()]
+
+
 def load_risk(store: Store | None) -> RiskSettings:
     """Saved Settings > Risk; the defaults (sizing off) when none or unreadable."""
     try:
@@ -376,7 +428,8 @@ class Runtime:
         self.engine = self._build(settings)
 
     def _build(self, settings: DataSettings) -> Engine:
-        feed = build_feed(settings, self.mt5_password_for(settings)[0])
+        real = real_history(self.store) if settings.source == "synthetic" else None
+        feed = build_feed(settings, self.mt5_password_for(settings)[0], real=real)
         engine = Engine(feed, self.cfg, settings.resolved_symbol, self.store, tick_seconds=settings.resolved_tick,
                         poll=self.poll)
         engine.on_tick = lambda price, at: self._on_tick(engine, price, at)

@@ -500,6 +500,15 @@ class Store:
         with self.engine.connect() as conn:
             return [(int(d) * 86400, int(n)) for d, n in conn.execute(q).all()]
 
+    def last_bar(self, source: str, symbol: str) -> tuple[int, float] | None:
+        """The newest stored bar of a stream: (open time unix, close), or None."""
+        t = bars_table
+        q = (select(t.c.time, t.c.close).where(t.c.source == source, t.c.symbol == symbol)
+             .order_by(t.c.time.desc()).limit(1))
+        with self.engine.connect() as conn:
+            row = conn.execute(q).first()
+        return (int(row[0]), float(row[1])) if row else None
+
     def bar_stats(self) -> list[dict]:
         t = bars_table
         q = select(t.c.source, t.c.symbol, func.count(), func.min(t.c.time), func.max(t.c.time)).group_by(t.c.source, t.c.symbol)
