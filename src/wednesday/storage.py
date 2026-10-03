@@ -195,6 +195,7 @@ journals_table = Table(
     Column("created_at", String(40), nullable=False),
     Column("synced_at", String(40), nullable=True),
     Column("sample", Boolean, nullable=True),  # the made-up sample portfolio (journal/sample.py)
+    Column("settings", Text, nullable=True),  # JSON: auto_sync, show_weekends (journal/service.py)
 )
 
 calendar_events_table = Table(
@@ -653,10 +654,12 @@ class Store:
             rows = [dict(r._mapping) for r in conn.execute(select(t).order_by(t.c.created_at))]
         for r in rows:
             r["account"] = json.loads(r["account"]) if r["account"] else None
+            r["settings"] = json.loads(r["settings"]) if r.get("settings") else {}
         return rows
 
     def journal_put(self, row: dict) -> None:
-        row = {**row, "account": json.dumps(row["account"]) if row.get("account") is not None else None}
+        row = {**row, "account": json.dumps(row["account"]) if row.get("account") is not None else None,
+               "settings": json.dumps(row["settings"]) if row.get("settings") else None}
         self._upsert(journals_table, [row], ["id"])
 
     def journal_delete(self, journal_id: str) -> bool:

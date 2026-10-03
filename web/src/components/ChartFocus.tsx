@@ -4,6 +4,7 @@ import type { CalendarEvent, DetectorInfo, QuartersResponse, Scan, SessionsRespo
 import type { NewsMark } from "../newsPrimitive";
 import type { LayerOptions } from "../chartData";
 import { CrosshairBus } from "../crosshairSync";
+import { openChartWindow, useDesktopApi } from "../desktop";
 import { CollapseIcon, LayoutIcon } from "../icons";
 import type { LiveFeed } from "../liveData";
 import { boundaries, LAYOUTS, layoutOf, moveBoundary, paneCells, paneCount, sizesFor, template, type LayoutId, type Sizes } from "../focusLayouts";
@@ -146,6 +147,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
   const [focused, setFocused] = useState(0); // the pane the keyboard shortcuts act on
   const navs = useRef<(ChartNav | null)[]>([]);
   const market = useContext(ChartMarket);
+  const desktop = useDesktopApi();
   const pane = Math.min(focused, layout - 1);
 
   useEffect(() => {
@@ -268,7 +270,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
               const { [i]: _old, ...rest } = paneLayers;
               setPaneLayers(Object.keys(o).length ? { ...rest, [i]: o } : rest);
             }}
-            cell={c} sync={{ bus, id: i }} news={news} live={live} drawings={drawings}
+            cell={c} sync={{ bus, id: i }} onPopOut={() => openChartWindow(desktop, paneTf(i))} news={news} live={live} drawings={drawings}
             nav={(h) => { navs.current[i] = h; }} focused={i === pane} onFocus={() => setFocused(i)} />
         ))}
         {boundaries(sizes.cols).map((at, i) => (

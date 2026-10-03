@@ -38,7 +38,7 @@ export function MonthlyBars({ stats, currency }: { stats: JournalStats; currency
   const rows = useMemo(() => stats.monthly.filter((m) => m.gain !== null).slice(-MAX_BARS), [stats.monthly]);
   const [ref, width, height] = useSize<HTMLDivElement>();
   const [hot, setHot] = useState<number | null>(null);
-  const H = Math.max(height, 180); // fills the panel, as tall as the calendar beside it
+  const H = Math.max(height, 180); // fills the plot box, capped in CSS so a few months stay compact
   const top = 22;
   const values = rows.map((m) => m.gain as number);
   const bottom = Math.min(0, ...values) < 0 ? 40 : 24; // room for a label under a red bar, above the months
@@ -127,8 +127,10 @@ export function MonthlyBars({ stats, currency }: { stats: JournalStats; currency
   );
 }
 
-/** A month of closed-trade results per day, tinted green or red by size, with a week total. */
-export function PnlCalendar({ stats, currency }: { stats: JournalStats; currency: string }) {
+/** A month of closed-trade results per day, tinted green or red by size, with a week total.
+ * Monday to Friday unless `showWeekends`; hidden weekend results still count in the week and month,
+ * and the Week cell says so. */
+export function PnlCalendar({ stats, currency, showWeekends = false }: { stats: JournalStats; currency: string; showWeekends?: boolean }) {
   const byDay = useMemo(() => new Map(stats.daily.map((d) => [d.day, d])), [stats.daily]);
   const latest = stats.daily.length ? stats.daily[stats.daily.length - 1].day.slice(0, 7) : new Date().toISOString().slice(0, 7);
   const first = stats.daily.length ? stats.daily[0].day.slice(0, 7) : latest;
@@ -159,7 +161,10 @@ export function PnlCalendar({ stats, currency }: { stats: JournalStats; currency
     const share = Math.round(12 + 38 * Math.min(Math.abs(v) / biggest, 1));
     return { background: `color-mix(in srgb, var(${v > 0 ? "--bull" : "--bear"}) ${share}%, var(--surface))` };
   };
-  const weeks = Array.from({ length: cells.length / 7 }, (_, i) => cells.slice(i * 7, i * 7 + 7));
+  const shown = showWeekends ? [0, 1, 2, 3, 4, 5, 6] : [0, 1, 2, 3, 4];
+  // A row whose weekdays are all outside the month and that has no weekend result says nothing.
+  const weeks = Array.from({ length: cells.length / 7 }, (_, i) => cells.slice(i * 7, i * 7 + 7))
+    .filter((w) => showWeekends || w.slice(0, 5).some(Boolean) || w.slice(5).some((d) => d && byDay.has(d)));
 
   return (
     <section className="journal-calendar" aria-labelledby="cal-h">
@@ -176,17 +181,23 @@ export function PnlCalendar({ stats, currency }: { stats: JournalStats; currency
           <span>{total.trades} trades on {inMonth.length} days</span>
         </p>
       </div>
-      <div className="cal-grid num" role="table" aria-label={`Results per day, ${monthName(month)}`}>
+      <div className={`cal-grid num${showWeekends ? "" : " is-weekdays"}`} role="table" aria-label={`Results per day, ${monthName(month)}`}>
         <div className="cal-row cal-names" role="row">
-          {DAYS.map((d) => <span key={d} role="columnheader">{d}</span>)}
+          {shown.map((i) => <span key={i} role="columnheader">{DAYS[i]}</span>)}
           <span role="columnheader">Week</span>
         </div>
         {weeks.map((week, wi) => {
           const days = week.map((d) => (d ? byDay.get(d) : undefined)).filter((d) => d !== undefined);
           const wk = days.reduce((a, d) => ({ profit: a.profit + d!.profit, pips: a.pips + d!.pips }), { profit: 0, pips: 0 });
+          // weekend results the hidden columns would have shown, named in the Week cell
+          const weekend = showWeekends ? [] : [5, 6].flatMap((i) => {
+            const d = week[i] ? byDay.get(week[i] as string) : undefined;
+            return d ? [{ name: DAYS[i], d }] : [];
+          });
+          const weekendText = weekend.map((w) => `${w.name} ${money(w.d.profit)}`).join(", ");
           return (
             <div key={wi} className="cal-row" role="row">
-              {week.map((day, di) => {
+              {shown.map((di) => week[di]).map((day, di) => {
                 const d = day ? byDay.get(day) : undefined;
                 return (
                   <div key={di} role="cell" className={`cal-cell${day ? "" : " is-out"}${d ? " has-trades" : ""}`}
@@ -196,18 +207,21 @@ export function PnlCalendar({ stats, currency }: { stats: JournalStats; currency
                     {d && (
                       <>
                         <b className="cal-money"><span className="cal-long">{money(d.profit)}</span><span className="cal-short">{short(d.profit)}</span></b>
-                        <span className="cal-pips">{pips(d.pips)} pips</span>
+                        <span className="cal-pips">{pips(d.pips)}<span className="cal-unit"> pips</span></span>
                         <span className="cal-trades">{d.trades} {d.trades === 1 ? "trade" : "trades"}</span>
                       </>
                     )}
                   </div>
                 );
               })}
-              <div role="cell" className={`cal-cell cal-week${days.length ? " has-trades" : ""}`}>
+              <div role="cell" className={`cal-cell cal-week${days.length ? " has-trades" : ""}`}
+                title={weekend.length ? `Includes ${weekend.map((w) => `${w.name} ${money(w.d.profit)} ${currency}, ${pips(w.d.pips)} pips, ${w.d.trades} trades`).join("; ")}` : undefined}
+                aria-label={days.length ? `Week: ${money(wk.profit)} ${currency}, ${pips(wk.pips)} pips${weekend.length ? `, including ${weekendText}` : ""}` : undefined}>
                 {days.length > 0 && (
                   <>
                     <b className={`cal-money ${tone(wk.profit)}`}><span className="cal-long">{money(wk.profit)}</span><span className="cal-short">{short(wk.profit)}</span></b>
-                    <span className="cal-pips">{pips(wk.pips)} pips</span>
+                    <span className="cal-pips">{pips(wk.pips)}<span className="cal-unit"> pips</span></span>
+                    {weekend.length > 0 && <span className="cal-weekend">incl. {weekendText}</span>}
                   </>
                 )}
               </div>
