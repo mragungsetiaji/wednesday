@@ -21,6 +21,20 @@ function mergeCandles(a: Candle[], b: Candle[]): Candle[] {
   return [...byTime.values()].sort((x, y) => x.time - y.time);
 }
 
+// One request per timeframe and scan, shared by every chart on screen that shows it (#34).
+const shared = new Map<string, Promise<CandlesResponse>>();
+function sharedCandles(tf: string, lookback: number, version: number): Promise<CandlesResponse> {
+  const key = `${tf}|${lookback}|${version}`;
+  let p = shared.get(key);
+  if (!p) {
+    p = fetchCandles(tf, lookback);
+    p.catch(() => shared.delete(key)); // a failure isn't cached: the next scan asks again
+    shared.set(key, p);
+    for (const k of shared.keys()) if (!k.endsWith(`|${version}`)) shared.delete(k); // only this scan's
+  }
+  return p;
+}
+
 interface Loaded {
   tf: string;
   candles: Candle[]; // older pages, plus candles that moved out of the latest window
@@ -44,7 +58,7 @@ export function useCandles(tf: string, version: number, lookback: number,
       return;
     }
     let alive = true;
-    fetchCandles(tf, lookback)
+    sharedCandles(tf, lookback, version)
       .then((res) => {
         if (!alive) return;
         // Not urgent: the chart keeps answering the pointer while the new candles render.

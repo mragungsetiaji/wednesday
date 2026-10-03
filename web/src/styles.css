@@ -947,10 +947,21 @@ p {
   align-items: center;
   gap: var(--s3);
 }
-/* Live: the dot glows and sends out a soft ring, like a power light. */
+/* Live: the dot glows and sends out a soft ring, like a power light. Both animate only opacity and
+   transform, which the compositor handles without repainting: an animated box-shadow repainted every
+   frame and was most of the dashboard's idle CPU (#34). */
 .live.ok .dot {
   position: relative;
+}
+.live.ok .dot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--ok) 80%, transparent);
+  opacity: 0.3;
   animation: live-glow 2s ease-in-out infinite;
+  will-change: opacity;
 }
 .live.ok .dot::after {
   content: "";
@@ -959,17 +970,17 @@ p {
   border-radius: 50%;
   background: var(--ok);
   animation: live-ring 2s var(--ease-out) infinite;
+  will-change: transform, opacity;
 }
 @keyframes live-glow {
-  0%, 100% { box-shadow: 0 0 2px 0 color-mix(in srgb, var(--ok) 60%, transparent); }
-  50% { box-shadow: 0 0 6px 1px color-mix(in srgb, var(--ok) 80%, transparent); }
+  50% { opacity: 1; }
 }
 @keyframes live-ring {
   from { transform: scale(1); opacity: 0.6; }
   to { transform: scale(2.6); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .live.ok .dot,
+  .live.ok .dot::before,
   .live.ok .dot::after {
     animation: none;
   }
@@ -1095,6 +1106,20 @@ p {
 .popout-tools .link-pop {
   inset-block-start: calc(100% + 4px);
   inset-block-end: auto;
+}
+.perf-overlay {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 100;
+  display: flex;
+  gap: var(--s2);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: rgb(0 0 0 / 0.75);
+  color: #fff;
+  font-size: var(--text-xs);
+  pointer-events: none;
 }
 .chart-foot-tools {
   display: flex;

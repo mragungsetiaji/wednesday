@@ -19,6 +19,7 @@ import type { Candle, QuarterBlock, QuarterRow, QuartersResponse, SwingPoint } f
 import { countdown, measure, PRESETS, presetStart, type Preset } from "../chartNav";
 import type { CrosshairLink } from "../crosshairSync";
 import { linkBus, type LinkGroup } from "../windowLink";
+import { counters, planUpdate } from "../perf";
 import { DrawingEditor } from "../drawingEditor";
 import type { DrawingCtl } from "../drawings";
 import { useLiveTick, type LiveFeed } from "../liveData";
@@ -351,11 +352,33 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     });
   }, [palette]);
 
+  // New candles: update only the bars that changed when that's all it is (a scan adds one or two at
+  // the end); a full setData only when history changed (#34).
+  const shownCandles = useRef<Candle[]>([]);
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
-    series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
+    const plan = planUpdate(shownCandles.current, candles);
+    if (plan.kind === "set") {
+      series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
+      counters.setData++;
+    } else if (plan.kind === "update") {
+      try {
+        for (const c of candles.slice(plan.from)) series.update({ ...c, time: c.time as UTCTimestamp });
+        counters.update++;
+      } catch {
+        // A tick already opened a later candle than these: replace everything instead.
+        series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
+        counters.setData++;
+      }
+    }
+    shownCandles.current = candles;
     candlesRef.current = candles;
+  }, [candles]);
+
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
     zonesRef.current?.update({ zones, times: candles.map((c) => c.time), palette });
     const times = candles.map((c) => c.time);
     const markers: SeriesMarker<Time>[] = events
@@ -395,11 +418,27 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     editorRef.current?.update({ candles });
   }, [candles]);
 
-  // Live ticks move the last candle between scans; the next scan's candles replace it.
+  // Live ticks move the last candle between scans; the next scan's candles replace it. A chart out of
+  // view (scrolled away, a collapsed pane) skips them and catches up when it shows again.
+  const [onScreen, setOnScreen] = useState(true);
   useEffect(() => {
-    if (liveCandle) seriesRef.current?.update({ ...liveCandle, time: liveCandle.time as UTCTimestamp });
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setOnScreen(e.isIntersecting && e.boundingClientRect.width > 0));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!onScreen) {
+      if (liveCandle) counters.skipped++;
+      return;
+    }
+    if (liveCandle) {
+      seriesRef.current?.update({ ...liveCandle, time: liveCandle.time as UTCTimestamp });
+      counters.ticks++;
+    }
     editorRef.current?.update({ live: liveCandle }); // positions track the forming candle too
-  }, [liveCandle]);
+  }, [liveCandle, onScreen]);
 
   useEffect(() => {
     zonesRef.current?.update({ highlight });

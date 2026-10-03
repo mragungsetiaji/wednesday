@@ -70,5 +70,17 @@ tests/
 4. `scanner` picks the nearest level above/below per detector and ranks the limit setups.
 5. `Runtime` runs the Telegram alert check, then the console report or the API picks up the result.
 
+### Chart performance
+
+Charts apply a scan's candles with `series.update` when only the last bars
+changed, and `setData` only when history did (`perf.ts`, `planUpdate`). Panes on
+the same timeframe share one `/api/candles` request per scan, and a chart out of
+view skips live ticks until it shows again. Animations that run all the time
+must animate only `opacity` and `transform`: an animated `box-shadow` on the Live
+dot repainted every frame and was over half of the idle CPU. **Alt+Shift+P** (or
+`?perf` in the address) shows frames per second and the loads, updates and ticks
+per second. With 4 panes on the demo feed, Chrome's task time over 75 s went from
+21.7 s to 9.9 s with these changes.
+
 Adding a detector: [detectors.md](detectors.md#adding-a-detector). Adding a data
 source: [data-sources.md](data-sources.md#adding-a-source).
