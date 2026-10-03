@@ -602,57 +602,85 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
   };
   const from = rows.length ? current * PAGE + 1 : 0;
   const to = Math.min(rows.length, (current + 1) * PAGE);
+  const shown = rows.slice(current * PAGE, current * PAGE + PAGE);
+  // Columns that would be all dashes on this page stay out.
+  const hasWorst = shown.some((t) => t.mae !== null);
+  const hasChecked = shown.some((t) => t.verified || t.price_ok === false);
+  const hasNote = shown.some((t) => t.note || t.tags.length > 0 || t.images.length > 0);
+  const cols = 7 + Number(hasWorst) + Number(hasChecked) + Number(hasNote);
+  // The Closed cell is the row's button; focus goes back to it when the note closes.
+  const triggers = useRef(new Map<string, HTMLButtonElement>());
+  const close = (id: string) => {
+    setOpen(null);
+    requestAnimationFrame(() => triggers.current.get(id)?.focus());
+  };
+  const toggleRow = (id: string) => (open === id ? close(id) : setOpen(id));
   return (
     <section className="journal-trades" aria-labelledby="trades-h">
       <div className="journal-section-head">
         <h3 id="trades-h">Trades</h3>
         <span className="pager-range num">{from}–{to} of {rows.length}</span>
       </div>
+      {shown.length > 0 && !hasWorst && !hasChecked && (
+        <p className="field-note">No prices stored for these trades: drawdown is from closed results.</p>
+      )}
       <div className="table-scroll">
         <table className="data journal-table num">
           <thead>
             <tr>
               <th scope="col">Closed</th>
               <th scope="col">Symbol</th>
-              <th scope="col">Side</th>
-              <th scope="col" className="end">Lots</th>
-              <th scope="col" className="end">Open → close</th>
+              <th scope="col" className="journal-wide">Side</th>
               <th scope="col" className="end">Result</th>
               <th scope="col" className="end">Pips</th>
-              <th scope="col" className="end" title="Worst floating result while open, from M1 prices">Worst</th>
-              <th scope="col">Checked</th>
-              <th scope="col">Note</th>
+              <th scope="col" className="end journal-wide">Lots</th>
+              <th scope="col" className="end journal-wide">Open → close</th>
+              {hasWorst && <th scope="col" className="end journal-wide" title="Worst floating result while open, from 1-minute prices">Worst</th>}
+              {hasChecked && <th scope="col" className="journal-wide">Checked</th>}
+              {hasNote && <th scope="col" className="journal-wide">Note</th>}
             </tr>
           </thead>
           <tbody>
-            {rows.slice(current * PAGE, current * PAGE + PAGE).map((t) => [
-              <tr key={t.id} className={open === t.id ? "is-selected" : undefined} onClick={() => setOpen(open === t.id ? null : t.id)}>
-                <td>{t.close_time ? fmtUnix(t.close_time) : <span className="badge accent">open</span>}</td>
+            {shown.map((t) => [
+              <tr key={t.id} className={open === t.id ? "is-selected" : undefined} onClick={() => toggleRow(t.id)}>
+                <td>
+                  <button type="button" className="journal-row-button" aria-expanded={open === t.id} aria-controls={`note-${t.id}`}
+                    title={open === t.id ? "Close the note" : "Open the note, tags and charts"}
+                    ref={(el) => { if (el) triggers.current.set(t.id, el); else triggers.current.delete(t.id); }}
+                    onClick={(e) => { e.stopPropagation(); toggleRow(t.id); }}>
+                    {t.close_time ? fmtUnix(t.close_time) : <span className="badge accent">open</span>}
+                  </button>
+                </td>
                 <td>{t.symbol}</td>
-                <td>{t.side === "buy" ? "↑ Buy" : "↓ Sell"}</td>
-                <td className="end">{t.volume.toFixed(2)}</td>
-                <td className="end">{fmtPrice(t.open_price)} → {t.close_price === null ? "—" : fmtPrice(t.close_price)}</td>
+                <td className="journal-wide">{t.side === "buy" ? "↑ Buy" : "↓ Sell"}</td>
                 <td className={`end ${tone(t.close_time ? t.net : t.floating) ?? ""}`}>{signed(t.close_time ? t.net : t.floating)}</td>
                 <td className="end">{t.pips === null ? "—" : `${t.pips >= 0 ? "+" : "−"}${Math.abs(t.pips).toFixed(1)}`}</td>
-                <td className="end">{t.mae === null ? "—" : signed(t.mae)}</td>
-                <td>
-                  {t.verified ? <span className="pos" title="Prices checked and floating rebuilt"><CheckIcon /></span>
-                    : t.price_ok === false ? <span className="neg" title="Its prices aren't inside the M1 bars"><CrossIcon /></span>
-                      : <span className="muted" title="No prices for this trade">—</span>}
-                </td>
-                <td className="journal-note-cell">
-                  {t.tags.map((g) => <span key={g} className="badge">{g}</span>)} {t.note}
-                  {t.images.length > 0 && (
-                    <span className="muted journal-shot-count" title={`${t.images.length} chart snapshot${t.images.length > 1 ? "s" : ""}`}>
-                      <CameraIcon size={12} /> {t.images.length}
-                    </span>
-                  )}
-                </td>
+                <td className="end journal-wide">{t.volume.toFixed(2)}</td>
+                <td className="end journal-wide">{fmtPrice(t.open_price)} → {t.close_price === null ? "—" : fmtPrice(t.close_price)}</td>
+                {hasWorst && <td className="end journal-wide">{t.mae === null ? "—" : signed(t.mae)}</td>}
+                {hasChecked && (
+                  <td className="journal-wide">
+                    {t.verified ? <span className="pos" title="Prices checked and floating rebuilt"><CheckIcon /></span>
+                      : t.price_ok === false ? <span className="neg" title="Its prices aren't inside the 1-minute bars"><CrossIcon /></span>
+                        : <span className="muted" title="No prices for this trade">—</span>}
+                  </td>
+                )}
+                {hasNote && (
+                  <td className="journal-note-cell journal-wide">
+                    {t.tags.map((g) => <span key={g} className="badge">{g}</span>)} {t.note}
+                    {t.images.length > 0 && (
+                      <span className="muted journal-shot-count" title={`${t.images.length} chart snapshot${t.images.length > 1 ? "s" : ""}`}>
+                        <CameraIcon size={12} /> {t.images.length}
+                      </span>
+                    )}
+                  </td>
+                )}
               </tr>,
               open === t.id && (
-                <tr key={`${t.id}-note`} className="lab-scores-row">
-                  <td colSpan={10}>
-                    <NoteEditor journalId={journalId} trade={t} onSaved={() => { setOpen(null); onSaved(); }} onChanged={onSaved} />
+                <tr key={`${t.id}-note`} id={`note-${t.id}`} className="lab-scores-row">
+                  <td colSpan={cols}>
+                    <NoteEditor journalId={journalId} trade={t} onClose={() => close(t.id)}
+                      onSaved={() => { close(t.id); onSaved(); }} onChanged={onSaved} />
                   </td>
                 </tr>
               ),
@@ -718,13 +746,13 @@ function Shots({ journalId, trade, onChanged }: { journalId: string; trade: Jour
   );
 }
 
-function NoteEditor({ journalId, trade, onSaved, onChanged }: { journalId: string; trade: JournalTrade; onSaved: () => void;
-  onChanged: () => void }) {
+function NoteEditor({ journalId, trade, onSaved, onChanged, onClose }: { journalId: string; trade: JournalTrade; onSaved: () => void;
+  onChanged: () => void; onClose: () => void }) {
   const [note, setNote] = useState(trade.note);
   const [tags, setTags] = useState(trade.tags.join(", "));
   const [error, setError] = useState<string | null>(null);
   return (
-    <form className="journal-note" onSubmit={async (e) => {
+    <form className="journal-note" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }} onSubmit={async (e) => {
       e.preventDefault();
       try {
         await saveTradeNote(journalId, trade.id, note, tags.split(",").map((x) => x.trim()).filter(Boolean));
@@ -734,13 +762,17 @@ function NoteEditor({ journalId, trade, onSaved, onChanged }: { journalId: strin
       }
     }}>
       <p className="field-note">
+        {trade.side === "buy" ? "Buy" : "Sell"} {trade.volume.toFixed(2)} lots, {fmtPrice(trade.open_price)} →{" "}
+        {trade.close_price === null ? "—" : fmtPrice(trade.close_price)}
+        {trade.mae !== null && <> · worst floating {signed(trade.mae)}</>}
+        <br />
         Opened {fmtUnix(trade.open_time)} · position {trade.position} · commission {money(trade.commission)} · swap {money(trade.swap)}
         {trade.mfe !== null && <> · best floating {signed(trade.mfe)}</>}
       </p>
       {trade.images.length > 0 && <Shots journalId={journalId} trade={trade} onChanged={onChanged} />}
       <label className="field">
         <span className="field-label">Note</span>
-        <textarea rows={2} value={note} placeholder="Why you took it, what you'd do again" onChange={(e) => setNote(e.target.value)} />
+        <textarea rows={2} autoFocus value={note} placeholder="Why you took it, what you'd do again" onChange={(e) => setNote(e.target.value)} />
       </label>
       <label className="field">
         <span className="field-label">Tags</span>

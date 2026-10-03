@@ -3285,6 +3285,33 @@ fieldset:disabled .switch {
 .journal-note-cell .badge {
   margin-inline-end: 4px;
 }
+/* The Closed cell is the row's button: text-styled, reachable with Tab. */
+.journal-row-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.journal-row-button:hover {
+  text-decoration: underline;
+}
+.journal-row-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+/* On a phone: Closed, Symbol, Result and Pips; the rest is in the opened row. */
+@media (max-width: 600px) {
+  .journal-table {
+    min-width: 0;
+  }
+  .journal-table .journal-wide {
+    display: none;
+  }
+}
 .journal-note {
   display: grid;
   gap: var(--s3);

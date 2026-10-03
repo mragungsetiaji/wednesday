@@ -155,9 +155,17 @@ whole hour from −14 to +14 and uses the one where most deal prices fit their b
 Bars from the same broker (the MT5 source) line up best; Yahoo's `GC=F` is
 futures, priced differently from spot, so it won't match.
 
+## Trades
+
+The table lists closed time, symbol, side, result and pips first, then lots and
+prices. **Worst** and **Checked** only show when a trade on the page has stored
+prices, and **Note** when one has a note, tag or chart. On a phone the table keeps
+the time, symbol, result and pips; the rest is in the opened row.
+
 ## Notes
 
-Click a trade to write a note and tags (`a+ setup`, `fomo`, `moved stop`). They
+Click a trade, or Tab to its close time and press Enter, to write a note and tags
+(`a+ setup`, `fomo`, `moved stop`); Escape closes it. They
 are kept by trade, survive a re-sync, and go into the CSV. They are the start of
 what the second brain (#15) will read.
 
