@@ -92,7 +92,8 @@ its worst and best floating result, whether it was checked, and your note.
 
 Under the curve, side by side: **Monthly gain** draws each month's gain as a bar from zero, green up and red
 down, time-weighted like the total (so a deposit mid-month doesn't inflate it).
-Hover a month for the money, pips and number of trades.
+The line above the bars shows the latest month's gain, money, pips and number of
+trades; hover or tab to a month to show that one instead.
 
 The **calendar** shows a month of closed trades per day, by the day they closed
 on the broker's clock: the result in money and pips, and how many trades. The
