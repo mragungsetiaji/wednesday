@@ -116,6 +116,22 @@ export const CrossIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Info: a neutral note, not a warning. */
+export const InfoIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="8" r="6.25" />
+    <path d="M8 7.25v4M8 4.9v.1" />
+  </Svg>
+);
+
+/** Gear: settings. */
+export const GearIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="8" cy="8" r="2.25" />
+    <path d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05" />
+  </Svg>
+);
+
 /** Tag: the app version. */
 export const TagIcon = (p: IconProps) => (
   <Svg {...p}>

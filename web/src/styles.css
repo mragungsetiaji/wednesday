@@ -3229,34 +3229,48 @@ fieldset:disabled .switch {
 .journal-verify {
   display: grid;
   gap: var(--s2);
-  padding: var(--s3) var(--s4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-}
-.journal-verify h3 {
-  margin: 0;
   font-size: var(--text-sm);
-  font-weight: 600;
   color: var(--text-2);
 }
+.journal-verify p,
 .journal-verify ul {
   margin: 0;
+}
+.journal-verify ul {
   padding: 0;
   list-style: none;
   display: grid;
   gap: var(--s1);
-  font-size: var(--text-sm);
 }
+.journal-verify-line,
 .journal-verify li {
   display: flex;
   gap: var(--s2);
   align-items: baseline;
 }
-.journal-verify li > .icon {
+.journal-verify .icon {
   flex: none;
   position: relative;
   top: 2px;
+}
+/* Real problems only: deal prices outside their bars, a balance that doesn't match. */
+.journal-verify-problems {
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--bear);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+.journal-verify-problems .icon {
+  color: var(--bear-text);
+}
+.journal-verify-details summary {
+  cursor: pointer;
+  width: max-content;
+  color: var(--accent);
+}
+.journal-verify-details[open] {
+  display: grid;
+  gap: var(--s2);
 }
 
 .journal-trades {

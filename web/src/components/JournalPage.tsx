@@ -7,7 +7,7 @@ import {
   snapshotUrl,
 } from "../api";
 import { fmtPrice, fmtUnix } from "../format";
-import { CameraIcon, CheckIcon, CrossIcon, TrashIcon } from "../icons";
+import { CameraIcon, CheckIcon, CrossIcon, InfoIcon, TrashIcon } from "../icons";
 import { usePref } from "../prefs";
 import type { ChartPalette } from "../theme";
 import { JournalChart, type JournalView } from "./JournalChart";
@@ -509,7 +509,7 @@ function Summary({ stats }: { stats: JournalStats }) {
           <span className="stat-label">Drawdown</span>
           <b className="stat-big num">{s.drawdown.toFixed(2)}%</b>
           <span className={`badge${rebuilt ? " accent" : ""}`}
-            title={rebuilt ? "Rebuilt from the price every minute a trade was open" : "From closed results only: no prices for these trades"}>
+            title={rebuilt ? "Drawdown from 1-minute prices while trades were open" : "Drawdown from closed results: no prices for these trades"}>
             {rebuilt ? "from price" : "closed only"}
           </span>
           {sample && <SampleBadge />}
@@ -541,47 +541,82 @@ function Summary({ stats }: { stats: JournalStats }) {
   );
 }
 
+/** One neutral line on how the numbers were worked out, with the detail behind a disclosure.
+ * Only real problems (deal prices outside their bars, a balance that doesn't match) get the
+ * warning look. */
 function Verification({ stats }: { stats: JournalStats }) {
   const v = stats.verification;
   const from = Object.entries(v.prices_from);
+  const mismatched = v.mismatched.length > 0;
+  const balanceOff = v.balance_reported !== undefined && v.balance_matches === false;
+  const rebuilt = v.basis === "ohlc";
   return (
     <div className="journal-verify">
-      <h3>How far these numbers are checked</h3>
-      <ul>
-        <li>
-          {v.basis === "ohlc" ? <CheckIcon /> : <CrossIcon />}
-          <span>
-            Drawdown rebuilt from M1 prices for <b className="num">{v.verified}</b> of <b className="num">{v.trades}</b> trades
-            {v.coverage !== null && <> (<span className="num">{v.coverage.toFixed(0)}%</span> of the time in trades)</>}.
-            {v.verified < v.trades && " The rest count at their closed result."}
-          </span>
-        </li>
-        <li>
-          {v.prices_checked > 0 && v.prices_ok === v.prices_checked ? <CheckIcon /> : <CrossIcon />}
-          <span>
-            {v.prices_checked > 0
-              ? <><b className="num">{v.prices_ok}</b> of <b className="num">{v.prices_checked}</b> deal prices sit inside their M1 bar.</>
-              : "No deal price could be checked against the bars."}
-            {v.mismatched.length > 0 && <> Not matching: <span className="num">{v.mismatched.slice(0, 5).join(", ")}{v.mismatched.length > 5 ? "…" : ""}</span>.</>}
-          </span>
-        </li>
-        {v.balance_reported !== undefined && (
+      <p className="journal-verify-line">
+        <InfoIcon />
+        <span>
+          {rebuilt ? "Drawdown from 1-minute prices" : "Drawdown from closed results"}. Prices for{" "}
+          <span className="num">{v.verified}</span> of <span className="num">{v.trades}</span> trades.
+        </span>
+      </p>
+      {(mismatched || balanceOff) && (
+        <ul className="journal-verify-problems">
+          {mismatched && (
+            <li>
+              <CrossIcon />
+              <span>
+                <span className="num">{v.mismatched.length}</span> deal price{v.mismatched.length > 1 ? "s aren't" : " isn't"} inside
+                its 1-minute bar: <span className="num">{v.mismatched.slice(0, 5).join(", ")}{v.mismatched.length > 5 ? "…" : ""}</span>.
+                Those trades are left out of the drawdown. Check the report wasn't edited and the prices come from the same broker.
+              </span>
+            </li>
+          )}
+          {balanceOff && (
+            <li>
+              <CrossIcon />
+              <span>
+                The balance doesn't match the terminal's (<span className="num">{fmtPrice(v.balance_reported as number)}</span>).
+                Set the terminal's History tab to all history, then sync again.
+              </span>
+            </li>
+          )}
+        </ul>
+      )}
+      <details className="journal-verify-details">
+        <summary>Details</summary>
+        <ul>
           <li>
-            {v.balance_matches ? <CheckIcon /> : <CrossIcon />}
+            {rebuilt ? <CheckIcon /> : <InfoIcon />}
             <span>
-              Balance {v.balance_matches ? "matches" : "doesn't match"} the terminal
-              {!v.balance_matches && <> (<span className="num">{fmtPrice(v.balance_reported)}</span>; is the terminal showing all history?)</>}.
+              Drawdown rebuilt from 1-minute prices for <b className="num">{v.verified}</b> of <b className="num">{v.trades}</b> trades
+              {v.coverage !== null && <> (<span className="num">{v.coverage.toFixed(0)}%</span> of the time in trades)</>}.
+              {v.verified < v.trades && " The rest count at their closed result."}
             </span>
           </li>
-        )}
-      </ul>
-      <p className="field-note">
-        {v.offset_hours !== null
-          ? <>Deal clock {v.offset_hours >= 0 ? "+" : "−"}{Math.abs(v.offset_hours)} h from the price clock ({v.offset_detected ? "detected" : "set in Settings"}). </>
-          : "The deal times didn't line up with the stored prices at any offset. "}
-        {from.length > 0 && <>Prices: {from.map(([sym, src]) => `${sym} from ${src}`).join(", ")}. </>}
-        {v.no_prices.length > 0 && <>No stored prices for {v.no_prices.join(", ")}: run the scanner on that symbol with MT5 to check them. </>}
-      </p>
+          <li>
+            {v.prices_checked > 0 && !mismatched ? <CheckIcon /> : mismatched ? <CrossIcon /> : <InfoIcon />}
+            <span>
+              {v.prices_checked > 0
+                ? <><b className="num">{v.prices_ok}</b> of <b className="num">{v.prices_checked}</b> deal prices checked against 1-minute prices.</>
+                : "No deal prices could be checked: there are no stored prices for these trades."}
+            </span>
+          </li>
+          {v.balance_reported !== undefined && (
+            <li>
+              {v.balance_matches ? <CheckIcon /> : <CrossIcon />}
+              <span>Balance {v.balance_matches ? "matches" : "doesn't match"} the terminal.</span>
+            </li>
+          )}
+        </ul>
+        <p className="field-note">
+          {v.offset_hours !== null
+            ? <>Broker time is {Math.abs(v.offset_hours)} h {v.offset_hours >= 0 ? "ahead of" : "behind"} the chart
+              ({v.offset_detected ? "detected" : <>set in <a href="#settings/journal">journal settings</a></>}). </>
+            : "The trade times didn't line up with the stored prices at any offset. "}
+          {from.length > 0 && <>Prices: {from.map(([sym, src]) => `${sym} from ${src}`).join(", ")}. </>}
+          {v.no_prices.length > 0 && <>No stored prices for {v.no_prices.join(", ")}: run the scanner on that symbol with MT5 to check them. </>}
+        </p>
+      </details>
     </div>
   );
 }
