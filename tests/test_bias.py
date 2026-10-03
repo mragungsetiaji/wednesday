@@ -174,6 +174,8 @@ def test_bias_and_brief_api(tmp_path, monkeypatch):
     assert Runtime(cfg, DataSettings(source="synthetic"), store).bias.direction == "bearish"  # survives restarts
     assert api.put("/api/bias", json={"direction": None}).json() == {"bias": None}
     assert store.get_setting("bias") is None
+    history = store.bias_history()  # kept for the Lab's bias feature family
+    assert [h["direction"] for h in history] == ["bearish", None] and history[0]["expires_at"]
 
     assert api.put("/api/brief", json={"urls": ["nope"]}).status_code == 422
     saved = api.put("/api/brief", json={"provider": "openai", "model": "gpt-x", "urls": ["https://a.com/x"]}).json()

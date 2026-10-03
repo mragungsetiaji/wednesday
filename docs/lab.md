@@ -82,6 +82,26 @@ confirming candles, where its high and low sit in that window, the hour and
 weekday, and the last closed candles of the next two timeframes up. Nothing later.
 Each sample records `available_at`, the moment a model could have known.
 
+**Feature families.** Extra groups of features are switched on per model in the
+Train form, so their worth can be measured by training with and without them. A
+model's file lists the families it was trained with (`params.families`), and
+scoring rebuilds exactly those; files from before families build the features
+above only.
+
+| Family | What it adds |
+| --- | --- |
+| Session and quarter | The session (Tokyo, London, NY AM, NY PM), its 90-minute quarter and the trading weekday, all in New York time from the feed's clock, plus how far the candle closed from the week's and the session's open, in ATRs. |
+| Structure | The latest break of structure on this timeframe (up or down, BOS or change of character, candles since) and on the next one up, the last swing's label (HH, HL, LH, LL), and the distance to the swing high and low that haven't been broken, in ATRs. Swings use 5 candles each side, like the detectors. |
+| Liquidity | Whether a swing high or low was swept (wick through, close back) by one of the last 5 candles, and the distance to the nearest equal highs and lows still standing (two swings within 0.1 ATR). |
+| News | Minutes from the candle to the next high-impact USD release and since the last one, from the calendar stored in the database. Release times are published ahead, so the next one is known at the time. Candles outside the stored calendar (more than a week before its first week or after its last) have no value, rather than a wrong one. |
+| Bias | The bias you had set when the candle was judged: bullish, bearish or neutral, empty when none was set or it had expired. Wednesday keeps every bias you set from this version on (`bias_history`), so older candles have no value. It only reads your history: the bias is still yours to set. |
+
+Every family is causal. Structure and liquidity describe the market as it stood
+when the last confirming candle closed, the moment the sample is judged; a test
+rewrites everything after that moment and checks nothing changes. Which families help is
+for you to measure: train the same tags with and without one and compare the
+fold scores.
+
 **Scores.** Everything is split by time, never at random, by the moment each
 sample became known. With a few hundred labels one test window is noisy (a calm
 or wild week flatters a model), so by default training runs **4 walk-forward
@@ -105,8 +125,8 @@ of every held-out trade against the average R of the trades the model liked.
 
 **What the model looks at.** A model's scores open a list per tag of the
 feature groups it leans on (the candle, the candles before, the confirming
-candles, the window high / low, volatility, time of day, higher timeframes, and
-the zone for the outcome model), with its top features in plain words. It is
+candles, the window high / low, volatility, time of day, higher timeframes,
+session and quarter when that family is on, and the zone for the outcome model), with its top features in plain words. It is
 permutation importance: how much held-out AUC drops when a group, or one feature,
 is shuffled across the held-out candles, measured on the model fit before them.
 A model that leans mostly on time of day rather than the candles is worth a

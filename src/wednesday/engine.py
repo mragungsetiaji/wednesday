@@ -328,6 +328,9 @@ class Runtime:
                 self.store.set_setting(BIAS_KEY, bias.to_dict())
             else:
                 self.store.delete_setting(BIAS_KEY)
+            # Kept for the Lab's bias feature family; the bias itself stays the trader's call.
+            self.store.bias_history_add(bias.set_at if bias and bias.set_at else datetime.now(timezone.utc).isoformat(),
+                                        bias.direction if bias else None, bias.expires_at if bias else None)
 
     def sizer(self) -> Sizer | None:
         """Position sizing from Settings > Risk and the terminal's balance and spec; None when off."""

@@ -22,6 +22,11 @@ FAMILIES = {
     "timeframe": "Timeframe",
     "htf": "Higher timeframes",
     "zone": "Order block zone",
+    "quarters": "Session and quarter",
+    "structure": "Structure",
+    "liquidity": "Liquidity",
+    "news": "News",
+    "bias": "Your bias",
 }
 TOP_FEATURES = 15
 REPEATS = 3
@@ -43,6 +48,26 @@ _NAMED = {
     "zone_risk": ("zone", "stop distance"),
     "zone_capped": ("zone", "stop capped"),
     "zone_entry": ("zone", "entry vs close"),
+    "q_session": ("quarters", "session (Tokyo to NY PM)"),
+    "q_q90": ("quarters", "90-minute quarter of the session"),
+    "q_weekday": ("quarters", "trading weekday"),
+    "q_week_move": ("quarters", "move since the week opened"),
+    "q_session_move": ("quarters", "move since the session opened"),
+    "s_break_dir": ("structure", "latest break: up or down"),
+    "s_break_choch": ("structure", "latest break was a change of character"),
+    "s_since_break": ("structure", "candles since the latest break"),
+    "s_swing_label": ("structure", "last swing (HH, HL, LH, LL)"),
+    "s_dist_high": ("structure", "distance to the unbroken swing high"),
+    "s_dist_low": ("structure", "distance to the unbroken swing low"),
+    "s_htf_break_dir": ("structure", "next timeframe up: latest break"),
+    "s_htf_since_break": ("structure", "next timeframe up: candles since its break"),
+    "l_swept_high": ("liquidity", "a swing high swept in the last 5 candles"),
+    "l_swept_low": ("liquidity", "a swing low swept in the last 5 candles"),
+    "l_dist_eq_high": ("liquidity", "distance to equal highs"),
+    "l_dist_eq_low": ("liquidity", "distance to equal lows"),
+    "n_to_next": ("news", "minutes to the next high-impact release"),
+    "n_since_last": ("news", "minutes since the last high-impact release"),
+    "b_bias": ("bias", "the bias you had set"),
 }
 _HTF_WHAT = {"close": "close vs candle", "high": "high vs candle", "low": "low vs candle", "body": "body"}
 

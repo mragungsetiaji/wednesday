@@ -23,7 +23,8 @@ from ..detectors.base import DetectorParams
 from ..storage import Store, lab_labels_table, lab_reviewed_table, lab_reviews_table
 from ..timeframes import TIMEFRAMES_BY_NAME
 from .bars import HISTORY_BARS_DEFAULT, HISTORY_BARS_MAX, LAB_DATA_KEY, Backfill, BarsFileError, ParsedBars, parse_bars
-from .dataset import ts, unix
+from . import dataset
+from .dataset import FAMILIES, FeatureParams, ts, unix
 from .model import ModelBundle, ModelFileError, load, load_bytes, read_manifest
 from .outcome import TradePlan, plan_levels, simulate
 from .tags import OB_TAGS, TAGS
@@ -128,6 +129,14 @@ class Lab:
         saved = store.get_setting(LAB_DATA_KEY) or {}
         self.history_bars = int(saved.get("history_bars") or HISTORY_BARS_DEFAULT)
         store.lab_runs_interrupted(_now())
+        dataset.use_news(self.news_times)  # the news feature family reads the stored calendar
+        dataset.use_bias(store.bias_history)  # and the bias family the trader's bias history
+
+    def news_times(self) -> tuple[list[int], int | None, int | None]:
+        """High-impact USD release times stored so far (unix UTC, oldest first), and the calendar's span."""
+        rows = self.store.calendar_history(["USD"], ["High"])
+        _, first, last = self.store.calendar_bounds()
+        return sorted({int(r["time"]) for r in rows}), first, last
 
     # ---- price history ---------------------------------------------------
     def set_history_bars(self, bars: int) -> None:
@@ -691,7 +700,7 @@ class Lab:
             return pd.DataFrame()
         bundle = self.active()
         p = bundle.manifest["params"] if bundle else {}
-        fp = TrainParams(lookback=int(p.get("lookback", 10)), confirm=int(p.get("confirm", 3))).features
+        fp = FeatureParams.of({"lookback": 10, "confirm": 3, **p})
         out = []
         for tf, group in pd.DataFrame(rows).groupby("timeframe"):
             fr = frames_for(m1, TIMEFRAMES_BY_NAME[tf], fp)
@@ -705,7 +714,8 @@ class Lab:
 
     def status(self, symbol: str) -> dict:
         ok, reason = ml_available()
-        return {"available": ok, "reason": reason, "tags": [{"id": t, "title": i["title"], "shape": i["shape"]}
+        return {"available": ok, "reason": reason, "families": [{"id": f, "title": t} for f, t in FAMILIES.items()],
+                "tags": [{"id": t, "title": i["title"], "shape": i["shape"]}
                                                             for t, i in TAGS.items()],
                 "counts": self.counts(symbol), "training": dict(self.training), "runs": self.runs(),
                 "models": self.models(), "active": self.active_id}

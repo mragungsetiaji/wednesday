@@ -198,6 +198,15 @@ journals_table = Table(
     Column("settings", Text, nullable=True),  # JSON: auto_sync, show_weekends (journal/service.py)
 )
 
+# Every time the trader sets or clears the bias, for the Lab's bias feature family.
+bias_history_table = Table(
+    "bias_history",
+    metadata,
+    Column("set_at", String(40), primary_key=True),  # ISO UTC
+    Column("direction", String(16), nullable=True),  # bullish / bearish / neutral; null = cleared
+    Column("expires_at", String(40), nullable=True),  # ISO UTC; null = until changed
+)
+
 calendar_events_table = Table(
     "calendar_events",
     metadata,
@@ -657,6 +666,15 @@ class Store:
             q = q.where(t.c.time < before)
         with self.engine.connect() as conn:
             return [dict(r._mapping) for r in conn.execute(q.order_by(t.c.time.desc()))]
+
+    def bias_history_add(self, set_at: str, direction: str | None, expires_at: str | None) -> None:
+        self._upsert(bias_history_table, [{"set_at": set_at, "direction": direction, "expires_at": expires_at}], ["set_at"])
+
+    def bias_history(self) -> list[dict]:
+        """Every bias the trader set or cleared, oldest first."""
+        t = bias_history_table
+        with self.engine.connect() as conn:
+            return [dict(r._mapping) for r in conn.execute(select(t).order_by(t.c.set_at))]
 
     def calendar_bounds(self) -> tuple[int, int | None, int | None]:
         """Stored releases: count, first and last time (unix seconds)."""

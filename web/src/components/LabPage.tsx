@@ -117,13 +117,13 @@ export function LabPage({ palette }: { palette: ChartPalette }) {
 
 const DEFAULTS: TrainParams = {
   timeframes: ["5M", "15M"], tags: [], lookback: 10, confirm: 3, rr: 2, horizon_hours: 72,
-  outcome_from_detector: true, test_fraction: 0.2, folds: 4, name: "", author: "", note: "",
+  outcome_from_detector: true, test_fraction: 0.2, folds: 4, families: [], name: "", author: "", note: "",
 };
 
 function LabTrain({ status, onStatus }: { status: LabStatus; onStatus: (s: LabStatus) => void }) {
   const tags = useMemo(() => status.tags ?? [], [status.tags]);
   const [saved, setSaved] = usePref<TrainParams>("wed.trainParams", DEFAULTS);
-  const [form, setForm] = useState<TrainParams>(() => ({ ...DEFAULTS, ...saved, tags: saved.tags.length ? saved.tags : tags.map((t) => t.id) }));
+  const [form, setForm] = useState<TrainParams>(() => ({ ...DEFAULTS, ...saved, families: saved.families ?? [], tags: saved.tags.length ? saved.tags : tags.map((t) => t.id) }));
   const [error, setError] = useState<string | null>(null);
   const [format, setFormat] = useState("parquet");
   const [days, setDays] = useState(30);
@@ -245,6 +245,13 @@ function LabTrain({ status, onStatus }: { status: LabStatus; onStatus: (s: LabSt
             <input type="checkbox" checked={form.outcome_from_detector} onChange={(e) => set({ outcome_from_detector: e.target.checked })} />
             <span>Outcome model also learns from the detector's order blocks</span>
           </label>
+          {(status.families ?? []).map((f) => (
+            <label key={f.id} className="field field-check field-span">
+              <input type="checkbox" checked={form.families.includes(f.id)}
+                onChange={() => set({ families: toggle(form.families, f.id) })} />
+              <span>{f.title}</span>
+            </label>
+          ))}
           <p className="field-hint field-span">
             A candle is judged once the confirming candles after it have closed: the model sees the candles before it,
             the candle and those, plus the last closed candles of the next two timeframes up. Nothing later.
