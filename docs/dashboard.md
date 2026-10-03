@@ -296,7 +296,7 @@ morning. Tick any of:
 
 | Toggle | What it draws |
 | --- | --- |
-| Killzones | Faint bands: Asia 20:00–00:00, London 02:00–05:00, NY AM 07:00–10:00, NY PM 13:30–16:00 New York |
+| Killzones | Faint bands: Asia 20:00–00:00, London 02:00–05:00, NY AM 07:00–10:00, NY PM 13:30–16:00 New York. Named at the bottom of the chart unless the quarter pane's Session row is showing |
 | Asia high / low | The Asia killzone's range, from 20:00 to the day's close, once the window has closed |
 | Previous day H / L | PDH / PDL across the next trading day |
 | Previous week H / L | PWH / PWL across the next week |
