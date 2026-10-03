@@ -1286,6 +1286,38 @@ export const attachSnapshot = (journalId: string, tradeId: string, snapshotId: s
 export const detachSnapshot = (journalId: string, tradeId: string, snapshotId: string) =>
   send<{ trade_id: string; images: string[] }>("DELETE",
     `/api/journals/${encodeURIComponent(journalId)}/trades/${encodeURIComponent(tradeId)}/images/${snapshotId}`);
+/** The market as it stood when an entry was written, frozen with it (journal/market.py). */
+export interface FrozenMarket {
+  at: string;
+  symbol: string;
+  source: string;
+  bar_time: string | null;
+  price: number | null;
+  bias: { direction: string; note?: string; expires_at?: string | null } | null;
+  setups: Record<"sell" | "buy", { timeframe: string; entry: number | null; sl: number | null; risk: string | null; priority: string | null; swing: string | null }[]>;
+  structure: { timeframe: string; direction: string; event: string; level: number }[];
+  news: { time: string; currency: string; title: string; impact: string }[];
+}
+export interface JournalEntry {
+  id: string;
+  kind: "note" | "review" | "setup";
+  created_at: string;
+  updated_at: string | null;
+  text: string;
+  tags: string[];
+  mood: number | null;
+  setup: { tag: string; timeframe: string; side: "sell" | "buy"; entry: number; sl: number | null } | null;
+  market: FrozenMarket | null;
+}
+const entriesUrl = (id: string) => `/api/journals/${encodeURIComponent(id)}/entries`;
+export const fetchEntries = (id: string) => getJson<{ entries: JournalEntry[] }>(entriesUrl(id));
+export const addEntry = (id: string, entry: Partial<Pick<JournalEntry, "kind" | "text" | "tags" | "mood" | "setup">>) =>
+  send<JournalEntry>("POST", entriesUrl(id), entry);
+export const updateEntry = (id: string, entryId: string, patch: Partial<Pick<JournalEntry, "text" | "tags" | "mood">>) =>
+  send<JournalEntry>("PATCH", `${entriesUrl(id)}/${encodeURIComponent(entryId)}`, patch);
+export const deleteEntry = (id: string, entryId: string) =>
+  send<{ deleted: boolean }>("DELETE", `${entriesUrl(id)}/${encodeURIComponent(entryId)}`);
+
 export const journalCsvUrl = (id: string) => `/api/journals/${encodeURIComponent(id)}/trades.csv`;
 export async function importReport(id: string, file: File): Promise<{ trades: number; cash: number; journal: Journal }> {
   const res = await apiFetch(`/api/journals/${encodeURIComponent(id)}/import`, { method: "POST", body: file });

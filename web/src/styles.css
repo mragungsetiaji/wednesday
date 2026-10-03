@@ -141,6 +141,32 @@ p {
 /* Press feedback on controls (fast ease-out). */
 .chip,
 .tab,
+/* "Journal this" beside a ladder setup: shown on hover or keyboard focus. */
+.ladder li {
+  position: relative;
+}
+.ladder-journal {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-2);
+  opacity: 0;
+  cursor: pointer;
+}
+.ladder li:hover .ladder-journal,
+.ladder-journal:focus-visible {
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .ladder-journal { opacity: 1; }
+}
 .ladder-row,
 .link {
   transition: background-color 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
@@ -3367,6 +3393,110 @@ fieldset:disabled .switch {
 .journal-verify-details[open] {
   display: grid;
   gap: var(--s2);
+}
+
+/* Notes, reviews and journalled setups (#14). */
+.journal-entries {
+  display: grid;
+  gap: var(--s3);
+}
+.journal-entry-form {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.journal-entry-form .segmented {
+  justify-self: start;
+}
+.journal-entry-form .seg {
+  width: auto;
+  padding-inline: var(--s3);
+  white-space: nowrap;
+}
+.journal-entry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--s3);
+}
+.journal-entry-meta .field {
+  flex: 1;
+  min-width: 200px;
+}
+.journal-mood {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.journal-mood legend {
+  float: left;
+  margin-inline-end: var(--s2);
+}
+.journal-mood-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 32px;
+  min-height: 32px;
+}
+.journal-entry-list {
+  display: grid;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.journal-entry {
+  display: grid;
+  gap: var(--s1);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+.journal-entry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+}
+.journal-entry-del {
+  margin-inline-start: auto;
+}
+.journal-entry-text {
+  margin: 0;
+  white-space: pre-wrap;
+  max-width: 80ch;
+}
+.journal-entry-setup {
+  margin: 0;
+}
+.journal-market summary {
+  cursor: pointer;
+  width: max-content;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+.journal-market-list {
+  display: grid;
+  gap: 2px;
+  margin: var(--s1) 0 0;
+  font-size: var(--text-sm);
+}
+.journal-market-list div {
+  display: flex;
+  gap: var(--s2);
+}
+.journal-market-list dt {
+  min-width: 9ch;
+  color: var(--text-3);
+}
+.journal-market-list dd {
+  margin: 0;
 }
 
 .journal-trades {

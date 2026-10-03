@@ -16,7 +16,9 @@ TERMINAL_TIMEOUT = 15  # the same, for the logged-in account alone
 
 
 def journal_router(get_journals: Callable[[], Journals | None], get_engine: Callable,
-                   get_features: Callable[[], list[str]], snapshots: Snapshots | None = None) -> APIRouter:
+                   get_features: Callable[[], list[str]], snapshots: Snapshots | None = None,
+                   get_market: Callable[[], dict] | None = None) -> APIRouter:
+    """``get_market()``: the market right now, frozen into each new entry (journal/market.py)."""
     r = APIRouter(prefix="/api/journals")
 
     def svc() -> Journals:
@@ -157,6 +159,40 @@ def journal_router(get_journals: Callable[[], Journals | None], get_engine: Call
         if snapshots:
             snapshots.delete(snapshot_id)
         return out
+
+    @r.get("/{journal_id}/entries")
+    def entries(journal_id: str) -> dict:
+        one(journal_id)
+        return {"entries": svc().entries(journal_id)}
+
+    @r.post("/{journal_id}/entries")
+    def add_entry(journal_id: str, body: dict = Body(...)) -> dict:
+        """A note, a session review, or a setup from the ladder; the market now is frozen into it."""
+        one(journal_id)
+        try:
+            market = get_market() if get_market else None
+        except Exception:  # noqa: BLE001 - an entry is still worth keeping without the snapshot
+            market = None
+        try:
+            return svc().add_entry(journal_id, str(body.get("kind") or "note"), body.get("text") or "",
+                                   body.get("tags") or [], body.get("mood"), body.get("setup"), market)
+        except (JournalError, TypeError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @r.patch("/{journal_id}/entries/{entry_id}")
+    def update_entry(journal_id: str, entry_id: str, body: dict = Body(...)) -> dict:
+        one(journal_id)
+        try:
+            return svc().update_entry(journal_id, entry_id, body)
+        except KeyError:
+            raise HTTPException(404, "No such entry") from None
+        except (JournalError, TypeError, ValueError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @r.delete("/{journal_id}/entries/{entry_id}")
+    def delete_entry(journal_id: str, entry_id: str) -> dict:
+        one(journal_id)
+        return {"deleted": svc().delete_entry(journal_id, entry_id)}
 
     @r.get("/{journal_id}/trades.csv")
     def trades_csv(journal_id: str) -> Response:

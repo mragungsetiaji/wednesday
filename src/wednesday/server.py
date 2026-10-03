@@ -22,6 +22,7 @@ from . import __version__
 from .auth import Auth, install as install_auth
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
+from .journal.market import freeze
 from .brief import BRIEF_KEY, BriefError, BriefSettings
 from .llm_usage import BudgetExceeded
 from .news import CALENDAR_KEY, CalendarSettings
@@ -736,8 +737,18 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             raise HTTPException(404, "No such snapshot")
         return FileResponse(path, media_type="image/png", headers={"Cache-Control": "private, max-age=31536000, immutable"})
 
+    def market_now() -> dict:
+        """The market as it is, for a journal entry to keep (journal/market.py)."""
+        _, result, _ = current().snapshot()
+        bias = trade_bias()
+        news = runtime.calendar.upcoming() if runtime and runtime.calendar else []
+        with current().state.lock:
+            live = current().state.live
+        return freeze(result.to_dict(bias) if result else None, bias.to_dict() if bias else None, news,
+                      current().symbol, current_source(), live["price"] if live else None)
+
     app.include_router(journal_router(lambda: runtime.journals if runtime else None, current,
-                                      lambda: features(app.state.plugins), shots))
+                                      lambda: features(app.state.plugins), shots, market_now))
 
     # Plugins mount their routes before the dashboard's catch-all static mount below.
     plugins = load_plugins(app, runtime) if runtime else []

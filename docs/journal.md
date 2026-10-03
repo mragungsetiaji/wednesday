@@ -193,6 +193,21 @@ prices. **Worst** and **Checked** only show when a trade on the page has stored
 prices, and **Note** when one has a note, tag or chart. On a phone the table keeps
 the time, symbol, result and pips; the rest is in the opened row.
 
+## Notes and reviews
+
+Above the trades, **Notes and reviews** keeps what isn't a trade: a **note**
+(what you see, what you're waiting for) or a **session review** (the plan, what
+price did, what you did), with tags and a mood from 1 to 5. On the chart, the
+book button beside a setup on the ladder (**Journal this**) adds that setup to
+the open journal: its tag, timeframe, side, entry and stop.
+
+Every entry keeps the market as it was when you wrote it: the price, your bias,
+the nearest three setups each side, each timeframe's last break, and the next
+high-impact releases. **Market then** under an entry shows it. It never changes
+afterwards, so a review a week later sees what you saw, not today's scan.
+Editing an entry changes its text, tags and mood only. Entries go with the
+journal when it's removed, and the sample portfolio has none.
+
 ## Notes
 
 Click a trade, or Tab to its close time and press Enter, to write a note and tags

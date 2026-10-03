@@ -238,6 +238,56 @@ class Journals:
         self._changed(journal_id)
         return {"trade_id": trade_id, "note": note, "tags": tags}
 
+    # ---- entries: notes, session reviews and journalled setups (#14) ----
+    ENTRY_KINDS = ("note", "review", "setup")
+
+    @staticmethod
+    def _clean_entry(text, tags, mood) -> tuple[str, list[str], int | None]:
+        text = str(text or "").strip()[:10_000]
+        tags = list(dict.fromkeys(str(t).strip().lower()[:40] for t in (tags or []) if str(t).strip()))[:20]
+        if mood not in (None, ""):
+            mood = int(mood)
+            if not 1 <= mood <= 5:
+                raise JournalError("Mood is 1 to 5")
+        else:
+            mood = None
+        return text, tags, mood
+
+    def entries(self, journal_id: str) -> list[dict]:
+        self.get(journal_id)
+        return self.store.journal_entries(journal_id)
+
+    def add_entry(self, journal_id: str, kind: str, text: str, tags: list, mood=None, setup: dict | None = None,
+                  market: dict | None = None) -> dict:
+        """A note, a session review or a setup from the ladder, with the market frozen as it is now."""
+        self.get(journal_id)
+        if kind not in self.ENTRY_KINDS:
+            raise JournalError(f"An entry is one of {', '.join(self.ENTRY_KINDS)}")
+        text, tags, mood = self._clean_entry(text, tags, mood)
+        if kind != "setup" and not text:
+            raise JournalError("Write something first")
+        if kind == "setup" and not isinstance(setup, dict):
+            raise JournalError("Journal a setup from a row of the ladder")
+        row = {"id": uuid.uuid4().hex[:12], "journal_id": journal_id, "kind": kind, "created_at": _now(), "updated_at": None,
+               "text": text, "tags": tags, "mood": mood, "setup": setup, "market": market}
+        self.store.journal_entry_put(row)
+        return row
+
+    def update_entry(self, journal_id: str, entry_id: str, body: dict) -> dict:
+        """Change the text, tags or mood; the frozen market never changes."""
+        found = next((e for e in self.entries(journal_id) if e["id"] == entry_id), None)
+        if found is None:
+            raise KeyError(entry_id)
+        text, tags, mood = self._clean_entry(body.get("text", found["text"]), body.get("tags", found["tags"]),
+                                             body.get("mood", found["mood"]))
+        found.update(text=text, tags=tags, mood=mood, updated_at=_now())
+        self.store.journal_entry_put(found)
+        return found
+
+    def delete_entry(self, journal_id: str, entry_id: str) -> bool:
+        self.get(journal_id)
+        return self.store.journal_entry_delete(journal_id, entry_id)
+
     def _note(self, journal_id: str, trade_id: str) -> dict:
         found = [n for n in self.store.journal_rows(journal_notes_table, journal_id) if n["trade_id"] == trade_id]
         return found[0] if found else {"note": "", "tags": [], "images": []}

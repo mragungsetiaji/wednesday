@@ -1,5 +1,7 @@
 import type { Risk, Setup, SetupSize, Sizing, TradeBias } from "../api";
 import { detail, fmtMoney, fmtPrice, fmtSigned } from "../format";
+import { BookIcon } from "../icons";
+import { journalThis } from "../journalThis";
 import { useLiveTick, type LiveFeed } from "../liveData";
 import { usePref } from "../prefs";
 import type { RailItem } from "../rail";
@@ -79,6 +81,12 @@ function Row({ item, sizing, highlight, onHighlight, onOpen }: { item: RailItem 
         </span>
         {size && sizing && <SizeLine size={size} currency={sizing.currency} />}
       </button>
+      {s && (
+        <button type="button" className="ladder-journal" onClick={() => journalThis(item)}
+          title={`Journal ${item.tag}: keep this setup with the market as it is now`} aria-label={`Journal ${item.tag}`}>
+          <BookIcon size={13} />
+        </button>
+      )}
     </li>
   );
 }
