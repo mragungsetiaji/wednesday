@@ -282,6 +282,11 @@ class Runtime:
         self.calendar = calendar  # news.Calendar or None
         self.lab = lab  # lab.service.Lab or None (needs a database)
         self.journals = journals  # journal.service.Journals or None (needs a database)
+        self.autosync = None
+        if journals is not None:
+            from .journal.autosync import AutoSync
+
+            self.autosync = AutoSync(journals)  # keeps journals in sync with the MT5 terminal after each scan
         self.hooks = Hooks()  # filled by plugins (see plugins.py)
         self.bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
         self.risk = load_risk(store)
@@ -350,6 +355,11 @@ class Runtime:
                 self.drawing_alerts.check(self.settings.source, engine.symbol, engine.state.m1, self.telegram_send())
             except Exception:  # noqa: BLE001 - never stop scanning over an alert
                 log.exception("drawing alert check failed")
+        if self.autosync is not None:
+            try:
+                self.autosync.check(engine.feed)  # on the feed's thread, like every MT5 call
+            except Exception:  # noqa: BLE001 - never stop scanning over the journal
+                log.exception("journal auto-sync failed")
         self.hooks.run_after_scan(result, engine)
         if self.on_result:
             self.on_result(result)

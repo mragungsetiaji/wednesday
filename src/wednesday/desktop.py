@@ -94,6 +94,21 @@ def _pick_port(host: str, preferred: int) -> int:
 class DesktopApi:
     """Called from the dashboard as ``window.pywebview.api.<method>()``; only in the desktop app."""
 
+    def __init__(self, url: str = ""):
+        self.url = url  # the local dashboard, for the pop-out chart windows
+
+    def open_chart(self, tf: str, group: str | None = None) -> bool:
+        """Open one chart in its own window (another monitor, say). It loads the same local dashboard,
+        so the scan, ticks and drawings are shared; it closes with the main window."""
+        import webview
+
+        tf = "".join(c for c in str(tf) if c.isalnum())[:8] or "1H"
+        group = group if group in ("A", "B", "C") else None
+        route = f"#popout/{tf}" + (f"/{group}" if group else "")
+        webview.create_window(f"{TITLE} {tf}", f"{self.url}/{route}", width=1100, height=700, min_size=(480, 320),
+                              js_api=self)
+        return True
+
     def pick_terminal(self) -> str | None:
         """Pick a terminal64.exe with the Windows file dialog."""
         import webview
@@ -144,7 +159,14 @@ def serve_in_window(app, host: str, port: int) -> None:
             webbrowser.open(url)
             thread.join()
             return
-        webview.create_window(TITLE, url, width=1440, height=900, min_size=(960, 600), js_api=DesktopApi())
+        main = webview.create_window(TITLE, url, width=1440, height=900, min_size=(960, 600), js_api=DesktopApi(url))
+
+        def close_popouts() -> None:  # the server stops with the main window, so its charts go too
+            for w in list(webview.windows):
+                if w is not main:
+                    w.destroy()
+
+        main.events.closed += close_popouts
         # private_mode=False keeps the dashboard's saved layout (localStorage) between runs.
         webview.start(private_mode=False, storage_path=str(home_dir() / "webview"))
     finally:

@@ -235,6 +235,18 @@ class MT5Feed(DataFeed):
             raise RuntimeError(f"MT5 has no account logged in: {mt5.last_error()}")
         return {"login": str(acc.login), "server": acc.server, "company": acc.company}
 
+    def account_activity(self) -> dict:
+        """A cheap look at the account for the journal's auto-sync: its number, how many deals it has and
+        how many positions are open. A change in either means a full sync is worth it. Scan thread only."""
+        mt5 = self._mt5
+        if mt5 is None:
+            raise RuntimeError("The MT5 terminal isn't connected yet")
+        acc = mt5.account_info()
+        if acc is None:
+            raise RuntimeError(f"MT5 has no account logged in: {mt5.last_error()}")
+        deals = mt5.history_deals_total(datetime(2000, 1, 1), datetime.now() + timedelta(days=3))
+        return {"login": str(acc.login), "deals": int(deals or 0), "positions": int(mt5.positions_total() or 0)}
+
     def account_history(self) -> dict:
         """The logged-in account, every deal in its history and the open positions (for the journal).
 

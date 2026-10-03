@@ -23,3 +23,6 @@ export class CrosshairBus {
     for (const [id, fn] of this.subs) if (id !== from) fn(p);
   }
 }
+
+/** What a chart needs from a crosshair link: the bus above, or a link group (windowLink.ts). */
+export type CrosshairLink = Pick<CrosshairBus, "subscribe" | "publish">;

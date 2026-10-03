@@ -23,9 +23,9 @@ filled before you hand over an account. The screenshots on this page are of it.
 - It doesn't count as a journal: with the free plan you keep it and still make
   one journal of your own.
 - It can't be synced or imported into, and it has no MT5 account.
-- **Delete sample** (in its header, or **Delete** under **Journals**) removes its
-  trades and its prices. It stays deleted after a restart. To bring it back,
-  **Journals**, **Show the sample** (or the link on the empty journal page).
+- **Delete…** next to it under Settings, Journal, Journals removes its trades and
+  its prices. It stays deleted after a restart. To bring it back, **Show the
+  sample** in the same place (or the link on the empty journal page).
 
 The trades come from a generator with a fixed seed (`journal/sample.py`), so it
 is the same on every install. It makes the M1 bars too, since the drawdown is
@@ -34,26 +34,49 @@ Settings, Storage), and only the sample reads them. The scanner, the Lab and you
 own journals never do. Every entry and exit price sits inside its minute's bar,
 so the checks below pass the way they would for a real account.
 
+## The header and Journal settings
+
+The header holds the journal's name (a picker when there are several), one line
+with the account, server and sync state ("Synced 2 min ago", "Waiting for account
+51234567 in the terminal", "Last sync failed: …"), and a gear that opens
+**Settings, Journal** (`#settings/journal`). Everything that sets up or manages a
+journal lives there, saved field by field:
+
+| Section | |
+| --- | --- |
+| This journal | Name; the MT5 account, server, company and currency from the last sync or import. |
+| Sync | **Sync from MT5 automatically** (see below), the last sync and **Sync now**; **Import report**. |
+| Display | **Show Saturday and Sunday in the calendar**, off by default. |
+| Advanced | **Broker time offset (hours)**: leave empty to detect it from the deal prices. |
+| Data | **Export trades (CSV)**. |
+| Journals | Every journal with its account and last sync, **Open**, **Remove journal…**, and **New journal**. |
+
 ## Journals
 
 A new journal takes a name and the MT5 account number (the login under
 *Navigator*, *Accounts*). When the data source is MT5, the form fills in the
 account the terminal is logged in to and **Create and sync** reads its history
-straight away. For another account the journal starts empty: log in to that
-account in the terminal and press **Sync from MT5**, or import its report. One
+straight away, with auto-sync on. For another account the journal starts empty:
+log in to that account in the terminal and sync, or import its report. One
 account has one journal; a second journal for the same number is refused.
 
-**Journals** in the header lists every journal with its account and last sync.
-Open one from there, or **Remove** it: that deletes its trades and notes from
-Wednesday and changes nothing in MT5.
+Under **Journals** in Settings, Journal, the open one says *Current*. **Remove
+journal…** asks first, then deletes its trades and notes from Wednesday and
+changes nothing in MT5.
 
 ## Filling it
 
-- **Sync from MT5** reads every deal from the terminal the scanner is connected
-  to, when the data source is MT5. It goes through the scan thread, since MT5 can
-  only be used from the thread that connected it. Wednesday reads the account
-  number, server, company, currency, balance and equity; never the password or the
-  account holder's name.
+- **Sync from MT5 automatically** (one switch per journal, on for journals made
+  from the terminal's account and for older journals filled from MT5) keeps the
+  journal current with nothing to press. After each scan, on the scan thread
+  (MT5 can only be used from the thread that connected it), it reads the deal
+  count and open positions, and syncs only when they changed, once after the
+  feed connects, and every 5 minutes while positions are open so their floating
+  result stays current. A closed trade shows within about a minute. A terminal
+  logged in to another account is waited for; a failure keeps the last good data
+  and tries again after 1, 2, 4… minutes (at most 30). **Sync now** does it by hand.
+  Wednesday reads the account number, server, company, currency, balance and
+  equity; never the password or the account holder's name.
 - **Import report**: in the terminal, *History* tab, right click, *Report*,
   *HTML*, with *All history* selected. The *Positions* table gives the trades, the
   *Deals* table the deposits and withdrawals. This works on any machine, so the
@@ -85,8 +108,14 @@ show with their floating result.
 | Worst floating | The lowest the open trades were, together, in money. |
 
 The numbers also include trades, win rate, profit factor, average win and loss, best and worst,
-lots, commission, swap and the average hold. The trade list below is paged, newest first; click a trade for its note. **Export CSV** gives every trade with
-its worst and best floating result, whether it was checked, and your note.
+lots, commission, swap and the average hold. The trade list below is paged, newest first; click a trade for its note. **Export trades (CSV)**,
+in Settings, Journal, gives every trade with its worst and best floating result,
+whether it was checked, and your note.
+
+Under the curve, one line says how the drawdown was worked out ("Drawdown from
+closed results. Prices for 0 of 165 trades."), with **Details** for the full
+check. Deal prices outside their bars, or a balance that doesn't match the
+terminal, show in red with what to do.
 
 ## Monthly gain and the calendar
 
@@ -98,8 +127,10 @@ trades; hover or tab to a month to show that one instead.
 The **calendar** shows a month of closed trades per day, by the day they closed
 on the broker's clock: the result in money and pips, and how many trades. The
 tint is green or red by the sign and stronger for bigger days (scaled to the
-month's biggest). The last column adds up the week. On a phone it shows the money
-only, rounded.
+month's biggest). The last column adds up the week. It shows Monday to Friday:
+weekend results still count in the week and the month, and the week cell names
+them ("incl. Sat +145.60"). **Show Saturday and Sunday in the calendar** in
+Settings, Journal brings the two columns back. On a phone the money is rounded.
 
 <img src="images/journal-periods.png" alt="Monthly gain as green and red bars beside a month of daily results with money, pips and weekly totals" width="100%">
 
@@ -150,7 +181,7 @@ The box under the chart says how far the numbers are checked:
   balance the terminal reports.
 
 The broker's deal clock and the price feed's clock can be hours apart. Unless
-you set the offset (Settings on the journal page), the journal tries every
+you set the offset (Broker time offset in Settings, Journal), the journal tries every
 whole hour from −14 to +14 and uses the one where most deal prices fit their bars.
 Bars from the same broker (the MT5 source) line up best; Yahoo's `GC=F` is
 futures, priced differently from spot, so it won't match.
