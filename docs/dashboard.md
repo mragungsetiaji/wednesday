@@ -320,6 +320,18 @@ The two options belong to the group, so they're the same in every window. An
 unlinked chart doesn't follow anything. The charts inside full screen are already
 linked with each other.
 
+### Workspaces
+
+**Workspace** under the chart saves the current setup under a name ("London
+prep", "NY execution"): the chart layout (timeframe, full screen layout and pane
+sizes, layer toggles, link groups) and, in the desktop app, every window with its
+position, size, monitor and chart. Opening one puts the layout back, closes the
+popped-out charts, opens the saved ones where they were, and reloads the
+dashboard. **Update** saves over a workspace, and **Remove** deletes it. Up to 20
+are kept, in the database, so clearing the browser's or the app's storage doesn't
+lose them. In a browser, opening a workspace opens its charts as popups at their
+saved positions (allow popups for the dashboard).
+
 ## Quarterly theory pane
 
 Under the candles, a pane splits time the way quarterly theory does, in New

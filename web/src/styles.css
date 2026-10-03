@@ -1169,6 +1169,36 @@ p {
   color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent);
 }
+.workspace-menu {
+  position: relative;
+}
+.workspace-pop {
+  min-width: 280px;
+}
+.workspace-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.workspace-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 28px;
+}
+.workspace-list li > .link-button:first-child {
+  overflow: hidden;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-save {
+  display: flex;
+  gap: var(--s2);
+}
 .chart-foot-tools {
   display: flex;
   align-items: center;

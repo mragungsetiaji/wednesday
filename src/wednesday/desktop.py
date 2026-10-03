@@ -24,6 +24,7 @@ import webbrowser
 from pathlib import Path
 
 from .cli import load_env_file, main
+from .workspaces import MIN_SIZE, ROUTE, WorkspaceError, Workspaces, clean_windows, fit_on_screen
 
 log = logging.getLogger("wednesday")
 
@@ -91,22 +92,119 @@ def _pick_port(host: str, preferred: int) -> int:
         return s.getsockname()[1]
 
 
+class WindowTracker:
+    """The app's windows with their routes, so they can be remembered and arranged (#27)."""
+
+    def __init__(self, url: str):
+        self.url = url
+        self.routes: dict = {}  # window -> the route it opened with
+        self.maximized: dict = {}
+        self.main = None
+
+    def track(self, w, route: str):
+        self.routes[w] = route
+        self.maximized[w] = False
+        events = getattr(w, "events", None)
+        for name, value in (("maximized", True), ("restored", False)):
+            ev = getattr(events, name, None)
+            if ev is not None:
+                ev += lambda w=w, value=value: self.maximized.__setitem__(w, value)
+        closed = getattr(events, "closed", None)
+        if closed is not None and w is not self.main:
+            closed += lambda w=w: (self.routes.pop(w, None), self.maximized.pop(w, None))
+        return w
+
+    def route_of(self, w) -> str:
+        """The window's route now (a pop-out's timeframe can change), falling back to the one it opened with."""
+        try:
+            url = w.get_current_url() or ""
+        except Exception:  # noqa: BLE001 - closing, or an old pywebview
+            url = ""
+        route = "#" + url.split("#", 1)[1] if "#" in url else self.routes.get(w, "#")
+        return route if ROUTE.match(route) else self.routes.get(w, "#")
+
+    def snapshot(self) -> list[dict]:
+        """Every open window: route, position, size, maximised. The dashboard first."""
+        out = []
+        for w in sorted(self.routes, key=lambda w: w is not self.main):
+            out.append({"route": "#" if w is self.main else self.route_of(w), "x": int(getattr(w, "x", 0) or 0),
+                        "y": int(getattr(w, "y", 0) or 0), "width": int(getattr(w, "width", 1440) or 1440),
+                        "height": int(getattr(w, "height", 900) or 900), "maximized": bool(self.maximized.get(w))})
+        return out
+
+    @staticmethod
+    def screens() -> list[dict]:
+        import webview
+
+        return [{"x": int(getattr(s, "x", 0)), "y": int(getattr(s, "y", 0)), "width": int(s.width), "height": int(s.height)}
+                for s in getattr(webview, "screens", None) or []]
+
+    def open(self, route: str, api, geometry: dict | None = None):
+        """A pop-out window for ``route``, where ``geometry`` says (kept on a screen that exists)."""
+        import webview
+
+        g = fit_on_screen(geometry, self.screens()) if geometry else {"width": 1100, "height": 700}
+        tf = route.split("/")[1] if route.count("/") else ""
+        kw = {k: g[k] for k in ("x", "y", "width", "height") if k in g}
+        w = webview.create_window(f"{TITLE} {tf}".strip(), f"{self.url}/{route}", min_size=MIN_SIZE, js_api=api, **kw)
+        self.track(w, route)
+        if g.get("maximized") and hasattr(w, "maximize"):
+            w.maximize()
+        return w
+
+    def place(self, w, geometry: dict) -> None:
+        """Move and resize an open window (the dashboard's) to ``geometry``."""
+        g = fit_on_screen(geometry, self.screens())
+        if g.get("maximized") and hasattr(w, "maximize"):
+            w.maximize()
+            return
+        if hasattr(w, "restore") and self.maximized.get(w):
+            w.restore()
+        if hasattr(w, "move"):
+            w.move(g["x"], g["y"])
+        if hasattr(w, "resize"):
+            w.resize(g["width"], g["height"])
+
+    def arrange(self, windows: list[dict], api) -> None:
+        """Make the open windows match ``windows``: the dashboard moves, pop-outs close and reopen."""
+        for w in list(self.routes):
+            if w is not self.main:
+                w.destroy()
+                self.routes.pop(w, None)
+        for g in windows:
+            if g["route"] in ("#", ""):
+                if self.main is not None:
+                    self.place(self.main, g)
+            else:
+                self.open(g["route"], api, g)
+
+
 class DesktopApi:
     """Called from the dashboard as ``window.pywebview.api.<method>()``; only in the desktop app."""
 
-    def __init__(self, url: str = ""):
+    def __init__(self, url: str = "", tracker: WindowTracker | None = None):
         self.url = url  # the local dashboard, for the pop-out chart windows
+        self.tracker = tracker or WindowTracker(url)
 
     def open_chart(self, tf: str, group: str | None = None) -> bool:
         """Open one chart in its own window (another monitor, say). It loads the same local dashboard,
         so the scan, ticks and drawings are shared; it closes with the main window."""
-        import webview
-
         tf = "".join(c for c in str(tf) if c.isalnum())[:8] or "1H"
         group = group if group in ("A", "B", "C") else None
         route = f"#popout/{tf}" + (f"/{group}" if group else "")
-        webview.create_window(f"{TITLE} {tf}", f"{self.url}/{route}", width=1100, height=700, min_size=(480, 320),
-                              js_api=self)
+        self.tracker.open(route, self)
+        return True
+
+    def window_layout(self) -> list[dict]:
+        """The open windows, for saving a workspace."""
+        return self.tracker.snapshot()
+
+    def arrange(self, windows: list) -> bool:
+        """Open a workspace's windows: move the dashboard, replace the pop-outs."""
+        try:
+            self.tracker.arrange(clean_windows(windows), self)
+        except WorkspaceError:
+            return False
         return True
 
     def pick_terminal(self) -> str | None:
@@ -159,16 +257,41 @@ def serve_in_window(app, host: str, port: int) -> None:
             webbrowser.open(url)
             thread.join()
             return
-        main = webview.create_window(TITLE, url, width=1440, height=900, min_size=(960, 600), js_api=DesktopApi(url))
+        store = getattr(app.state, "store", None)
+        memory = Workspaces(store) if store is not None else None
+        last = memory.last_windows() if memory else []
+        tracker = WindowTracker(url)
+        api = DesktopApi(url, tracker)
+        first = next((w for w in last if w["route"] == "#"), None)
+        geometry = {k: first[k] for k in ("x", "y", "width", "height")} if first else {"width": 1440, "height": 900}
+        main = webview.create_window(TITLE, url, min_size=(960, 600), js_api=api, **geometry)
+        tracker.main = main
+        tracker.track(main, "#")
+
+        def restore() -> None:  # once the GUI runs: keep the dashboard on screen, reopen last session's charts
+            if first:
+                tracker.place(main, first)
+            for w in last:
+                if w["route"] != "#":
+                    tracker.open(w["route"], api, w)
+
+        def remember() -> None:  # the dashboard is closing: keep where every window was
+            if memory:
+                try:
+                    memory.remember_windows(tracker.snapshot())
+                except Exception:  # noqa: BLE001 - never block closing over it
+                    log.exception("couldn't remember the windows")
 
         def close_popouts() -> None:  # the server stops with the main window, so its charts go too
             for w in list(webview.windows):
                 if w is not main:
                     w.destroy()
 
+        if getattr(main.events, "closing", None) is not None:
+            main.events.closing += remember
         main.events.closed += close_popouts
         # private_mode=False keeps the dashboard's saved layout (localStorage) between runs.
-        webview.start(private_mode=False, storage_path=str(home_dir() / "webview"))
+        webview.start(restore, private_mode=False, storage_path=str(home_dir() / "webview"))
     finally:
         server.should_exit = True
         thread.join(timeout=10)

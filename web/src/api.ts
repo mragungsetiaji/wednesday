@@ -164,6 +164,15 @@ export interface ReplayResponse extends CandlesResponse {
 export const fetchReplay = (at: number, tf: string, limit: number) =>
   getJson<ReplayResponse>(`/api/replay?at=${at}&tf=${encodeURIComponent(tf)}&limit=${limit}`);
 export const fetchReplayRange = () => getJson<{ first: number; last: number }>("/api/replay/range");
+/** A window of a workspace: the dashboard ("#") or a popped-out chart, where it was. */
+export interface WorkspaceWindow { route: string; x: number; y: number; width: number; height: number; maximized?: boolean }
+export interface Workspace { name: string; layout: Record<string, unknown>; windows: WorkspaceWindow[]; saved_at: string }
+export const fetchWorkspaces = () =>
+  getJson<{ workspaces: { name: string; saved_at: string; windows: number }[] }>("/api/workspaces");
+export const fetchWorkspace = (name: string) => getJson<Workspace>(`/api/workspaces/${encodeURIComponent(name)}`);
+export const saveWorkspace = (name: string, layout: Record<string, unknown>, windows: WorkspaceWindow[]) =>
+  send<Workspace>("PUT", `/api/workspaces/${encodeURIComponent(name)}`, { layout, windows });
+export const deleteWorkspace = (name: string) => send<{ deleted: boolean }>("DELETE", `/api/workspaces/${encodeURIComponent(name)}`);
 
 /** Fired when the server wants a login (the session ended or was never there); the login screen listens. */
 export const LOGGED_OUT_EVENT = "wednesday:logged-out";

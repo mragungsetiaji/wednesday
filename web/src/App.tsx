@@ -7,6 +7,7 @@ import { ChartFocus } from "./components/ChartFocus";
 import { ChartPopOut } from "./components/ChartPopOut";
 import { PerfOverlay } from "./components/PerfOverlay";
 import { LinkMenu, useChartLink } from "./components/LinkMenu";
+import { WorkspaceMenu } from "./components/WorkspaceMenu";
 import { openChartWindow, useDesktopApi } from "./desktop";
 import type { LinkGroup } from "./windowLink";
 import { DistributionPanel } from "./components/DistributionPanel";
@@ -471,6 +472,7 @@ export default function App() {
                   title="Bar replay: play the stored history forward candle by candle, without seeing what came next">
                   Replay
                 </button>
+                <WorkspaceMenu />
                 <LinkMenu value={mainGroup} onChange={setMainGroup} />
                 <button type="button" className="icon-button" onClick={() => openChartWindow(desktop, tf, mainGroup)} disabled={!scan || replaying}
                   title={`Open ${tf} in its own window, for another monitor`} aria-label="Open the chart in its own window">
