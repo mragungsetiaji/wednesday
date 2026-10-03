@@ -82,6 +82,19 @@ confirming candles, where its high and low sit in that window, the hour and
 weekday, and the last closed candles of the next two timeframes up. Nothing later.
 Each sample records `available_at`, the moment a model could have known.
 
+**Feature families.** Extra groups of features are switched on per model in the
+Train form, so their worth can be measured by training with and without them. A
+model's file lists the families it was trained with (`params.families`), and
+scoring rebuilds exactly those; files from before families build the features
+above only.
+
+| Family | What it adds |
+| --- | --- |
+| Session and quarter | The session (Tokyo, London, NY AM, NY PM), its 90-minute quarter and the trading weekday, all in New York time from the feed's clock, plus how far the candle closed from the week's and the session's open, in ATRs. |
+
+Every family is causal: it only reads the candle and earlier ones, like the rest.
+Structure, liquidity sweeps, news and bias families are planned.
+
 **Scores.** Everything is split by time, never at random, by the moment each
 sample became known. With a few hundred labels one test window is noisy (a calm
 or wild week flatters a model), so by default training runs **4 walk-forward
@@ -105,8 +118,8 @@ of every held-out trade against the average R of the trades the model liked.
 
 **What the model looks at.** A model's scores open a list per tag of the
 feature groups it leans on (the candle, the candles before, the confirming
-candles, the window high / low, volatility, time of day, higher timeframes, and
-the zone for the outcome model), with its top features in plain words. It is
+candles, the window high / low, volatility, time of day, higher timeframes,
+session and quarter when that family is on, and the zone for the outcome model), with its top features in plain words. It is
 permutation importance: how much held-out AUC drops when a group, or one feature,
 is shuffled across the held-out candles, measured on the model fit before them.
 A model that leans mostly on time of day rather than the candles is worth a

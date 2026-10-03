@@ -23,7 +23,7 @@ from ..detectors.base import DetectorParams
 from ..storage import Store, lab_labels_table, lab_reviewed_table, lab_reviews_table
 from ..timeframes import TIMEFRAMES_BY_NAME
 from .bars import HISTORY_BARS_DEFAULT, HISTORY_BARS_MAX, LAB_DATA_KEY, Backfill, BarsFileError, ParsedBars, parse_bars
-from .dataset import ts, unix
+from .dataset import FAMILIES, FeatureParams, ts, unix
 from .model import ModelBundle, ModelFileError, load, load_bytes, read_manifest
 from .outcome import TradePlan, plan_levels, simulate
 from .tags import OB_TAGS, TAGS
@@ -691,7 +691,7 @@ class Lab:
             return pd.DataFrame()
         bundle = self.active()
         p = bundle.manifest["params"] if bundle else {}
-        fp = TrainParams(lookback=int(p.get("lookback", 10)), confirm=int(p.get("confirm", 3))).features
+        fp = FeatureParams.of({"lookback": 10, "confirm": 3, **p})
         out = []
         for tf, group in pd.DataFrame(rows).groupby("timeframe"):
             fr = frames_for(m1, TIMEFRAMES_BY_NAME[tf], fp)
@@ -705,7 +705,8 @@ class Lab:
 
     def status(self, symbol: str) -> dict:
         ok, reason = ml_available()
-        return {"available": ok, "reason": reason, "tags": [{"id": t, "title": i["title"], "shape": i["shape"]}
+        return {"available": ok, "reason": reason, "families": [{"id": f, "title": t} for f, t in FAMILIES.items()],
+                "tags": [{"id": t, "title": i["title"], "shape": i["shape"]}
                                                             for t, i in TAGS.items()],
                 "counts": self.counts(symbol), "training": dict(self.training), "runs": self.runs(),
                 "models": self.models(), "active": self.active_id}

@@ -326,7 +326,7 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
     @r.post("/train", status_code=202)
     def train(body: dict = Body(...)) -> dict:
         need_ml()
-        params = TrainParams.from_dict(body)
+        params = TrainParams.from_dict({**body, "clock": get_clock()})  # the families in New York time need it
         if errors := params.validate():
             raise HTTPException(422, "; ".join(errors))
         m1 = history()
