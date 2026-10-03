@@ -1,12 +1,13 @@
 import { useId, useMemo, type CSSProperties, type Ref } from "react";
 
 import type { DetectorInfo, QuartersResponse, Scan, SessionsResponse } from "../api";
-import type { CrosshairBus } from "../crosshairSync";
+import type { CrosshairLink } from "../crosshairSync";
+import type { LinkGroup } from "../windowLink";
 import type { DrawingCtl } from "../drawings";
 import type { LiveFeed } from "../liveData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "../chartData";
 import { fmtPrice } from "../format";
-import { Direction, LayersIcon } from "../icons";
+import { Direction, LayersIcon, PopOutIcon } from "../icons";
 import type { NewsMark } from "../newsPrimitive";
 import type { RailItem } from "../rail";
 import { levelGroups as knownGroups, levelView, type LevelGroup } from "../refLevels";
@@ -51,7 +52,9 @@ interface Props {
   own?: PaneLayers; // this pane's overrides
   onOwn?: (o: PaneLayers) => void;
   label: string; // accessible name, e.g. "Chart 2"
-  sync?: { bus: CrosshairBus; id: number };
+  sync?: { bus: CrosshairLink; id: number };
+  rangeLink?: { group: LinkGroup; id: string } | null; // scroll and zoom with a link group
+  onPopOut?: () => void; // open this chart in its own window
   news?: NewsMark[];
   live?: LiveFeed | null;
   drawings?: DrawingCtl | null;
@@ -63,7 +66,7 @@ interface Props {
 
 /** One chart of the full-screen layout, with its own timeframe. */
 export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers: global, palette, quarters, showQuarters, showNews,
-  allDetectors, sessions, levelGroups, own = NO_OWN, onOwn, label, sync, news, live, drawings, nav, cell, focused, onFocus }: Props) {
+  allDetectors, sessions, levelGroups, own = NO_OWN, onOwn, label, sync, rangeLink, onPopOut, news, live, drawings, nav, cell, focused, onFocus }: Props) {
   const layers = useMemo<LayerOptions>(() => ({
     detectors: own.detectors ? allDetectors.filter((d) => own.detectors!.includes(d.name)) : global.detectors,
     showHigherTf: own.htf ?? global.showHigherTf,
@@ -99,6 +102,12 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
             );
           })}
         </div>
+        {onPopOut && (
+          <button type="button" className="pane-layers-btn" onClick={onPopOut} title={`Open ${tf} in its own window`}
+            aria-label={`${label}: open in its own window`}>
+            <PopOutIcon size={14} />
+          </button>
+        )}
         {onOwn && (
           <PaneLayersMenu label={label} own={own} onOwn={onOwn} allDetectors={allDetectors} lookback={lookback} effective={{
             detectors: layers.detectors.map((d) => d.name), midOb: layers.showMidOb, htf: layers.showHigherTf,
@@ -118,6 +127,7 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
         quarters={quarters}
         quarterRows={rows}
         sync={sync}
+        rangeLink={rangeLink}
         swings={layers.showSwings ? chart?.swings : undefined}
         news={newsOn ? news : undefined}
         levels={levels}

@@ -13,6 +13,7 @@ import {
   type Sizing,
 } from "./api";
 import type { DrawingCtl, DrawTool } from "./drawings";
+import { announceDrawings, onOtherDrawings } from "./windowLink";
 import { usePref } from "./prefs";
 
 const typing = (el: EventTarget | null) =>
@@ -89,6 +90,9 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
     reload();
   }, [source, symbol, reload]);
 
+  // A drawing saved in another window (a popped-out chart, say) shows here too.
+  useEffect(() => onOtherDrawings(reload), [reload]);
+
   // After each scan: an alert that fired greys out.
   useEffect(() => {
     if (!version || !source) return;
@@ -113,11 +117,11 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
   const apply = useCallback((id: string, d: Drawing | null) => {
     if (d) {
       setItems((xs) => (xs.some((x) => x.id === id) ? xs.map((x) => (x.id === id ? d : x)) : [...xs, d]));
-      putDrawing(d).then(() => setError(null)).catch(failed("save"));
+      putDrawing(d).then(() => { setError(null); announceDrawings(); }).catch(failed("save"));
     } else {
       setItems((xs) => xs.filter((x) => x.id !== id));
       select((s) => (s === id ? null : s));
-      deleteDrawing(id).then(() => setError(null)).catch(failed("delete"));
+      deleteDrawing(id).then(() => { setError(null); announceDrawings(); }).catch(failed("delete"));
     }
   }, [failed]);
 

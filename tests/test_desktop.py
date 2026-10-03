@@ -59,6 +59,36 @@ def test_single_instance(tmp_path):
     again.close()
 
 
+class _Event(list):
+    def __iadd__(self, fn):
+        self.append(fn)
+        return self
+
+
+class FakeWindow:
+    def __init__(self):
+        self.events = types.SimpleNamespace(closed=_Event())
+        self.destroyed = False
+
+    def destroy(self):
+        self.destroyed = True
+
+
+def test_open_chart_opens_a_window_on_the_same_server(monkeypatch):
+    made = []
+
+    def create_window(title, url, **kwargs):
+        made.append((title, url, kwargs))
+        return FakeWindow()
+
+    monkeypatch.setitem(sys.modules, "webview", types.SimpleNamespace(create_window=create_window))
+    api = desktop.DesktopApi("http://127.0.0.1:8000")
+    assert api.open_chart("5M", "B") is True
+    assert api.open_chart("1H<script>", "Z") is True  # only letters and digits reach the address
+    assert [m[1] for m in made] == ["http://127.0.0.1:8000/#popout/5M/B", "http://127.0.0.1:8000/#popout/1Hscript"]
+    assert made[0][0] == "Wednesday 5M" and made[0][2]["js_api"] is api
+
+
 def test_run_serves_dashboard_in_window(home, monkeypatch):
     port = _free_port()
     monkeypatch.setenv("XAU_SOURCE", "synthetic")
@@ -67,6 +97,7 @@ def test_run_serves_dashboard_in_window(home, monkeypatch):
 
     def create_window(title, url, **kwargs):
         seen["title"], seen["url"] = title, url
+        return FakeWindow()
 
     def start(**kwargs):
         # The "window" is open: the server must answer while it is.

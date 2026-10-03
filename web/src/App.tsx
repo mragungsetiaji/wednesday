@@ -4,6 +4,10 @@ import { fetchQuarters, fetchScan, fetchSessions, type QuartersResponse, type Sc
 import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
 import { ChartFocus } from "./components/ChartFocus";
+import { ChartPopOut } from "./components/ChartPopOut";
+import { LinkMenu, useChartLink } from "./components/LinkMenu";
+import { openChartWindow, useDesktopApi } from "./desktop";
+import type { LinkGroup } from "./windowLink";
 import { DistributionPanel } from "./components/DistributionPanel";
 import { Dock } from "./components/Dock";
 import { DrawingStyleBar } from "./components/DrawingStyleBar";
@@ -25,7 +29,7 @@ import { LiveTickerPrice } from "./components/TickerPrice";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtPrice } from "./format";
-import { BookIcon, ChartIcon, Direction, ExpandIcon, FlaskIcon, SlidersIcon } from "./icons";
+import { BookIcon, ChartIcon, Direction, ExpandIcon, FlaskIcon, PopOutIcon, SlidersIcon } from "./icons";
 import { predictionMark } from "./labPrimitive";
 import { useMl } from "./mlData";
 import { usePref } from "./prefs";
@@ -52,11 +56,12 @@ function useOlderThan(since: number | null, ms: number): boolean {
   return old;
 }
 
-type View = "chart" | "journal" | "lab" | "settings";
+type View = "chart" | "journal" | "lab" | "settings" | "popout";
 const viewFromHash = (): View => {
   const h = window.location.hash;
   if (h === "#settings" || h.startsWith("#settings/")) return "settings";
   if (h === "#journal") return "journal";
+  if (h.startsWith("#popout")) return "popout";
   return h.startsWith("#lab") ? "lab" : "chart";
 };
 
@@ -244,8 +249,40 @@ export default function App() {
   }, [showBanner]);
 
   const mainNav = useRef<ChartNav | null>(null);
+  const desktop = useDesktopApi();
+  // The main chart's link group: crosshair, scroll and zoom, and timeframe with charts in other windows.
+  const [mainGroup, setMainGroup] = usePref<LinkGroup | null>("wed.linkMain", null);
+  const tfFromLink = useRef(false);
+  const mainLink = useChartLink(view === "chart" && !focus ? mainGroup : null, (t) => {
+    tfFromLink.current = true;
+    setTf(t);
+  });
+  const tfShared = useRef(tf);
+  useEffect(() => {
+    if (tfShared.current === tf) return; // only changes, not the first render
+    tfShared.current = tf;
+    if (tfFromLink.current) tfFromLink.current = false;
+    else mainLink.shareTf(tf);
+  }, [tf]); // eslint-disable-line react-hooks/exhaustive-deps
   const market = useMemo(() => ({ pip: data?.pip ?? 0.1, clockOffset: data?.clock_offset ?? 0, symbol: data?.symbol ?? "",
     clockName: data?.clock ?? "UTC" }), [data?.pip, data?.clock_offset, data?.symbol, data?.clock]);
+
+  if (view === "popout") {
+    return (
+      <ChartMarket.Provider value={market}>
+        <div className="app app-popout">
+          <ChartPopOut symbol={data?.symbol ?? ""} scan={scan} timeframes={timeframes} version={version} lookback={lookback}
+            rail={rail} layers={layers} palette={palette} quarters={quarters} showQuarters={showQuarters} showNews={showNews}
+            allDetectors={allDetectors} sessions={sessions} levelGroups={levelGroupsOn} news={news} live={live}
+            drawings={drawings} bias={tradeBias} status={status} clockOffset={market.clockOffset} />
+          <StatusBar version={data?.app_version} status={status} source={data?.source}
+            scannedAt={data?.scanned_at ?? null} barTime={scan?.time ?? null} />
+          <NewsAlert events={upcomingNews} />
+          <Toasts />
+        </div>
+      </ChartMarket.Provider>
+    );
+  }
 
   return (
     <ChartMarket.Provider value={market}>
@@ -394,6 +431,8 @@ export default function App() {
                 live={live}
                 drawings={drawings}
                 nav={mainNav}
+                sync={mainLink.sync}
+                rangeLink={mainLink.rangeLink}
               />
               </div>
               <div className="chart-foot">
@@ -412,10 +451,17 @@ export default function App() {
                   {levels.lines.length > 0 && <li><span className="key key-reflevel" /> Session levels, faint once swept</li>}
                   <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
                 </ul>
+                <div className="chart-foot-tools">
+                <LinkMenu value={mainGroup} onChange={setMainGroup} />
+                <button type="button" className="icon-button" onClick={() => openChartWindow(desktop, tf, mainGroup)} disabled={!scan}
+                  title={`Open ${tf} in its own window, for another monitor`} aria-label="Open the chart in its own window">
+                  <PopOutIcon size={15} />
+                </button>
                 <button type="button" className="icon-button" onClick={() => setFocus(true)} disabled={!scan}
                   title="Full screen: one, two or four charts (F)" aria-label="Full screen charts">
                   <ExpandIcon size={15} />
                 </button>
+                </div>
               </div>
               {scan && config && (
                 <Dock open={dockTab} onOpen={setDockTab} tabs={[

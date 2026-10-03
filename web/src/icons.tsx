@@ -124,6 +124,20 @@ export const InfoIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Link: charts that follow each other. */
+export const LinkIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6.5 9.5l3-3M7 4.5l1-1a2.5 2.5 0 013.5 3.5l-1 1M9 11.5l-1 1A2.5 2.5 0 014.5 9l1-1" />
+  </Svg>
+);
+
+/** Pop out: open in its own window. */
+export const PopOutIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9.5 2.5h4v4M13.5 2.5L8 8M11.5 9.5v3a1 1 0 01-1 1h-7a1 1 0 01-1-1v-7a1 1 0 011-1h3" />
+  </Svg>
+);
+
 /** Gear: settings. */
 export const GearIcon = (p: IconProps) => (
   <Svg {...p}>

@@ -38,6 +38,10 @@ database or a file. A `.env` in this folder is still read if you create one.
 On first start the app shows the [disclaimer and risk agreement](../DISCLAIMER.md);
 it can't be used until you accept it. The installer asks the same before
 installing.
+A chart can open in its own window, for another monitor: the pop-out button
+under the chart (see [Charts in their own windows](dashboard.md#charts-in-their-own-windows)).
+Those windows use the same local server and close with the main window.
+
 The installer includes the MT5, news brief and Lab extras, so every source and
 feature works without installing Python.
 
