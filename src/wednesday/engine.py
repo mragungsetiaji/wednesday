@@ -334,6 +334,32 @@ class ScanWorker:
             self._thread.join(timeout)
 
 
+REAL_SOURCES = ("mt5", "yfinance", "csv")  # stored bars that are market data (not "sample" or demo)
+
+
+def real_price(store: Store | None) -> tuple[pd.Timestamp, float] | None:
+    """The newest real price in the database, (UTC time, close), so demo data starts from today's level:
+    MT5 first, then the other sources, the most recent winning. None without stored market bars."""
+    if store is None:
+        return None
+    from .quarters import to_utc
+    from .settings import SOURCES
+
+    best = None
+    for row in store.bar_stats():
+        if row["source"] not in REAL_SOURCES or not row["bars"]:
+            continue
+        got = store.last_bar(row["source"], row["symbol"])
+        if got is None:
+            continue
+        clock = SOURCES[row["source"]].get("default_clock", "UTC")
+        at = to_utc(pd.DatetimeIndex([pd.Timestamp(got[0], unit="s")]), clock)[0].tz_localize(None)
+        rank = (row["source"] == "mt5", at)
+        if best is None or rank > best[0]:
+            best = (rank, (at, got[1]))
+    return best[1] if best else None
+
+
 def load_risk(store: Store | None) -> RiskSettings:
     """Saved Settings > Risk; the defaults (sizing off) when none or unreadable."""
     try:
@@ -376,7 +402,8 @@ class Runtime:
         self.engine = self._build(settings)
 
     def _build(self, settings: DataSettings) -> Engine:
-        feed = build_feed(settings, self.mt5_password_for(settings)[0])
+        anchor = real_price(self.store) if settings.source == "synthetic" else None
+        feed = build_feed(settings, self.mt5_password_for(settings)[0], anchor=anchor)
         engine = Engine(feed, self.cfg, settings.resolved_symbol, self.store, tick_seconds=settings.resolved_tick,
                         poll=self.poll)
         engine.on_tick = lambda price, at: self._on_tick(engine, price, at)
