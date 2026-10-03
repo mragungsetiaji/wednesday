@@ -1121,6 +1121,54 @@ p {
   font-size: var(--text-xs);
   pointer-events: none;
 }
+/* Bar replay: one line of controls between the toolbar and the chart. */
+.replay-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  padding: var(--s1) var(--s3);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  font-size: var(--text-sm);
+}
+.replay-clock {
+  font-weight: 600;
+  min-width: 15ch;
+}
+.replay-jump,
+.replay-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+.replay-jump input {
+  width: auto;
+  height: 30px;
+}
+.replay-speed select {
+  width: auto;
+  height: 30px;
+}
+.replay-controls .icon-button {
+  width: auto;
+  min-width: 30px;
+  padding-inline: 6px;
+  font-size: var(--text-sm);
+}
+.replay-play {
+  min-width: 64px;
+}
+.replay-note {
+  font-size: var(--text-xs);
+}
+.replay-exit {
+  margin-inline-start: auto;
+}
+.replay-toggle.is-on {
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 .chart-foot-tools {
   display: flex;
   align-items: center;

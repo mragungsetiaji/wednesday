@@ -26,6 +26,8 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: "Delete", action: "Delete the selected drawing" },
   { keys: "Ctrl+Z / ⌘Z", action: "Undo a drawing change" },
   { keys: "Ctrl+Shift+Z, Ctrl+Y / ⌘⇧Z", action: "Redo" },
+  { keys: "Space", action: "Play or pause", where: "Replay" },
+  { keys: "← / →", action: "Step back or forward one candle (Shift: one minute)", where: "Replay" },
 ];
 
 export const typing = (el: EventTarget | null) =>

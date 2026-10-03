@@ -155,6 +155,16 @@ export interface CandlesResponse {
   swings: SwingPoint[];
 }
 
+/** The market at a replay clock: candles and scan built only from bars closed by `at` (unix, feed clock). */
+export interface ReplayResponse extends CandlesResponse {
+  at: number;
+  bar_time: number; // the last closed minute
+  scan: Scan;
+}
+export const fetchReplay = (at: number, tf: string, limit: number) =>
+  getJson<ReplayResponse>(`/api/replay?at=${at}&tf=${encodeURIComponent(tf)}&limit=${limit}`);
+export const fetchReplayRange = () => getJson<{ first: number; last: number }>("/api/replay/range");
+
 /** Fired when the server wants a login (the session ended or was never there); the login screen listens. */
 export const LOGGED_OUT_EVENT = "wednesday:logged-out";
 
