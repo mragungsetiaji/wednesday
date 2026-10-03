@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  createJournal, deleteJournal, fetchJournal, fetchJournals, fetchTerminalAccount, importReport, journalCsvUrl, restoreSample, saveTradeNote,
-  syncJournal, updateJournal, type Journal, type JournalStats, type JournalTrade, type JournalsResponse, type TerminalAccount,
+  createJournal, fetchJournal, fetchJournals, restoreSample, saveTradeNote, syncJournal, type Journal, type JournalStats,
+  type JournalTrade, type JournalsResponse,
   detachSnapshot,
   snapshotUrl,
 } from "../api";
 import { fmtPrice, fmtUnix } from "../format";
-import { CameraIcon, CheckIcon, CrossIcon, InfoIcon, TrashIcon } from "../icons";
+import { CameraIcon, CheckIcon, CrossIcon, GearIcon, InfoIcon, TrashIcon } from "../icons";
 import { usePref } from "../prefs";
 import type { ChartPalette } from "../theme";
 import { JournalChart, type JournalView } from "./JournalChart";
 import { MonthlyBars, PnlCalendar } from "./JournalMonthly";
+import { JOURNAL_PREF, JOURNAL_SETTINGS, NewJournal, SampleBadge, syncText, type NewDraft } from "./JournalSettings";
 
 const PAGE = 25;
 const VIEWS: { id: JournalView; title: string }[] = [
@@ -19,9 +20,6 @@ const VIEWS: { id: JournalView; title: string }[] = [
   { id: "balance", title: "Balance" },
   { id: "drawdown", title: "Drawdown" },
 ];
-
-/** What the new-journal form hands up: sync right away only when the terminal is on that account. */
-type NewDraft = { name: string; login: string; sync: boolean };
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(2)}%`);
@@ -43,7 +41,7 @@ function fmtHold(s: number | null) {
  */
 export function JournalPage({ palette }: { palette: ChartPalette }) {
   const [list, setList] = useState<JournalsResponse | null>(null);
-  const [current, setCurrent] = usePref<string | null>("wed.journal", null);
+  const [current, setCurrent] = usePref<string | null>(JOURNAL_PREF, null);
   const [stats, setStats] = useState<JournalStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -75,6 +73,8 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
 
   useEffect(() => {
     loadList();
+    const id = setInterval(loadList, 30_000); // auto-sync status and new trades arrive on their own
+    return () => clearInterval(id);
   }, [loadList]);
 
   useEffect(() => {
@@ -84,6 +84,17 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
     const id = setInterval(() => loadStats(selected.id), 60_000);
     return () => clearInterval(id);
   }, [selected?.id, loadStats]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A sync (by hand or automatic) changed the journal: reload its numbers.
+  const syncedAt = selected?.synced_at ?? null;
+  const firstSync = useRef(true);
+  useEffect(() => {
+    if (firstSync.current) {
+      firstSync.current = false;
+      return;
+    }
+    if (selected) loadStats(selected.id);
+  }, [syncedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async (fn: () => Promise<string | void>): Promise<boolean> => {
     setBusy(true);
@@ -109,20 +120,13 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
   // Create, then sync at once when the terminal is logged in to that account. If the sync fails the journal
   // stays, empty, and the banner says why.
   const create = (draft: NewDraft) => run(async () => {
-    const j = await createJournal(draft.name, draft.login);
+    const j = await createJournal(draft.name, draft.login, draft.sync);
     setCurrent(j.id);
     await loadList();
-    if (!draft.sync) return `Created ${j.name} for account ${j.login}. Sync it when the terminal is on that account, or import its history report.`;
+    if (!draft.sync) return `Created ${j.name} for account ${j.login}. Import its history report, or turn on auto-sync in journal settings.`;
     const r = await syncJournal(j.id);
     await refresh(j.id);
     return `Created ${j.name} and synced ${r.trades} trades and ${r.cash} deposits or withdrawals from account ${r.journal.login}.`;
-  });
-
-  const remove = (j: Journal) => run(async () => {
-    await deleteJournal(j.id);
-    if (j.id === selected?.id) setCurrent(null);
-    await loadList();
-    return j.sample ? "Deleted the sample portfolio. Journals, Show the sample brings it back." : `Removed ${j.name}.`;
   });
 
   const restore = () => run(async () => {
@@ -169,32 +173,14 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
 
   return (
     <main className="lab-page journal-page">
-      <JournalHead journal={selected} journals={journals} multi={list.multi} busy={busy}
-        onPick={setCurrent}
-        onCreate={create}
-        onRemove={remove}
-        onRestore={restore}
-        onSync={() => run(async () => {
-          const r = await syncJournal(selected.id);
-          await refresh(selected.id);
-          return `Synced ${r.trades} trades and ${r.cash} deposits or withdrawals from account ${r.journal.login}.`;
-        })}
-        onImport={(file) => run(async () => {
-          const r = await importReport(selected.id, file);
-          await refresh(selected.id);
-          return `Imported ${r.trades} trades and ${r.cash} deposits or withdrawals.`;
-        })}
-        onUpdate={(patch) => run(async () => {
-          await updateJournal(selected.id, patch);
-          await refresh(selected.id);
-        })} />
+      <JournalHead journal={selected} journals={journals} onPick={setCurrent} />
       {(error || notice) && (
         <p className={error ? "banner" : "journal-notice"} role={error ? "alert" : "status"}>{error ?? notice}</p>
       )}
       {!stats ? (
         <p className="empty">Working out the numbers…</p>
       ) : stats.trades.length === 0 && stats.cash.length === 0 ? (
-        <EmptyJournal />
+        <EmptyJournal journal={selected} />
       ) : (
         <>
           <div className="journal-grid">
@@ -213,7 +199,7 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
           </div>
           <div className="journal-periods">
             <MonthlyBars stats={stats} currency={selected.currency ?? ""} />
-            <PnlCalendar stats={stats} currency={selected.currency ?? ""} />
+            <PnlCalendar stats={stats} currency={selected.currency ?? ""} showWeekends={selected.show_weekends} />
           </div>
           <Trades journalId={selected.id} stats={stats} onSaved={() => loadStats(selected.id)} />
         </>
@@ -222,24 +208,10 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
   );
 }
 
-// ---- head: pick, sync, import, settings, the list of journals -------------------------------
+// ---- head: the journal's name, its sync, and the way to its settings ------------------------
 
-function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onRemove, onRestore, onSync, onImport, onUpdate }: {
-  journal: Journal; journals: Journal[]; multi: boolean; busy: boolean;
-  onPick: (id: string) => void; onCreate: (d: NewDraft) => Promise<boolean>; onRemove: (j: Journal) => Promise<boolean>;
-  onRestore: () => void; onSync: () => void; onImport: (f: File) => void; onUpdate: (patch: { name?: string; time_offset?: number | null }) => void;
-}) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [panel, setPanel] = useState<"journals" | "settings" | null>(null);
-  const [rename, setRename] = useState(journal.name);
-  const [offset, setOffset] = useState(journal.time_offset === null ? "" : String(journal.time_offset));
-  useEffect(() => {
-    setRename(journal.name);
-    setOffset(journal.time_offset === null ? "" : String(journal.time_offset));
-  }, [journal]);
-  const toggle = (p: "journals" | "settings") => setPanel(panel === p ? null : p);
-  const own = journals.filter((j) => !j.sample).length; // the sample doesn't count toward the free journal
-
+function JournalHead({ journal, journals, onPick }: { journal: Journal; journals: Journal[]; onPick: (id: string) => void }) {
+  const status = syncText(journal);
   return (
     <div className="journal-head">
       <div className="journal-title">
@@ -259,232 +231,38 @@ function JournalHead({ journal, journals, multi, busy, onPick, onCreate, onRemov
           ) : (
             <>
               {journal.login ? <span className="num">#{journal.login}{journal.server ? ` · ${journal.server}` : ""}</span> : <span>No account yet</span>}
-              <span>{syncedText(journal)}</span>
+              {status.problem || journal.sync.state === "waiting"
+                ? <a href={JOURNAL_SETTINGS} className={status.problem ? "text-error" : undefined} title={status.title}>{status.text}</a>
+                : <span title={status.title}>{status.text}</span>}
             </>
           )}
         </p>
       </div>
-      <div className="journal-actions">
-        {journal.sample ? (
-          <button type="button" className="button secondary" disabled={busy}
-            onClick={() => window.confirm("Delete the sample portfolio? It doesn't come back on its own; Journals, Show the sample restores it.") && onRemove(journal)}>
-            Delete sample
-          </button>
-        ) : <>
-        <button type="button" className="button primary" disabled={busy} onClick={onSync}
-          title={journal.login ? `Read every deal of account ${journal.login} from the MT5 terminal` : "Read every deal from the MT5 terminal the scanner is connected to"}>
-          {busy ? "Working…" : "Sync from MT5"}
-        </button>
-        <input ref={fileRef} type="file" accept=".html,.htm,text/html" hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onImport(f);
-            e.target.value = "";
-          }} />
-        <button type="button" className="button secondary" disabled={busy} onClick={() => fileRef.current?.click()}
-          title="The terminal's history report: History tab, right click, Report, HTML">
-          Import report
-        </button>
-        </>}
-        <a className="button quiet" href={journalCsvUrl(journal.id)} download>Export CSV</a>
-        <button type="button" className="button quiet" aria-expanded={panel === "settings"} aria-controls="journal-panel"
-          onClick={() => toggle("settings")}>Settings</button>
-        <button type="button" className="button quiet" aria-expanded={panel === "journals"} aria-controls="journal-panel"
-          onClick={() => toggle("journals")}>
-          Journals <span className="num muted">{journals.length}</span>
-        </button>
-      </div>
-      {panel === "journals" && (
-        <div id="journal-panel" className="journal-panel journal-manage">
-          <JournalList journals={journals} current={journal.id} busy={busy}
-            onOpen={(id) => { onPick(id); setPanel(null); }} onRemove={onRemove} />
-          {!journals.some((j) => j.sample) && (
-            <p className="field-note">
-              <button type="button" className="link-button" disabled={busy} onClick={() => { onRestore(); setPanel(null); }}>
-                Show the sample
-              </button>{" "}
-              portfolio again: made-up trades that show every panel, and don't count as a journal.
-            </p>
-          )}
-          <section className="journal-new" aria-labelledby="journal-new-h">
-            <h3 id="journal-new-h">New journal</h3>
-            {!multi && own >= 1 ? (
-              <p className="field-note">
-                One journal is free. More than one, say one per MT5 account, comes with a plan that includes{" "}
-                <strong>Multiple journals</strong> (Settings, Plan).
-              </p>
-            ) : (
-              <NewJournal journals={journals} busy={busy}
-                onCreate={async (d) => {
-                  const ok = await onCreate(d);
-                  if (ok) setPanel(null);
-                  return ok;
-                }} />
-            )}
-          </section>
-        </div>
-      )}
-      {panel === "settings" && (
-        <form id="journal-panel" className="journal-panel fields-grid" onSubmit={(e) => {
-          e.preventDefault();
-          onUpdate({ name: rename, time_offset: offset.trim() === "" ? null : Number(offset) });
-          setPanel(null);
-        }}>
-          <label className="field">
-            <span className="field-label">Name</span>
-            <input type="text" value={rename} onChange={(e) => setRename(e.target.value)} />
-          </label>
-          <label className="field">
-            <span className="field-label">Deal clock minus price clock (hours)</span>
-            <input type="number" min={-14} max={14} step={0.5} placeholder="detect" value={offset} onChange={(e) => setOffset(e.target.value)} />
-            <span className="field-note">Leave empty to detect it from the deal prices.</span>
-          </label>
-          <div className="form-actions field-span">
-            <button type="submit" className="button secondary" disabled={busy}>Save</button>
-            <span className="field-note">To remove this journal, open Journals.</span>
-          </div>
-        </form>
-      )}
+      <a className="icon-button" href={JOURNAL_SETTINGS} aria-label="Journal settings" title="Journal settings">
+        <GearIcon size={16} />
+      </a>
     </div>
   );
 }
 
-/** Marks the sample portfolio's numbers as made up. */
-function SampleBadge({ long = false }: { long?: boolean }) {
-  return (
-    <span className="badge sample" title="Sample data: not a real account. Generated trades and prices, no results anyone got.">
-      {long ? "Sample data: not a real account" : "Sample data"}
-    </span>
-  );
-}
-
-function syncedText(j: Journal) {
-  if (!j.synced_at) return "not synced yet";
-  return `${j.source === "mt5" ? "synced" : "imported"} ${new Date(j.synced_at).toLocaleString()}`;
-}
-
-/** Every journal with its account: open one, or remove it (its trades and notes go with it). */
-function JournalList({ journals, current, busy, onOpen, onRemove }: {
-  journals: Journal[]; current: string; busy: boolean; onOpen: (id: string) => void; onRemove: (j: Journal) => Promise<boolean>;
-}) {
-  return (
-    <ul className="journal-list" aria-label="Journals">
-      {journals.map((j) => (
-        <li key={j.id} aria-current={j.id === current ? "true" : undefined}>
-          <div className="journal-list-main">
-            <b>{j.name}</b>
-            <span className="meta">
-              {j.sample ? <SampleBadge long /> : <>
-                {j.login ? <span className="num">#{j.login}{j.server ? ` · ${j.server}` : ""}</span> : <span>No account yet</span>}
-                <span>{syncedText(j)}</span>
-              </>}
-            </span>
-          </div>
-          <div className="journal-list-actions">
-            {j.id === current
-              ? <span className="badge">Open</span>
-              : <button type="button" className="button quiet" onClick={() => onOpen(j.id)}>Open</button>}
-            <button type="button" className="link link-danger" disabled={busy}
-              onClick={() => window.confirm(j.sample
-                ? "Delete the sample portfolio? It doesn't come back on its own; Show the sample restores it."
-                : `Remove ${j.name}? Its trades and notes are deleted from Wednesday. Nothing changes in MT5.`) && onRemove(j)}>
-              {j.sample ? "Delete" : "Remove"}<span className="sr-only"> {j.name}</span>
-            </button>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/**
- * Name and MT5 account number, prefilled from the account the terminal is logged in to. When the terminal is on
- * that account the journal syncs as it's created; otherwise it starts empty and the form says why.
- */
-function NewJournal({ journals, busy, onCreate }: { journals: Journal[]; busy: boolean; onCreate: (d: NewDraft) => Promise<boolean> }) {
-  const [name, setName] = useState("");
-  const [login, setLogin] = useState("");
-  const [terminal, setTerminal] = useState<TerminalAccount | null>(null);
-  useEffect(() => {
-    let live = true;
-    fetchTerminalAccount()
-      .then((t) => {
-        if (!live) return;
-        setTerminal(t);
-        if (t.connected && !journals.some((j) => j.login === t.login)) setLogin((cur) => cur || t.login);
-      })
-      .catch((e) => live && setTerminal({ connected: false, detail: errText(e) }));
-    return () => { live = false; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const account = login.trim();
-  const valid = /^\d+$/.test(account);
-  const taken = journals.find((j) => j.login === account);
-  const onTerminal = terminal?.connected === true && terminal.login === account;
-  const ready = !busy && name.trim() !== "" && valid && !taken;
-
-  return (
-    <form className="journal-new-form" onSubmit={async (e) => {
-      e.preventDefault();
-      if (!ready) return;
-      if (await onCreate({ name: name.trim(), login: account, sync: onTerminal })) {
-        setName("");
-        setLogin("");
-      }
-    }}>
-      <p className="journal-terminal field-note" role="status">
-        {terminal === null ? "Checking the MT5 terminal…"
-          : terminal.connected ? (
-            <>
-              MT5 terminal is logged in to <span className="num">#{terminal.login}</span>{terminal.server ? ` · ${terminal.server}` : ""}.
-              {account !== terminal.login && (
-                <> <button type="button" className="link-button" onClick={() => setLogin(terminal.login)}>Use this account</button></>
-              )}
-            </>
-          ) : <>{terminal.detail}. You can still create the journal and import the terminal's history report.</>}
-      </p>
-      <div className="fields-grid">
-        <label className="field">
-          <span className="field-label">Name</span>
-          <input type="text" value={name} maxLength={120} placeholder="e.g. Prop firm 100k" onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label className="field">
-          <span className="field-label">MT5 account number</span>
-          <input type="text" inputMode="numeric" autoComplete="off" value={login} placeholder="e.g. 51234567"
-            aria-invalid={account !== "" && (!valid || !!taken)} aria-describedby="journal-login-note"
-            onChange={(e) => setLogin(e.target.value)} />
-          <span id="journal-login-note" className={account !== "" && (!valid || taken) ? "field-note text-error" : "field-note"}>
-            {account === "" ? "The login number shown in MT5, under Navigator, Accounts."
-              : !valid ? "Digits only, as MT5 shows the login."
-                : taken ? `${taken.name} already follows this account.`
-                  : onTerminal ? "The terminal is on this account, so the journal syncs as it's created."
-                    : terminal?.connected
-                      ? `The terminal is on #${terminal.login}, so this journal starts empty. Log in to #${account} in MT5 and sync, or import its report.`
-                      : "Starts empty. Sync once the terminal is on this account, or import its report."}
-          </span>
-        </label>
-      </div>
-      <div className="form-actions">
-        <button type="submit" className="button primary" disabled={!ready}>
-          {busy ? "Working…" : onTerminal ? "Create and sync" : "Create journal"}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function EmptyJournal() {
+function EmptyJournal({ journal }: { journal: Journal }) {
   return (
     <div className="journal-empty">
       <h3>No trades yet</h3>
-      <ol>
-        <li><strong>Sync from MT5</strong> reads every deal from the terminal, when the data source is MT5 (Settings).</li>
-        <li>
-          Or in the terminal: <em>History</em> tab, right click, <em>Report</em>, <em>HTML</em>, with <em>All history</em>
-          selected. Then <strong>Import report</strong>.
-        </li>
-      </ol>
-      <p className="field-note">Either way replaces what the journal had, so sync or import the full history.</p>
+      {journal.auto_sync ? (
+        <p>
+          Auto-sync is on: trades show here within a minute of the MT5 terminal having them, while the data source is MT5
+          and the terminal is logged in to {journal.login ? <span className="num">#{journal.login}</span> : "this account"}.
+        </p>
+      ) : (
+        <ol>
+          <li><a href={JOURNAL_SETTINGS}>Turn on auto-sync</a> to read every deal from the MT5 terminal, when the data source is MT5.</li>
+          <li>
+            Or in the terminal: <em>History</em> tab, right click, <em>Report</em>, <em>HTML</em>, with <em>All history</em> selected.
+            Then <a href={JOURNAL_SETTINGS}>import the report</a>.
+          </li>
+        </ol>
+      )}
     </div>
   );
 }

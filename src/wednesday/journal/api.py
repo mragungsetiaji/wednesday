@@ -41,7 +41,7 @@ def journal_router(get_journals: Callable[[], Journals | None], get_engine: Call
     @r.post("")
     def create(body: dict = Body(...)) -> dict:
         try:
-            return svc().create(str(body.get("name") or ""), get_features(), body.get("login"))
+            return svc().create(str(body.get("name") or ""), get_features(), body.get("login"), bool(body.get("auto_sync")))
         except PermissionError as exc:
             raise HTTPException(402, str(exc)) from exc
         except JournalError as exc:
