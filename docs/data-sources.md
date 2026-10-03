@@ -67,13 +67,17 @@ header price, the ladder and the chart's last candle move without waiting for th
 next scan. When the minute closes, the scan fetches only that closed bar (history
 already loaded is never fetched again) and it replaces the candle the ticks built,
 since ticks sampled every second or more can miss the minute's true high or low.
+With MT5 every tick since the last poll is read (`copy_ticks_from`), so the
+forming candle's high and low are exact and the interval only sets how quickly
+the price moves on screen. Ticks are polled on the feed thread, which never runs
+the scan, so a slow scan doesn't freeze the price.
 
 Set the interval in **Settings > Data source > Live price every**, `XAU_TICK` in
 `.env`, or leave it empty for the source's default:
 
 | Source | Default | Fastest |
 | --- | --- | --- |
-| MT5 | 1 s | 0.5 s |
+| MT5 | 0.25 s | 0.1 s |
 | Demo data | 2 s | 0.5 s |
 | Yahoo Finance | 60 s (once a minute, with the scan) | 15 s: each update is a request to Yahoo |
 | CSV | none: a CSV has closed bars only | - |

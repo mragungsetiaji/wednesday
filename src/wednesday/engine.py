@@ -1,7 +1,10 @@
 """Scan engine shared by the console loop and the web server.
 
-All feed calls (including MetaTrader 5, which is not thread-safe) happen on the
-thread that calls :meth:`Engine.step`; readers only get snapshots.
+Two threads. The **feed thread** owns the feed (MetaTrader 5 must only be used from
+the thread that connected it) and does only light work: live ticks, the M1 fetch at
+each minute close, and short tasks queued through :meth:`Engine.call`. The **scan
+worker** runs the scan, the alerts and the plugins' after-scan hooks on the fetched
+bars, so a slow scan never stalls the live price (#25). Readers only get snapshots.
 """
 
 from __future__ import annotations
@@ -31,6 +34,8 @@ log = logging.getLogger(__name__)
 
 # A feed that doesn't retry its connection (MT5) gets this many tries after losing it.
 RECONNECT_ATTEMPTS = 3
+# A queued feed task longer than this holds up the live price; it's logged so it can be found.
+SLOW_TASK = 0.2
 # A tick starts the forming candle only this soon after the last closed bar: older bars mean
 # the market is closed or the feed lags, and a candle "now" would sit after a gap.
 FORMING_WINDOW = pd.Timedelta(minutes=5)
@@ -86,10 +91,15 @@ class Engine:
             self.state.attempt = attempt
 
     def step(self) -> ScanResult:
-        """Fetch new M1 bars and rescan. Errors are recorded in the state and re-raised."""
+        """Fetch new M1 bars and rescan, both on this thread (``--once``, ``--check`` and tests).
+        Errors are recorded in the state and re-raised."""
+        return self._scan(*self._fetch())
+
+    def _fetch(self) -> tuple[pd.DataFrame, float | None, dict | None]:
+        """The feed's part of a scan, on the feed thread: new M1 bars, the last price and the trading spec."""
         try:
             m1 = self.buffer.update()
-            result = scan(m1, self.cfg, self.feed.last_price())
+            price = self.feed.last_price()
         except Exception as exc:
             self._record_error(exc)
             raise
@@ -98,6 +108,15 @@ class Engine:
         except Exception:  # sizing falls back to Settings > Risk; never fail a scan over it
             log.debug("no trading spec", exc_info=True)
             spec = None
+        return m1, price, spec
+
+    def _scan(self, m1: pd.DataFrame, price: float | None, spec: dict | None) -> ScanResult:
+        """The heavy part, which never touches the feed: scan the bars and publish the result."""
+        try:
+            result = scan(m1, self.cfg, price)
+        except Exception as exc:
+            self._record_error(exc)
+            raise
         with self.state.lock:
             self.state.version += 1
             self.state.result = result
@@ -112,15 +131,20 @@ class Engine:
         return result
 
     def tick(self) -> None:
-        """Poll the live price and fold it into the forming M1 candle. Never raises."""
+        """Poll the live price and fold it into the forming M1 candle. Never raises.
+
+        A feed with ``new_ticks`` (MT5) hands over every tick since the last poll, so the forming
+        candle's high and low are exact whatever the poll interval; others give the latest one."""
         try:
-            got = self.feed.last_tick()
+            got = self.feed.new_ticks() if hasattr(self.feed, "new_ticks") else [self.feed.last_tick()]
         except Exception:  # a missed tick is fine; the next scan still runs
             log.debug("tick failed", exc_info=True)
             return
-        if got is None:
-            return
-        at, price = got
+        for t in got:
+            if t is not None:
+                self._fold(*t)
+
+    def _fold(self, at: pd.Timestamp, price: float) -> None:
         minute = at.floor("min")
         with self.state.lock:
             m1 = self.state.m1
@@ -158,16 +182,25 @@ class Engine:
         done, box = threading.Event(), {}
 
         def task():
+            started = time.monotonic()
             try:
                 box["value"] = fn(self.feed)
             except Exception as exc:  # noqa: BLE001 - handed back to the caller
                 box["error"] = exc
             finally:
+                took = time.monotonic() - started
+                if took > SLOW_TASK:
+                    log.warning("a feed task took %.2fs (%s); the live price waited for it", took,
+                                getattr(fn, "__qualname__", "task"))
                 done.set()
 
         self._tasks.put(task)
-        if not done.wait(timeout):
-            raise TimeoutError("the scan thread didn't run the task in time")
+        deadline = time.monotonic() + timeout
+        while not done.wait(0.1):
+            if self._stop.is_set():  # the feed thread is closing and won't run it
+                raise RuntimeError("The scanner is stopping")
+            if time.monotonic() > deadline:
+                raise TimeoutError("the scan thread didn't run the task in time")
         if "error" in box:
             raise box["error"]
         return box["value"]
@@ -208,19 +241,21 @@ class Engine:
         ``RECONNECT_ATTEMPTS`` failed minutes in a row once it had connected; the
         state then says ``failed`` until the dashboard restarts the feed.
         """
+        if self._thread is None:  # console mode runs this on the caller's thread: call() queues to it
+            self._thread = threading.current_thread()
         connected = False  # the feed connected at least once
         failures = 0
+        worker = ScanWorker(self, on_result)
         try:
             while not self._stop.is_set():
                 try:
                     if not connected:
                         self.feed.connect()
                         connected = True
-                    result = self.step()
+                    fetched = self._fetch()
                     failures = 0
                     self._set_conn("connected")
-                    if on_result:
-                        on_result(result)
+                    worker.submit(fetched)
                     if not self.poll:
                         log.info("%s: polling off, keeping this scan", self.feed.name)
                         while not self._stop.is_set():
@@ -237,6 +272,7 @@ class Engine:
                     log.exception("scan failed; retrying next minute")
                 self._wait(seconds_to_next_minute(delay))
         finally:
+            worker.stop()
             if connected:
                 self.feed.close()
 
@@ -250,6 +286,51 @@ class Engine:
     def stop(self, timeout: float | None = 10) -> None:
         self._stop.set()
         if self._thread and self._thread is not threading.current_thread():
+            self._thread.join(timeout)
+
+
+class ScanWorker:
+    """Scans fetched bars off the feed thread, one at a time. If scans fall behind, only the
+    newest bars are scanned (each fetch holds the whole window, so skipping one loses nothing)."""
+
+    def __init__(self, engine: Engine, on_result=None):
+        self.engine = engine
+        self.on_result = on_result
+        self._pending = None
+        self._cond = threading.Condition()
+        self._stopped = False
+        self._thread = threading.Thread(target=self._run, name="scan-worker", daemon=True)
+        self._thread.start()
+
+    def submit(self, fetched: tuple) -> None:
+        with self._cond:
+            self._pending = fetched
+            self._cond.notify()
+
+    def _run(self) -> None:
+        while True:
+            with self._cond:
+                while self._pending is None and not self._stopped:
+                    self._cond.wait()
+                if self._stopped:
+                    return
+                fetched, self._pending = self._pending, None
+            try:
+                result = self.engine._scan(*fetched)
+            except Exception:  # recorded in the state; the next minute tries again
+                log.exception("scan failed; retrying next minute")
+                continue
+            if self.on_result:
+                try:
+                    self.on_result(result)
+                except Exception:  # noqa: BLE001 - alerts or a plugin must never stop scanning
+                    log.exception("after-scan work failed")
+
+    def stop(self, timeout: float = 10) -> None:
+        with self._cond:
+            self._stopped = True
+            self._cond.notify()
+        if self._thread is not threading.current_thread():
             self._thread.join(timeout)
 
 
@@ -357,7 +438,7 @@ class Runtime:
                 log.exception("drawing alert check failed")
         if self.autosync is not None:
             try:
-                self.autosync.check(engine.feed)  # on the feed's thread, like every MT5 call
+                self.autosync.check(engine.feed, engine.call)  # MT5 reads go through the feed thread
             except Exception:  # noqa: BLE001 - never stop scanning over the journal
                 log.exception("journal auto-sync failed")
         self.hooks.run_after_scan(result, engine)

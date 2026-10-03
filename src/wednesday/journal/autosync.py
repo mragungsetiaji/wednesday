@@ -1,9 +1,10 @@
 """Keep journals in sync with the MT5 terminal without a button (issue #42).
 
-After each scan, on the feed's thread, :meth:`AutoSync.check` looks at the account cheaply
+After each scan :meth:`AutoSync.check` looks at the account cheaply
 (deal count and open positions, ``MT5Feed.account_activity``) and runs the full sync only
 when something changed, when the feed (re)connected, or every few minutes while positions
-are open so the floating result stays current. A terminal on another account is waited
+are open so the floating result stays current. The two MT5 reads go through the feed
+thread (``Engine.call``); working out the journal happens on the caller's thread. A terminal on another account is waited
 for, not an error. Failures keep the last good data and retry with a growing pause.
 """
 
@@ -39,8 +40,10 @@ class AutoSync:
     def _set(self, journal_id: str, state: str, error: str | None = None) -> None:
         self.journals.status[journal_id] = {"state": state, "error": error}
 
-    def check(self, feed) -> None:
-        """Sync the journals that want it. Runs on the feed's thread; never raises."""
+    def check(self, feed, call=None) -> None:
+        """Sync the journals that want it; never raises. ``call(fn)`` runs ``fn(feed)`` on the feed's
+        thread (``Engine.call``); without it the feed is used directly (tests, the feed thread itself)."""
+        self._call = call or (lambda fn: fn(feed))
         wanted = [j for j in self.journals.store.journals() if not j.get("sample") and Journals.options(j)["auto_sync"]]
         if not wanted:
             return
@@ -52,7 +55,7 @@ class AutoSync:
             return
         now = self.clock()
         try:
-            activity = feed.account_activity()
+            activity = self._call(lambda f: f.account_activity())
         except Exception as exc:  # noqa: BLE001 - the terminal not being there is a status, not a crash
             for j in wanted:
                 self._set(j["id"], "error", str(exc))
@@ -77,9 +80,9 @@ class AutoSync:
             return
         self._set(jid, "syncing")
         try:
-            history = feed.account_history()
+            history = self._call(lambda f: f.account_history())
             self.journals.sync(jid, history)
-        except (JournalError, RuntimeError) as exc:
+        except (JournalError, RuntimeError, TimeoutError) as exc:
             seen.failures += 1
             seen.retry_at = now + min(60 * 2 ** (seen.failures - 1), MAX_BACKOFF)
             self._set(jid, "error", str(exc))

@@ -64,7 +64,16 @@ tests/
 
 ## How a scan flows
 
-1. `M1Buffer` loads stored bars, fetches the newest ones from the feed and saves them.
+Two threads (`engine.py`). The **feed thread** owns the feed: MetaTrader 5 may
+only be used from the thread that connected it. It does light work only: live
+ticks, the M1 fetch at each minute close, and short tasks queued with
+`Engine.call` (journal sync, account reads, scrolling back). Every task over
+0.2 s is logged, since the live price waits for it. The **scan worker**
+(`ScanWorker`) takes the fetched bars and does steps 2 to 5. If it falls behind,
+only the newest fetch is scanned. Anything after a scan that needs MT5 must go
+through `engine.call`.
+
+1. `M1Buffer` loads stored bars, fetches the newest ones from the feed and saves them (feed thread).
 2. `resample_ohlcv` builds each timeframe, dropping the candle still forming.
 3. Per timeframe, a shared `Context` computes structure once; each detector returns `Level`s.
 4. `scanner` picks the nearest level above/below per detector and ranks the limit setups.

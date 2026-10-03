@@ -36,7 +36,7 @@ class FixedTicks:
 
 def test_tick_defaults_and_validation():
     assert DataSettings(source="yfinance").resolved_tick == 60
-    assert DataSettings(source="mt5").resolved_tick == 1
+    assert DataSettings(source="mt5").resolved_tick == 0.25
     assert DataSettings(source="csv").resolved_tick == 0
     assert DataSettings(source="mt5", tick_seconds=5).resolved_tick == 5
     assert DataSettings(source="mt5", tick_seconds=0).validate() == []
