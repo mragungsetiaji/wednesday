@@ -9,3 +9,4 @@ data/
 *.log
 .env
 logs/
+tradingview/node_modules/

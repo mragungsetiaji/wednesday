@@ -49,7 +49,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **Finds the nearest levels** above and below price: order blocks (extreme and mid), BSL / SSL with equal highs and lows, and inducement.
 - **Ranks limit setups**: entry on the order block's body, stop on the opposite edge capped at 3.00, extreme first, then nearest.
 - **Maps everything to the chart**: every setup and level in the ladder is pinned on the chart under the same tag.
-- **Full screen with 1, 2 or 4 charts**, TradingView style: each on its own timeframe, crosshairs linked, panes resizable by dragging.
+- **Full screen with 1, 2 or 4 charts**, TradingView style: each on its own timeframe, crosshairs linked, panes resizable by dragging. A chart can show another symbol beside gold (e.g. FXCM silver, `FX:XAGUSD`), price only.
 - **Sessions and reference levels** on the chart: killzones, the Asia range, previous day / week / month high and low (faded once swept), and the day, week, midnight and quarter opens, all in New York time.
 - **Quarterly theory pane** under the chart: every weekday, session (Tokyo, London, NY AM, NY PM) and 90-minute quarter as a green or red block, plus how often each one closed green.
 - **Your bias steers the list**: set bullish, bearish or neutral by hand; setups get RISK ON / RISK OFF labels, sells at a lower high (or buys at a higher low) come first, and neutral marks everything no trade.
@@ -134,7 +134,7 @@ developing: [Windows and VPS](docs/deploy-windows.md) and [Development](docs/dev
 | --- | --- |
 | [Detectors and the limit strategy](docs/detectors.md) | How order blocks, liquidity and inducement are found, and how setups are ranked |
 | [Dashboard](docs/dashboard.md) | Chart, level ladder, quarterly pane, panels |
-| [Data sources and storage](docs/data-sources.md) | Yahoo Finance, MT5, CSV, SQLite / PostgreSQL |
+| [Data sources and storage](docs/data-sources.md) | Yahoo Finance, MT5, TradingView (FXCM), CSV, SQLite / PostgreSQL |
 | [Bias and news brief](docs/bias.md) | Setting a bias, risk on / off labels, the LLM news brief |
 | [Position size](docs/risk.md) | Lot size per setup from your risk, MT5 balance and lot rules |
 | [Lab: labels and models](docs/lab.md) | Tag candles, train models, model files, reviewing model blocks, the dataset |

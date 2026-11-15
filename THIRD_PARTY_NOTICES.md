@@ -21,6 +21,18 @@ status bar, as the license terms ask.
 It uses `fancy-canvas` (<https://www.npmjs.com/package/fancy-canvas>), under the MIT
 License below.
 
+## TradingView data source (optional)
+
+The `tradingview` data source installs, in `tradingview/node_modules` (not part of
+the Windows app):
+
+- `@mathieuc/tradingview` 4.1.2 (<https://github.com/Mathieu2301/TradingView-API>),
+  by Mathieu Colmon, ISC License (declared in its `package.json`). An independent
+  library, not made or endorsed by TradingView.
+- `ws` 8 (<https://github.com/websockets/ws>), MIT License, Copyright (c) 2011 Einar
+  Otto Stangvik, (c) 2013 Arnout Kazemier and contributors, (c) 2016 Luigi Pinca and
+  contributors.
+
 ## React
 
 `react`, `react-dom` and `scheduler` (<https://react.dev>), MIT License:

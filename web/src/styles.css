@@ -1330,6 +1330,40 @@ p {
   padding: var(--s1) var(--s2);
   border-bottom: 1px solid var(--line);
 }
+.pane-symbol {
+  margin-inline-start: var(--s2);
+}
+.pane-symbol input {
+  width: 11ch;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+}
+.pane-symbol input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.pane-symbol input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+.pane-note {
+  margin-inline-start: var(--s2);
+  color: var(--text-3);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.pane-error {
+  margin: 0;
+  padding: var(--s1) var(--s2);
+  color: var(--error);
+  font-size: var(--text-xs);
+}
 .tabs-compact .tab {
   height: 22px;
   padding-inline: 8px;

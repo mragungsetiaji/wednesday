@@ -253,6 +253,17 @@ at once. **Esc** or **Exit** goes back. On a phone the charts stack and scroll.
   the candle that contains the same moment on their timeframe (and the same
   price), and their OHLC and quarter readouts follow. A chart whose candles
   don't reach back that far just hides its crosshair.
+- **Another symbol in a chart**: the box next to a chart's timeframe tabs holds
+  its symbol. Type a TradingView symbol with its exchange prefix, for example
+  `FX:XAGUSD` (FXCM silver) on the right next to gold on the left, and press
+  Enter. That chart shows the other market's candles and live price, from
+  TradingView, labelled **Price only**: levels, setups, alerts, the bias and
+  drawings belong to the scanned symbol, so none are drawn on it. Clear the box,
+  or type the scanned symbol, to bring the chart back. Each chart's symbol is
+  remembered by its place. It works with every data source, but needs Node.js
+  and the TradingView helper installed (`make install`, see
+  [Data sources](data-sources.md#tradingview)); without them the chart says so.
+  In bar replay every chart shows the scanned symbol.
 - **Resizable panes**: drag a line between charts; each line moves only the two
   charts beside it. Arrow keys move a focused line (Shift for bigger steps), and
   double-click shares the two evenly. Every layout remembers its own sizes.

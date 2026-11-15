@@ -210,6 +210,19 @@ export interface TickResponse {
 }
 export const fetchTick = () => getJson<TickResponse>("/api/tick");
 
+/** A full-screen pane's own symbol (e.g. FX:XAGUSD) from TradingView: candles only, never scanned. */
+export interface MarketCandles extends CandlesResponse {
+  symbol: string;
+  precision: number; // decimals the symbol is quoted with
+  has_more: boolean;
+}
+const marketQuery = (symbol: string) => `symbol=${encodeURIComponent(symbol)}`;
+export const fetchMarketCandles = (symbol: string, tf: string, limit: number, before?: number) =>
+  getJson<MarketCandles>(`/api/markets/candles?${marketQuery(symbol)}&tf=${encodeURIComponent(tf)}&limit=${limit}` +
+    (before === undefined ? "" : `&before=${before}`));
+export const fetchMarketTick = (symbol: string) =>
+  getJson<{ symbol: string; price: number | null; time: number | null }>(`/api/markets/tick?${marketQuery(symbol)}`);
+
 export const fetchCandles = (tf: string, limit: number) =>
   getJson<CandlesResponse>(`/api/candles?tf=${encodeURIComponent(tf)}&limit=${limit}`);
 

@@ -136,6 +136,8 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
   const spec = layoutOf(savedLayout);
   const layout = paneCount(spec);
   const [tfs, setTfs] = usePref<string[]>("wed.focusTfs", DEFAULT_TFS);
+  // Each pane's own symbol (null = the scanned one), e.g. FX:XAGUSD beside gold. Price only.
+  const [paneSymbols, setPaneSymbols] = usePref<(string | null)[]>("wed.focusSymbols", []);
   // Track sizes per layout. The old one split (2 and 2 × 2) seeds those two.
   const [oldSplit] = usePref<{ x: number; y: number } | null>("wed.focusSplit", null);
   const [savedSizes, saveSizes] = usePref<Partial<Record<LayoutId, Sizes>>>("wed.focusSizes",
@@ -174,11 +176,17 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
   }, [onClose]);
 
   const paneTf = (i: number) => (i === 0 ? tf : tfs[i] ?? DEFAULT_TFS[i]);
+  const mainSymbol = market.symbol || symbol;
+  // In replay (no live feed) every pane shows the scanned market: another symbol would show its future.
+  const paneSymbol = (i: number) => (live ? paneSymbols[i] ?? null : null);
+  const setPaneSymbol = (i: number, value: string | null) =>
+    setPaneSymbols(Array.from({ length: Math.max(paneSymbols.length, i + 1) }, (_, j) => (j === i ? value : paneSymbols[j] ?? null)));
+  const paneLabel = (i: number) => { const s = paneSymbol(i); return s ? `${s} ${paneTf(i)}` : paneTf(i); };
 
   // Snapshot of the whole layout: each chart's screenshot where it sits in the grid, its
   // timeframe on it, one footer under all of them.
   const gridRef = useRef<HTMLDivElement>(null);
-  const layoutInfo = () => ({ symbol: market.symbol || symbol, timeframes: cells.map((_, i) => paneTf(i)), at: Date.now(),
+  const layoutInfo = () => ({ symbol: mainSymbol, timeframes: cells.map((_, i) => paneTf(i)), at: Date.now(),
     clockOffset: market.clockOffset, clockName: market.clockName });
   const layoutShot: SnapshotSource = {
     make: () => {
@@ -191,7 +199,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
         const el = charts[i];
         if (!canvas || !el) return [];
         const r = el.getBoundingClientRect();
-        return [{ canvas, x: r.left - g.left, y: r.top - g.top, w: r.width, h: r.height, label: cells.length > 1 ? paneTf(i) : undefined }];
+        return [{ canvas, x: r.left - g.left, y: r.top - g.top, w: r.width, h: r.height, label: cells.length > 1 || paneSymbol(i) ? paneLabel(i) : undefined }];
       });
       if (!parts.length) return null;
       return compose(parts, g.width, g.height, layoutInfo(),
@@ -271,7 +279,8 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
               setPaneLayers(Object.keys(o).length ? { ...rest, [i]: o } : rest);
             }}
             cell={c} sync={{ bus, id: i }} onPopOut={() => openChartWindow(desktop, paneTf(i))} news={news} live={live} drawings={drawings}
-            nav={(h) => { navs.current[i] = h; }} focused={i === pane} onFocus={() => setFocused(i)} />
+            nav={(h) => { navs.current[i] = h; }} focused={i === pane} onFocus={() => setFocused(i)}
+            symbol={paneSymbol(i)} mainSymbol={mainSymbol} onSymbol={live ? (v) => setPaneSymbol(i, v) : undefined} />
         ))}
         {boundaries(sizes.cols).map((at, i) => (
           <Splitter key={`x${i}`} axis="x" value={at} label="Resize columns" onChange={(v) => resize("cols", i, v)}
