@@ -1,10 +1,12 @@
-import { useId, useMemo, type CSSProperties, type Ref } from "react";
+import { useEffect, useId, useMemo, useState, type CSSProperties, type Ref } from "react";
 
 import type { DetectorInfo, QuartersResponse, Scan, SessionsResponse } from "../api";
 import type { CrosshairLink } from "../crosshairSync";
 import type { LinkGroup } from "../windowLink";
 import type { DrawingCtl } from "../drawings";
 import type { LiveFeed } from "../liveData";
+import { useMarketCandles, useMarketLive } from "../marketData";
+import { paneSymbol, SUGGESTED_SYMBOLS } from "../marketSymbol";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "../chartData";
 import { fmtPrice } from "../format";
 import { Direction, LayersIcon, PopOutIcon } from "../icons";
@@ -62,11 +64,22 @@ interface Props {
   cell?: { col: number; row: number; rowSpan: number }; // its place in the full screen grid
   focused?: boolean; // receives the keyboard shortcuts (outlined when there are several panes)
   onFocus?: () => void;
+  // Full screen: the pane's own symbol (null = the scanned one), shown from TradingView without levels.
+  symbol?: string | null;
+  mainSymbol?: string;
+  onSymbol?: (symbol: string | null) => void;
+  tickSeconds?: number; // live price interval for the pane's own symbol
 }
 
-/** One chart of the full-screen layout, with its own timeframe. */
-export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers: global, palette, quarters, showQuarters, showNews,
-  allDetectors, sessions, levelGroups, own = NO_OWN, onOwn, label, sync, rangeLink, onPopOut, news, live, drawings, nav, cell, focused, onFocus }: Props) {
+/** One chart of the full-screen layout, with its own timeframe and, optionally, its own symbol. */
+export function ChartPane(props: Props) {
+  return props.symbol ? <MarketPane {...props} symbol={props.symbol} /> : <ScanPane {...props} />;
+}
+
+/** A pane on the scanned symbol: its candles with the scan's levels. */
+function ScanPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers: global, palette, quarters, showQuarters, showNews,
+  allDetectors, sessions, levelGroups, own = NO_OWN, onOwn, label, sync, rangeLink, onPopOut, news, live, drawings, nav, cell, focused, onFocus,
+  mainSymbol = "", onSymbol }: Props) {
   const layers = useMemo<LayerOptions>(() => ({
     detectors: own.detectors ? allDetectors.filter((d) => own.detectors!.includes(d.name)) : global.detectors,
     showHigherTf: own.htf ?? global.showHigherTf,
@@ -102,6 +115,7 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
             );
           })}
         </div>
+        {onSymbol && <SymbolBox label={label} value={null} main={mainSymbol} onChange={onSymbol} />}
         {onPopOut && (
           <button type="button" className="pane-layers-btn" onClick={onPopOut} title={`Open ${tf} in its own window`}
             aria-label={`${label}: open in its own window`}>
@@ -140,6 +154,104 @@ export function ChartPane({ tf, onTf, timeframes, scan, version, lookback, rail,
 }
 
 const NO_OWN: PaneLayers = {};
+
+/**
+ * A pane on another symbol (e.g. FX:XAGUSD beside gold): TradingView candles and live price only.
+ * Levels, setups, alerts and drawings belong to the scanned symbol, so none are drawn here.
+ */
+function MarketPane({ symbol, tf, onTf, timeframes, version, lookback, palette, showNews, own = NO_OWN, label, sync, rangeLink,
+  news, nav, cell, focused, onFocus, mainSymbol = "", onSymbol, tickSeconds = 1 }: Props & { symbol: string }) {
+  const { chart, loadOlder, error } = useMarketCandles(symbol, tf, version, own.lookback ?? lookback);
+  const live = useMarketLive(symbol, tickSeconds);
+  const newsOn = own.news ?? showNews;
+  return (
+    <section className={`pane${focused ? " is-focused" : ""}`} aria-label={`${label}: ${symbol} ${tf}`} onPointerDownCapture={onFocus}
+      style={cell && ({ "--col": cell.col, "--row": cell.row, "--row-span": cell.rowSpan } as CSSProperties)}>
+      <div className="pane-head">
+        <div className="tabs tabs-compact" role="tablist" aria-label={`${label} timeframe`}>
+          {timeframes.map((name) => (
+            <button key={name} type="button" role="tab" aria-selected={name === tf} className="tab" onClick={() => onTf(name)}>
+              {name}
+            </button>
+          ))}
+        </div>
+        {onSymbol && <SymbolBox label={label} value={symbol} main={mainSymbol} onChange={onSymbol} />}
+        <span className="pane-note" title="This symbol isn't scanned: no levels, setups, alerts or drawings. Candles and price from TradingView.">
+          Price only
+        </span>
+      </div>
+      {error && !chart && <p className="pane-error" role="alert">{error}</p>}
+      <PriceChart
+        candles={chart?.candles ?? []}
+        zones={NO_ZONES}
+        events={NO_EVENTS}
+        highlight={null}
+        palette={palette}
+        resetKey={`${symbol}|${tf}`}
+        timeframe={tf}
+        loading={!chart && !error}
+        onNeedOlder={loadOlder}
+        quarters={null}
+        quarterRows={NO_ROWS}
+        sync={sync}
+        rangeLink={rangeLink}
+        news={newsOn ? news : undefined}
+        live={live}
+        drawings={null}
+        nav={nav}
+        precision={chart?.precision ?? 2}
+      />
+    </section>
+  );
+}
+
+const NO_ZONES: never[] = [];
+const NO_EVENTS: never[] = [];
+const NO_ROWS: never[] = [];
+
+/**
+ * The pane's symbol: empty or the scanned symbol follows the scan; any TradingView symbol with
+ * its exchange prefix (FX:XAGUSD is FXCM silver) shows that market's candles beside it.
+ */
+function SymbolBox({ label, value, main, onChange }: {
+  label: string;
+  value: string | null;
+  main: string;
+  onChange: (symbol: string | null) => void;
+}) {
+  const shown = value ?? main;
+  const [draft, setDraft] = useState(shown);
+  const listId = useId();
+  useEffect(() => setDraft(shown), [shown]);
+  const parsed = paneSymbol(draft, main);
+  const commit = () => {
+    if (parsed === undefined) return; // keeps the draft, marked invalid
+    if (parsed !== value) onChange(parsed);
+    else setDraft(shown);
+  };
+  return (
+    <span className="pane-symbol">
+      <input type="text" value={draft} spellCheck={false} aria-label={`${label} symbol`} list={listId}
+        aria-invalid={parsed === undefined}
+        title={parsed === undefined
+          ? "Use a TradingView symbol with its exchange prefix, e.g. FX:XAGUSD (FXCM silver)"
+          : `Symbol of this chart. Empty or ${main} follows the scan; another (FX:XAGUSD, OANDA:XAUUSD...) shows its price only.`}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") {
+            setDraft(shown);
+            e.stopPropagation();
+          }
+          e.stopPropagation(); // typing letters mustn't trigger the chart shortcuts
+        }} />
+      <datalist id={listId}>
+        {[main, ...SUGGESTED_SYMBOLS.filter((s) => s !== main)].filter(Boolean).map((s) => <option key={s} value={s} />)}
+      </datalist>
+    </span>
+  );
+}
 
 const TOGGLES: { key: "midOb" | "htf" | "swings" | "quarters" | "news"; label: string }[] = [
   { key: "midOb", label: "Mid OBs" },

@@ -334,7 +334,7 @@ class ScanWorker:
             self._thread.join(timeout)
 
 
-REAL_SOURCES = ("mt5", "yfinance", "csv")  # stored bars that are market data (not "sample" or demo)
+REAL_SOURCES = ("mt5", "tradingview", "yfinance", "csv")  # stored bars that are market data (not "sample" or demo)
 
 
 DEMO_REAL_DAYS = 45  # how much real history the demo shows at most

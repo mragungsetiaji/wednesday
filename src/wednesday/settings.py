@@ -39,6 +39,16 @@ SOURCES = {
         "default_tick": 0.25,  # every tick between polls is read (copy_ticks_from), so this is latency, not accuracy
         "min_tick": 0.1,
     },
+    "tradingview": {
+        "title": "TradingView",
+        "description": "Free, no account. Spot gold from TradingView's feeds: FX:XAUUSD is FXCM, or any symbol with its "
+        "exchange prefix (OANDA:XAUUSD, ...). About 5 days of 1-minute bars at first; history grows as bars are stored. "
+        "Unofficial: it may stop working if TradingView changes its site.",
+        "default_symbol": "FX:XAUUSD",
+        "default_clock": "UTC",
+        "default_tick": 1,  # read from a quote stream the helper keeps open, so polling is cheap
+        "min_tick": 0.5,
+    },
     "csv": {
         "title": "CSV file",
         "description": "M1 bars from a CSV (time, open, high, low, close[, volume]) that another process keeps appending to.",
@@ -136,6 +146,12 @@ def source_availability(source: str) -> tuple[bool, str | None]:
             return False, "Install it with: uv sync --extra mt5"
     if source == "yfinance" and importlib.util.find_spec("yfinance") is None:
         return False, "Install it with: uv sync"
+    if source == "tradingview":
+        from .feeds import tradingview_command
+
+        command, why = tradingview_command()
+        if command is None:
+            return False, why
     return True, None
 
 

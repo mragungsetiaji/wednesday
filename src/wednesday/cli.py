@@ -62,7 +62,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="wednesday", description=__doc__, parents=[pre])
     p.add_argument("--source", choices=list(SOURCES),
                    help="data source (default: saved in the dashboard, else XAU_SOURCE, else yfinance)")
-    p.add_argument("--symbol", help="default per source: GC=F for yfinance, XAUUSD for mt5")
+    p.add_argument("--symbol", help="default per source: GC=F for yfinance, XAUUSD for mt5, FX:XAUUSD for tradingview")
     p.add_argument("--csv", help="M1 CSV path for --source csv (XAU_CSV)")
     p.add_argument("--clock", help="the feed's clock for the quarterly view: UTC, NY+7 (most MT5 brokers), UTC+3 or a "
                                    "time zone like Europe/London (XAU_CLOCK; default: NY+7 for mt5, else UTC)")

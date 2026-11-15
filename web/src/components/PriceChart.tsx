@@ -96,6 +96,7 @@ interface Props {
   nav?: Ref<ChartNav | null>; // for the keyboard shortcuts
   timeframe?: string; // named in a snapshot's footer; resetKey when not given
   rangeLink?: { group: LinkGroup; id: string } | null; // scroll and zoom shared with a link group (windowLink.ts)
+  precision?: number; // price decimals: 2 for gold, more for a pane's own symbol (e.g. 3 for silver)
 }
 
 const ROW_PX = 22;
@@ -161,7 +162,7 @@ function candleAt(times: number[], t: number): number {
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
-  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe, rangeLink = null }: Props) {
+  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe, rangeLink = null, precision = 2 }: Props) {
   const liveBar = useLiveTick(live)?.bar ?? null; // only the chart re-renders on a tick, not its parent
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -462,9 +463,9 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     seriesRef.current?.applyOptions({
       priceFormat: percent
         ? { type: "custom", minMove: 0.01, formatter: (p: number) => `${fmtSigned((p / sessionOpen! - 1) * 100, 2)}%` }
-        : { type: "price", precision: 2, minMove: 0.01 },
+        : { type: "price", precision, minMove: 10 ** -precision },
     });
-  }, [percent, sessionOpen]);
+  }, [percent, sessionOpen, precision]);
 
   // Time left on the forming candle, beside the price label. Without live ticks the forming
   // candle is the one after the last close.

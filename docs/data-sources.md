@@ -9,6 +9,7 @@ them. Where those bars come from is a setting you can change live.
 | --- | --- | --- |
 | `yfinance` (default) | Free | COMEX gold futures `GC=F`, not spot; Yahoo only serves ~7 days of 1-minute bars |
 | `mt5` | Your broker | Spot XAUUSD from a running MT5 terminal on the same Windows machine |
+| `tradingview` | Free | Spot gold from TradingView, `FX:XAUUSD` (FXCM) by default; ~5 days of 1-minute bars at first. Needs Node 20+ (see [TradingView](#tradingview)) |
 | `csv` | - | M1 bars from a file another process keeps appending to (`time, open, high, low, close[, volume]`) |
 | `synthetic` | - | Demo data, never stored: the newest real bars in the database, then a random walk from them (see below) |
 
@@ -43,10 +44,13 @@ Where a setting comes from, strongest first:
 4. The default (`yfinance`)
 
 `--reset-settings` forgets the saved choice. Switching the source resets the
-symbol to that source's default (`GC=F` for Yahoo, `XAUUSD` for MT5).
+symbol to that source's default (`GC=F` for Yahoo, `XAUUSD` for MT5, `FX:XAUUSD`
+for TradingView).
 
 ```bash
 uv run wednesday --source mt5 --symbol XAUUSD # MT5 terminal running and logged in
+uv run wednesday --source tradingview                  # FX:XAUUSD, FXCM spot gold
+uv run wednesday --source tradingview --symbol OANDA:XAUUSD
 uv run wednesday --source csv --csv data/xauusd_m1.csv
 uv run wednesday --source synthetic --once    # demo data, one scan
 ```
@@ -59,7 +63,7 @@ that clock. Set it in **Settings > Data source > Feed clock**, `XAU_CLOCK` or `-
 
 | Value | Meaning |
 | --- | --- |
-| `UTC` | Default for Yahoo Finance, CSV and demo data |
+| `UTC` | Default for Yahoo Finance, TradingView, CSV and demo data |
 | `NY+7` | New York time plus 7 hours, default for MT5: the server time of most gold brokers (midnight there is the 17:00 NY close, UTC+2 in winter and UTC+3 in summer) |
 | `UTC+2`, `UTC+3`, ... | A fixed offset with no daylight saving |
 | `Europe/London`, `Asia/Jakarta`, ... | Any IANA time zone |
@@ -91,6 +95,7 @@ Set the interval in **Settings > Data source > Live price every**, `XAU_TICK` in
 | Source | Default | Fastest |
 | --- | --- | --- |
 | MT5 | 0.25 s | 0.1 s |
+| TradingView | 1 s | 0.5 s: read from a quote stream kept open, not a request each time |
 | Demo data | 2 s | 0.5 s |
 | Yahoo Finance | 60 s (once a minute, with the scan) | 15 s: each update is a request to Yahoo |
 | CSV | none: a CSV has closed bars only | - |
@@ -121,6 +126,46 @@ and only while the terminal is still running. **Reconnect** in Settings starts
 it again. Other sources keep retrying every minute.
 Full Windows and VPS setup: [deploy-windows.md](deploy-windows.md).
 
+## TradingView
+
+The `tradingview` source reads TradingView's market data through
+[TradingView-API](https://github.com/Mathieu2301/TradingView-API)
+(`@mathieuc/tradingview`), a community library. It is **unofficial**: TradingView
+doesn't offer this as an API, its terms don't allow automated access to its data,
+and the library can stop working when TradingView changes its site. Use it for
+personal charts, and keep MT5 or Yahoo Finance as a fallback.
+
+It runs as a small Node helper (`tradingview/feed.mjs`) that the screener starts
+and keeps running, with one websocket open. It needs Node 20+ and Wednesday run
+from source; the Windows app has no Node, so there the source shows as
+unavailable.
+
+```bash
+make install                      # also installs the helper (npm install in tradingview/)
+npm install --prefix tradingview  # the helper alone
+uv run wednesday --source tradingview --check
+```
+
+The symbol takes TradingView's exchange prefix. `FX:` is FXCM:
+
+| Symbol | Market |
+| --- | --- |
+| `FX:XAUUSD` (default) | XAU/USD spot, FXCM |
+| `FX:XAGUSD` | XAG/USD spot, FXCM |
+| `OANDA:XAUUSD`, `PEPPERSTONE:XAUUSD`, ... | Other brokers' gold |
+
+`FXCM:XAUUSD` doesn't exist; the source then says to use `FX:XAUUSD`. Without a
+TradingView account the server gives about 7,000 one-minute bars (~5 trading
+days), so the 4H timeframe fills in as stored history grows, as with Yahoo. Bar
+times are UTC. The candle still forming is dropped; the live price comes from
+TradingView's quote and builds the forming candle between scans.
+
+The same helper feeds a full-screen chart set to another symbol (`FX:XAGUSD`
+beside gold, see [Dashboard](dashboard.md#full-screen-and-multiple-charts)),
+whatever the main source is: only its candles and live price, through
+`/api/markets/candles` and `/api/markets/tick`. Nothing about that symbol is
+scanned or stored.
+
 ## Storage
 
 Every fetched M1 bar is stored per source and symbol. A restart resumes from
@@ -146,7 +191,7 @@ memory first, then:
 - **MT5**: the terminal's own candles of that timeframe (H1, H4, ...), not M1,
   so going back months is quick. How far depends on the history the terminal
   has downloaded and on **Max bars in chart**.
-- **Yahoo Finance and CSV**: the M1 bars stored in the database, so as far back
+- **Yahoo Finance, TradingView and CSV**: the M1 bars stored in the database, so as far back
   as the screener has been running (Yahoo itself only gives ~7 days of M1), or
   as far as the files imported in [Lab > Data](lab.md#data).
 - **Demo data**: only what is in memory.

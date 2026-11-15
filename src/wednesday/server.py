@@ -25,6 +25,7 @@ from .auth import Auth, install as install_auth
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
 from .journal.market import freeze
+from .markets import MarketError, Markets, clean_symbol
 from .replay import ReplayCache, view as replay_view
 from .workspaces import WorkspaceError, Workspaces
 from .brief import BRIEF_KEY, BriefError, BriefSettings
@@ -338,6 +339,35 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             "levels": levels,
             "swings": swings,  # confirmed swing points labelled HH / LH / HL / LL
         }
+
+    # ---- another symbol in a full-screen pane: candles and live price only (markets.py) ----
+    markets = Markets()
+
+    def market_call(fn):
+        try:
+            return fn()
+        except MarketError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+
+    @app.get("/api/markets/candles")
+    def market_candles(symbol: str = Query(...), tf: str = Query("1H"), limit: int = Query(300, ge=10, le=2000),
+                       before: int | None = Query(None)) -> dict:
+        """A pane's own symbol (e.g. FX:XAGUSD), from TradingView. No levels: only the source's symbol is scanned."""
+        timeframe = TIMEFRAMES_BY_NAME.get(tf.upper())
+        if timeframe is None:
+            raise HTTPException(404, f"unknown timeframe {tf!r}")
+        sym = market_call(lambda: clean_symbol(symbol))
+        candles = market_call(lambda: markets.candles(sym, timeframe, limit, current_clock(), before))
+        precision = market_call(lambda: markets.precision(sym))
+        return {"symbol": sym, "timeframe": timeframe.name, "precision": precision,
+                "price": float(candles["close"].iloc[-1]) if len(candles) else None,
+                "candles": _candle_rows(candles), "has_more": len(candles) > 0, "levels": [], "swings": []}
+
+    @app.get("/api/markets/tick")
+    def market_tick(symbol: str = Query(...)) -> dict:
+        """The live price of a pane's own symbol (unix time on the feed's clock)."""
+        sym = market_call(lambda: clean_symbol(symbol))
+        return market_call(lambda: markets.tick(sym, current_clock()))
 
     # ---- bar replay: the market as it stood at a past minute (replay.py) ----
     replay_cache = ReplayCache()

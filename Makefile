@@ -30,8 +30,12 @@ setup: doctor .env install ui ## First run: create .env, install dependencies, b
 	cp .env.example .env
 	@echo "Created .env from .env.example. Edit it for MT5 or Telegram; the default source is Yahoo Finance."
 
-install: $(WEB)/node_modules ## Install Python and dashboard dependencies
+install: $(WEB)/node_modules tradingview/node_modules ## Install Python, dashboard and TradingView helper dependencies
 	$(UV) sync --extra llm --extra ml
+
+tradingview/node_modules: tradingview/package.json tradingview/package-lock.json
+	cd tradingview && $(NPM) install
+	@touch $@
 
 $(WEB)/node_modules: $(WEB)/package.json $(WEB)/package-lock.json
 	cd $(WEB) && $(NPM) install
