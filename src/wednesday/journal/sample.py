@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-SOURCE = "sample"  # the bar stream's source key, next to "mt5", "yahoo", ...
+SOURCE = "sample"  # the bar stream's source key, next to "yfinance", "tradingview", ...
 SYMBOL = "XAUUSD"
 SEED = 22
 START = "2026-03-02"  # a Monday

@@ -21,11 +21,14 @@ status bar, as the license terms ask.
 It uses `fancy-canvas` (<https://www.npmjs.com/package/fancy-canvas>), under the MIT
 License below.
 
-## TradingView data source (optional)
+## TradingView data source
 
-The `tradingview` data source installs, in `tradingview/node_modules` (not part of
-the Windows app):
+The `tradingview` data source runs a small Node.js helper. From source it is installed
+in `tradingview/node_modules`; the Windows app bundles it, with Node.js itself:
 
+- Node.js 22 (`node.exe`, <https://nodejs.org>), MIT License, Copyright Node.js
+  contributors. Node.js bundles third-party code under their own licenses, listed in
+  its `LICENSE` file, which the Windows app ships next to `node.exe`.
 - `@mathieuc/tradingview` 4.1.2 (<https://github.com/Mathieu2301/TradingView-API>),
   by Mathieu Colmon, ISC License (declared in its `package.json`). An independent
   library, not made or endorsed by TradingView.

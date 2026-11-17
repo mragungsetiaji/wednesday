@@ -38,21 +38,21 @@ class FixedTicks:
 
 def test_tick_defaults_and_validation():
     assert DataSettings(source="yfinance").resolved_tick == 60
-    assert DataSettings(source="mt5").resolved_tick == 0.25
+    assert DataSettings(source="tradingview").resolved_tick == 1
     assert DataSettings(source="csv").resolved_tick == 0
-    assert DataSettings(source="mt5", tick_seconds=5).resolved_tick == 5
-    assert DataSettings(source="mt5", tick_seconds=0).validate() == []
+    assert DataSettings(source="tradingview", tick_seconds=5).resolved_tick == 5
+    assert DataSettings(source="tradingview", tick_seconds=0).validate() == []
     assert DataSettings(source="yfinance", tick_seconds=15).validate() == []
     assert DataSettings(source="yfinance", tick_seconds=5).validate()  # under Yahoo's minimum
-    assert DataSettings(source="mt5", tick_seconds=120).validate()
+    assert DataSettings(source="tradingview", tick_seconds=120).validate()
     assert DataSettings(source="csv", tick_seconds=1).validate()  # a CSV has no live price
-    assert DataSettings.from_dict({"source": "mt5", "tick_seconds": "0.5"}).tick_seconds == 0.5
+    assert DataSettings.from_dict({"source": "tradingview", "tick_seconds": "0.5"}).tick_seconds == 0.5
 
 
 def test_switching_source_resets_the_tick_interval():
     class Store:
         def get_setting(self, key):
-            return {"source": "mt5", "tick_seconds": 0.5}
+            return {"source": "tradingview", "tick_seconds": 0.5}
 
     assert resolve({}, Store()).resolved_tick == 0.5
     assert resolve({"source": "yfinance"}, Store()).resolved_tick == 60

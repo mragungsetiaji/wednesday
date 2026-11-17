@@ -1,7 +1,5 @@
-"""More M1 history (issue #12): file import in several formats, clock conversion, MT5 backfill, coverage."""
+"""More M1 history (issue #12): file import in several formats, clock conversion, coverage."""
 
-import sys
-import types
 
 import numpy as np
 import pandas as pd
@@ -10,15 +8,12 @@ from fastapi.testclient import TestClient
 
 from wednesday.detectors import DetectorParams
 from wednesday.engine import Runtime
-from wednesday.feeds import MT5Feed
-from wednesday.lab.bars import Backfill, BarsFileError, import_bars, parse_bars
+from wednesday.lab.bars import BarsFileError, import_bars, parse_bars
 from wednesday.lab.service import Lab
 from wednesday.scanner import ScanConfig
 from wednesday.server import create_app
 from wednesday.settings import DataSettings
 from wednesday.storage import Store
-
-from test_mt5_and_cli import FakeMT5
 
 KEY = ("csv", "XAUUSD")
 
@@ -114,62 +109,6 @@ def test_lab_history_spans_the_import_and_respects_its_size(tmp_path):
     assert days[0] == (int(pd.Timestamp("2023-01-02").timestamp()), 1440) and sum(n for _, n in days) == 30_000
 
 
-class RangeMT5(FakeMT5):
-    """A terminal with M1 history from ``oldest`` to ``newest``."""
-
-    def __init__(self, oldest, newest):
-        super().__init__()
-        self.oldest, self.newest, self.calls = oldest, newest, []
-
-    def copy_rates_range(self, symbol, timeframe, date_from, date_to):
-        assert timeframe == self.TIMEFRAME_M1 and isinstance(date_from, int)
-        self.calls.append((date_from, date_to))
-        lo, hi = max(date_from, self.oldest), min(date_to, self.newest)
-        times = np.arange(lo - lo % 60 + (60 if lo % 60 else 0), hi + 1, 60)
-        dtype = [("time", "i8"), ("open", "f8"), ("high", "f8"), ("low", "f8"), ("close", "f8"),
-                 ("tick_volume", "i8"), ("spread", "i4"), ("real_volume", "i8")]
-        rates = np.zeros(max(len(times), 0), dtype=dtype)
-        rates["time"] = times
-        rates["open"] = rates["high"] = rates["low"] = rates["close"] = 2650.0
-        return rates
-
-
-def unix(s):
-    return int(pd.Timestamp(s).timestamp())
-
-
-def test_backfill_walks_back_to_the_start_in_chunks(tmp_path, monkeypatch):
-    mt5 = RangeMT5(unix("2025-12-01"), unix("2026-01-31"))
-    monkeypatch.setitem(sys.modules, "MetaTrader5", mt5)
-    feed = MT5Feed("XAUUSD")
-    feed.connect()
-    s = store(tmp_path)
-    s.save_bars("mt5", "XAUUSD", feed.fetch_m1_range(pd.Timestamp("2026-01-30"), pd.Timestamp("2026-01-31")))
-    engine = types.SimpleNamespace(feed=feed, buffer=types.SimpleNamespace(key=("mt5", "XAUUSD")),
-                                   snapshot=lambda: (1, None, None), call=lambda fn, timeout=60: fn(feed))
-    done = []
-    job = Backfill()
-    job.start(engine, s, pd.Timestamp("2026-01-10"), on_done=lambda: done.append(1))
-    job._thread.join(10)
-    n, first, _ = s.bar_bounds("mt5", "XAUUSD")
-    assert job.state["error"] is None and done
-    assert first == unix("2026-01-10") and n == 21 * 1440 + 1  # 10 Jan .. 31 Jan 00:00
-    assert job.state["added"] == 20 * 1440
-    assert len(mt5.calls) >= 4  # 5-day chunks, not one huge call
-
-    # Past the terminal's oldest bar: stops with a note instead of looping.
-    job.start(engine, s, pd.Timestamp("2025-06-01"))
-    job._thread.join(10)
-    assert "no M1 bars before" in job.state["note"] and s.bar_bounds("mt5", "XAUUSD")[1] == unix("2025-12-01")
-
-
-def test_backfill_needs_mt5(tmp_path):
-    from wednesday.feeds import SyntheticFeed
-    engine = types.SimpleNamespace(feed=SyntheticFeed(), buffer=types.SimpleNamespace(key=None))
-    with pytest.raises(RuntimeError, match="MT5"):
-        Backfill().start(engine, store(tmp_path), pd.Timestamp("2025-01-01"))
-
-
 def test_data_endpoints(tmp_path):
     s = store(tmp_path)
     csv = tmp_path / "feed.csv"
@@ -179,7 +118,7 @@ def test_data_endpoints(tmp_path):
                       lab=Lab(s, tmp_path / "models", cfg.params))
     api = TestClient(create_app(runtime, ui_dir=tmp_path))
     body = api.get("/api/lab/data").json()
-    assert body["can_import"] is True and body["can_backfill"] is False and body["stored"]["bars"] == 0
+    assert body["can_import"] is True and "can_backfill" not in body and body["stored"]["bars"] == 0
 
     staged = api.post("/api/lab/data/import", content=minute_file("2026-01-05 00:00", 2000)).json()
     assert staged["format"] == "csv" and staged["bars"] == 2000 and len(staged["sample"]) == 5
@@ -189,8 +128,6 @@ def test_data_endpoints(tmp_path):
     assert api.post(f"/api/lab/data/import/{staged['token']}", json={}).status_code == 422  # used up
     assert api.post("/api/lab/data/import", content=b"nonsense").status_code == 422
 
-    assert api.post("/api/lab/data/backfill", json={"start": "2025-01-01"}).status_code == 409  # not MT5
-    assert api.post("/api/lab/data/backfill", json={"start": "soon"}).status_code == 422
     assert api.put("/api/lab/data", json={"history_bars": 50_000}).json()["history_bars"] == 50_000
     assert api.put("/api/lab/data", json={"history_bars": 5}).status_code == 422
 

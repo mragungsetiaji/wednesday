@@ -165,7 +165,7 @@ def test_settings_api_switches_source_live(store, tmp_path):
     body = client.get("/api/settings").json()
     assert body["editable"] is True
     assert body["settings"]["source"] == "synthetic"
-    assert {s["id"] for s in body["sources"]} == {"yfinance", "mt5", "csv", "synthetic"}
+    assert {s["id"] for s in body["sources"]} == {"yfinance", "tradingview", "csv", "synthetic"}
     assert body["storage"]["backend"] == "sqlite"
     assert body["running"]["bars_needed"] == cfg.required_m1_bars()
 

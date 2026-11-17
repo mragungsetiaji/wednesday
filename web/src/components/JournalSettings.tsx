@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  createJournal, deleteJournal, fetchJournals, fetchTerminalAccount, importReport, journalCsvUrl, restoreSample, syncJournal,
-  updateJournal, type Journal, type JournalPatch, type JournalsResponse, type TerminalAccount,
+  createJournal, deleteJournal, fetchJournals, importReport, journalCsvUrl, restoreSample,
+  updateJournal, type Journal, type JournalPatch, type JournalsResponse,
 } from "../api";
 import { usePref } from "../prefs";
 
-/** What the new-journal form hands up: sync right away only when the terminal is on that account. */
-export type NewDraft = { name: string; login: string; sync: boolean };
+/** What the new-journal form hands up. */
+export type NewDraft = { name: string; login: string };
 
 export const JOURNAL_PREF = "wed.journal"; // the journal open on the journal page and in its settings
 export const JOURNAL_SETTINGS = "#settings/journal";
@@ -30,23 +30,11 @@ export function fmtRelative(iso: string, now = Date.now()): string {
   return `${Math.floor(s / 86400)} days ago`;
 }
 
-/** The journal's sync in a few words, for the header and the settings: synced, syncing, waiting, failed or off. */
+/** When the journal's trades were last imported, for the header and the settings. */
 export function syncText(j: Journal, now = Date.now()): { text: string; title?: string; problem: boolean } {
-  const s = j.sync;
-  const last = s.at ? `${j.source === "report" ? "Imported" : "Synced"} ${fmtRelative(s.at, now)}` : "Not synced yet";
-  const title = s.at ? fmtStamp(s.at) : undefined;
-  switch (s.state) {
-    case "syncing":
-      return { text: "Syncing…", title, problem: false };
-    case "waiting":
-      return { text: s.error ?? "Waiting for the terminal", title, problem: false };
-    case "error":
-      return { text: `Last sync failed: ${s.error ?? "unknown error"}`, title, problem: true };
-    case "off":
-      return { text: j.source === "report" || !j.login ? last : `${last} · auto-sync off`, title, problem: false };
-    default:
-      return { text: last, title, problem: false };
-  }
+  const at = j.synced_at;
+  return at ? { text: `Imported ${fmtRelative(at, now)}`, title: fmtStamp(at), problem: false }
+    : { text: "Not imported yet", problem: false };
 }
 
 /** Marks the sample portfolio's numbers as made up. */
@@ -59,7 +47,7 @@ export function SampleBadge({ long = false }: { long?: boolean }) {
 }
 
 /**
- * Settings > Journal: the open journal's name, account, sync, display and clock offset, import and export,
+ * Settings > Journal: the open journal's name, account, report import, display and clock offset, import and export,
  * and every journal with New journal. The journal page only links here.
  */
 export function JournalSettings() {
@@ -77,8 +65,6 @@ export function JournalSettings() {
   }, []);
   useEffect(() => {
     load();
-    const id = setInterval(load, 15_000); // auto-sync status changes on its own
-    return () => clearInterval(id);
   }, [load]);
 
   const run = async (fn: () => Promise<string | void>): Promise<boolean> => {
@@ -117,11 +103,9 @@ export function JournalSettings() {
   });
 
   const create = (draft: NewDraft) => run(async () => {
-    const made = await createJournal(draft.name, draft.login, draft.sync);
+    const made = await createJournal(draft.name, draft.login);
     setCurrent(made.id);
-    if (!draft.sync) return `Created ${made.name} for account ${made.login}. It syncs once the terminal is on that account, or import its history report.`;
-    const r = await syncJournal(made.id);
-    return `Created ${made.name} and synced ${r.trades} trades and ${r.cash} deposits or withdrawals from account ${r.journal.login}.`;
+    return `Created ${made.name} for account ${made.login}. Import its MT5 history report under Report.`;
   });
 
   const remove = (x: Journal) => run(async () => {
@@ -140,10 +124,6 @@ export function JournalSettings() {
       {message && <p className={message.kind === "error" ? "text-error" : "journal-notice"} role={message.kind === "error" ? "alert" : "status"}>{message.text}</p>}
 
       {j && <ThisJournal key={j.id} journal={j} journals={journals} busy={busy} onPick={setCurrent} onPatch={patch}
-        onSync={() => run(async () => {
-          const r = await syncJournal(j.id);
-          return `Synced ${r.trades} trades and ${r.cash} deposits or withdrawals from account ${r.journal.login}.`;
-        })}
         onImport={(file) => run(async () => {
           const r = await importReport(j.id, file);
           return `Imported ${r.trades} trades and ${r.cash} deposits or withdrawals.`;
@@ -180,9 +160,9 @@ export function JournalSettings() {
 }
 
 /** The open journal's own settings, saved per field. */
-function ThisJournal({ journal: j, journals, busy, onPick, onPatch, onSync, onImport }: {
+function ThisJournal({ journal: j, journals, busy, onPick, onPatch, onImport }: {
   journal: Journal; journals: Journal[]; busy: boolean; onPick: (id: string) => void;
-  onPatch: (p: JournalPatch, done?: string) => void; onSync: () => void; onImport: (f: File) => void;
+  onPatch: (p: JournalPatch, done?: string) => void; onImport: (f: File) => void;
 }) {
   const [name, setName] = useState(j.name);
   const [offset, setOffset] = useState(j.time_offset === null ? "" : String(j.time_offset));
@@ -218,23 +198,13 @@ function ThisJournal({ journal: j, journals, busy, onPick, onPatch, onSync, onIm
             <div><dt>Currency</dt><dd>{j.currency ?? "—"}</dd></div>
           </dl>
         )}
-        {!j.sample && <p className="field-note">Account, server, company and currency come from the last sync or import.</p>}
+        {!j.sample && <p className="field-note">Account, server, company and currency come from the last imported report.</p>}
       </fieldset>
 
       {!j.sample && (
         <fieldset className="fields" disabled={busy}>
-          <legend>Sync</legend>
-          <label className="switch">
-            <input type="checkbox" checked={j.auto_sync} disabled={!j.login}
-              onChange={(e) => onPatch({ auto_sync: e.target.checked }, e.target.checked ? "Auto-sync is on." : "Auto-sync is off.")} />
-            <span>Sync from MT5 automatically</span>
-          </label>
-          <p className={status.problem ? "field-note text-error" : "field-note"} title={status.title}>
-            {!j.login ? "Needs the MT5 account number: import a report or make the journal from the terminal's account. " : null}
-            {j.auto_sync && "After each scan, when the terminal is logged in to this account and something changed. "}
-            {status.text}{status.title && <> ({status.title})</>}.{" "}
-            <button type="button" className="link-button" onClick={onSync}>Sync now</button>
-          </p>
+          <legend>Report</legend>
+          <p className="field-note" title={status.title}>{status.text}{status.title && <> ({status.title})</>}.</p>
           <div className="field">
             <span className="field-label">Import report</span>
             <input ref={fileRef} type="file" accept=".html,.htm,text/html" hidden
@@ -327,52 +297,25 @@ function JournalList({ journals, current, busy, onOpen, onRemove }: {
   );
 }
 
-/**
- * Name and MT5 account number, prefilled from the account the terminal is logged in to. When the terminal is on
- * that account the journal syncs as it's created and keeps syncing; otherwise it starts empty and the form says why.
- */
+/** Name and MT5 account number. The journal starts empty; its trades come from the account's history report. */
 export function NewJournal({ journals, busy, onCreate }: { journals: Journal[]; busy: boolean; onCreate: (d: NewDraft) => Promise<boolean> }) {
   const [name, setName] = useState("");
   const [login, setLogin] = useState("");
-  const [terminal, setTerminal] = useState<TerminalAccount | null>(null);
-  useEffect(() => {
-    let live = true;
-    fetchTerminalAccount()
-      .then((t) => {
-        if (!live) return;
-        setTerminal(t);
-        if (t.connected && !journals.some((j) => j.login === t.login)) setLogin((cur) => cur || t.login);
-      })
-      .catch((e) => live && setTerminal({ connected: false, detail: errText(e) }));
-    return () => { live = false; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const account = login.trim();
   const valid = /^\d+$/.test(account);
   const taken = journals.find((j) => j.login === account);
-  const onTerminal = terminal?.connected === true && terminal.login === account;
   const ready = !busy && name.trim() !== "" && valid && !taken;
 
   return (
     <form className="journal-new-form" onSubmit={async (e) => {
       e.preventDefault();
       if (!ready) return;
-      if (await onCreate({ name: name.trim(), login: account, sync: onTerminal })) {
+      if (await onCreate({ name: name.trim(), login: account })) {
         setName("");
         setLogin("");
       }
     }}>
-      <p className="journal-terminal field-note" role="status">
-        {terminal === null ? "Checking the MT5 terminal…"
-          : terminal.connected ? (
-            <>
-              MT5 terminal is logged in to <span className="num">#{terminal.login}</span>{terminal.server ? ` · ${terminal.server}` : ""}.
-              {account !== terminal.login && (
-                <> <button type="button" className="link-button" onClick={() => setLogin(terminal.login)}>Use this account</button></>
-              )}
-            </>
-          ) : <>{terminal.detail}. You can still create the journal and import the terminal's history report.</>}
-      </p>
       <div className="fields-grid">
         <label className="field">
           <span className="field-label">Name</span>
@@ -387,16 +330,13 @@ export function NewJournal({ journals, busy, onCreate }: { journals: Journal[]; 
             {account === "" ? "The login number shown in MT5, under Navigator, Accounts."
               : !valid ? "Digits only, as MT5 shows the login."
                 : taken ? `${taken.name} already follows this account.`
-                  : onTerminal ? "The terminal is on this account, so the journal syncs as it's created and keeps syncing."
-                    : terminal?.connected
-                      ? `The terminal is on #${terminal.login}, so this journal starts empty. Log in to #${account} in MT5 and sync, or import its report.`
-                      : "Starts empty. Sync once the terminal is on this account, or import its report."}
+                  : "Starts empty. Then import the account's history report."}
           </span>
         </label>
       </div>
       <div className="form-actions">
         <button type="submit" className="button primary" disabled={!ready}>
-          {busy ? "Working…" : onTerminal ? "Create and sync" : "Create journal"}
+          {busy ? "Working…" : "Create journal"}
         </button>
       </div>
     </form>

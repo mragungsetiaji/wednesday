@@ -1,12 +1,9 @@
-"""Turn MT5 history into trades and cash.
+"""Turn an MT5 history report into trades and cash.
 
-Two ways in:
-
-* :func:`from_deals`: deals as the terminal's ``history_deals_get`` returns them
-  (plus ``positions_get`` for what is still open).
-* :func:`parse_report`: the history report the terminal saves (History tab, right
-  click, Report, HTML). Its *Positions* table gives the trades and its *Deals*
-  table the deposits and withdrawals.
+:func:`parse_report` reads the history report the MetaTrader 5 terminal saves
+(History tab, right click, Report, HTML). Its *Positions* table gives the trades
+and its *Deals* table the deposits and withdrawals. Wednesday doesn't talk to
+the terminal itself; the trader exports the report and uploads it.
 
 Times stay on the broker's server clock, as unix seconds.
 """
@@ -14,21 +11,15 @@ Times stay on the broker's server clock, as unix seconds.
 from __future__ import annotations
 
 import re
-from collections import defaultdict
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 
-# MT5 deal types and entries (ENUM_DEAL_TYPE, ENUM_DEAL_ENTRY)
-BUY, SELL, BALANCE, CREDIT, BONUS = 0, 1, 2, 3, 6
-IN, OUT, INOUT, OUT_BY = 0, 1, 2, 3
+# MT5 deal types of cash rows (ENUM_DEAL_TYPE)
+BALANCE, CREDIT, BONUS = 2, 3, 6
 
 
 class ReportError(ValueError):
-    """A file or terminal answer that can't be read, with a message for the user."""
-
-
-def _get(deal, name, default=None):
-    return deal.get(name, default) if isinstance(deal, dict) else getattr(deal, name, default)
+    """A file that can't be read, with a message for the user."""
 
 
 def cash_kind(deal_type: int, amount: float) -> str:
@@ -37,86 +28,6 @@ def cash_kind(deal_type: int, amount: float) -> str:
     if deal_type in (CREDIT, BONUS):
         return "credit"
     return "other"  # charges, corrections, interest, fees billed as their own deal
-
-
-def from_deals(deals, positions=()) -> tuple[list[dict], list[dict]]:
-    """(trades, cash) from MT5 deal records (namedtuples or dicts).
-
-    A position is split into one trade per closing deal, with the average entry
-    price and the entry commission shared by volume, so partial closes keep the
-    floating P/L right. What is still open becomes a trade without a close time.
-    """
-    cash: list[dict] = []
-    by_position: dict[str, list] = defaultdict(list)
-    for d in deals:
-        kind = int(_get(d, "type"))
-        if kind in (BUY, SELL):
-            by_position[str(_get(d, "position_id"))].append(d)
-        elif kind not in (13, 14):  # buy/sell canceled
-            amount = float(_get(d, "profit", 0)) + float(_get(d, "commission", 0)) + float(_get(d, "fee", 0) or 0) \
-                + float(_get(d, "swap", 0))
-            cash.append({"id": str(_get(d, "ticket")), "time": int(_get(d, "time")), "kind": cash_kind(kind, amount),
-                         "amount": amount, "comment": _get(d, "comment") or None})
-
-    open_now = {str(_get(p, "ticket")): p for p in positions}
-    trades: list[dict] = []
-    for pos, legs in by_position.items():
-        legs.sort(key=lambda d: (int(_get(d, "time_msc", 0) or 0) or int(_get(d, "time")) * 1000, int(_get(d, "ticket"))))
-        side, symbol = None, str(_get(legs[0], "symbol"))
-        vol = avg = 0.0
-        open_time = None
-        entry_cost = entry_volume = 0.0  # commission paid on the way in, shared among the closes
-
-        def enter(t, price, volume, cost):
-            nonlocal vol, avg, open_time, entry_cost, entry_volume
-            if vol == 0:
-                open_time, entry_cost, entry_volume = t, 0.0, 0.0
-            avg = (avg * vol + price * volume) / (vol + volume)
-            vol += volume
-            entry_cost += cost
-            entry_volume += volume
-
-        for d in legs:
-            t, price, volume = int(_get(d, "time")), float(_get(d, "price")), float(_get(d, "volume"))
-            cost = float(_get(d, "commission", 0)) + float(_get(d, "fee", 0) or 0)
-            entry = int(_get(d, "entry"))
-            deal_side = "buy" if int(_get(d, "type")) == BUY else "sell"
-            if entry == IN or side is None:
-                side = side or deal_side
-                enter(t, price, volume, cost)
-                continue
-            closed = min(volume, vol) if entry == INOUT else volume
-            share = closed / entry_volume if entry_volume else 0.0
-            trades.append({
-                "id": f"p{pos}:{_get(d, 'ticket')}", "position": pos, "symbol": symbol, "side": side,
-                "volume": closed, "open_time": open_time, "open_price": avg, "close_time": t, "close_price": price,
-                "profit": float(_get(d, "profit", 0)), "commission": cost * (closed / volume if volume else 1)
-                + entry_cost * share, "swap": float(_get(d, "swap", 0)), "sl": None, "tp": None,
-                "comment": _get(d, "comment") or None,
-            })
-            entry_cost -= entry_cost * share
-            entry_volume -= closed
-            vol = max(vol - closed, 0.0)
-            if vol <= 1e-9:
-                vol, avg = 0.0, 0.0
-                if entry == INOUT and volume > closed:  # reversed: the rest opens the other way
-                    side = deal_side
-                    enter(t, price, volume - closed, cost * (volume - closed) / volume)
-        if vol > 1e-9:
-            p = open_now.get(pos)
-            trades.append({
-                "id": f"p{pos}", "position": pos, "symbol": symbol, "side": side, "volume": vol,
-                "open_time": open_time, "open_price": avg, "close_time": None,
-                "close_price": float(_get(p, "price_current")) if p is not None else None,
-                "profit": float(_get(p, "profit", 0)) if p is not None else 0.0, "commission": entry_cost,
-                "swap": float(_get(p, "swap", 0)) if p is not None else 0.0,
-                "sl": (float(_get(p, "sl")) or None) if p is not None else None,
-                "tp": (float(_get(p, "tp")) or None) if p is not None else None,
-                "comment": None,
-            })
-    trades.sort(key=lambda r: (r["open_time"], r["id"]))
-    cash.sort(key=lambda r: (r["time"], r["id"]))
-    return trades, cash
 
 
 # ---- the terminal's HTML report ----------------------------------------------------------------

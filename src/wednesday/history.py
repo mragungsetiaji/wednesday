@@ -2,8 +2,7 @@
 
 The scan only needs ``lookback`` candles per timeframe, so the engine keeps just
 enough M1 bars for that. Older candles come from, in order: the engine's M1
-buffer, the feed's own candles of that timeframe (MT5: no M1 history needed),
-or the M1 bars stored in the database.
+buffer, then the M1 bars stored in the database.
 """
 
 from __future__ import annotations
@@ -40,10 +39,6 @@ def older_candles(engine: Engine, tf: Timeframe, before: int, limit: int) -> tup
 
 
 def _beyond_memory(engine: Engine, tf: Timeframe, edge: pd.Timestamp, count: int) -> tuple[pd.DataFrame, bool]:
-    if engine.feed.native_history:
-        # MT5 is only used from the scan thread.
-        df = engine.call(lambda feed: feed.fetch_history(tf, edge, count))
-        return df.tail(count), len(df) >= count
     store, key = engine.buffer.store, engine.buffer.key
     if store is None or key is None:
         return _empty(), False

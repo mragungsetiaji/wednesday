@@ -252,16 +252,11 @@ Past results on history say nothing certain about future trades.
 ## Data
 
 **Lab > Data** shows how much M1 history is stored for the running source and
-symbol, and adds more. Early on there is little: Yahoo Finance only gives days
-of M1, and MT5 only what was fetched since Wednesday started.
+symbol, and adds more. Early on there is little: Yahoo Finance and TradingView
+only give days of M1, so importing files is how to get months or years.
 
 - **Stored history**: one row per month, one square per day. Paler squares
   have fewer bars, outlined ones none, grey ones are weekends.
-- **Backfill from MT5** (MT5 as the source): pulls older M1 bars from the
-  terminal back to a date, five days per call between scans, with progress and
-  a Stop button. It stops with a note when the terminal has nothing older:
-  raise *Tools > Options > Charts > Max bars in chart* and scroll the M1 chart
-  back so the terminal downloads more.
 - **Import a file**: M1 bars from an MT5 export (`<DATE> <TIME> <OPEN> ...`,
   UTF-16 is fine), Dukascopy (`Gmt time,...`), HistData ASCII (`20240102
   180000;...` or `2024.01.02,18:00,...`) or any CSV with a time column and
@@ -269,13 +264,13 @@ of M1, and MT5 only what was fetched since Wednesday started.
   you confirm the file's clock (Dukascopy UTC, HistData UTC-5, an MT5 export
   the broker's server time) and the times are moved to the feed's clock.
   Importing is an upsert on time, so a file imported twice adds nothing.
-  Use prices of the same market as the feed: spot gold for MT5, COMEX
-  futures for Yahoo Finance.
+  Use prices of the same market as the feed: spot gold for TradingView
+  (`FX:XAUUSD`) or a spot CSV, COMEX futures for Yahoo Finance.
 - **History the Lab uses**: how many of the latest stored bars are loaded for
   labelling, training and the dataset, up to 2,000,000 (about five years,
   roughly 100 MB of memory).
 
-Imported and backfilled bars also let the chart scroll further back (see
+Imported bars also let the chart scroll further back (see
 [Scrolling back](data-sources.md#scrolling-back)). Demo data is never stored,
 so there is nothing to add to.
 

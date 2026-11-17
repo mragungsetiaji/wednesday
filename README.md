@@ -19,7 +19,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
   <img src="https://img.shields.io/badge/React_19-20232A?logo=react&logoColor=61DAFB" alt="React 19">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
   <br>
-  <img src="https://img.shields.io/badge/data-Yahoo_Finance_%7C_MetaTrader_5-8f5b00" alt="Data: Yahoo Finance or MetaTrader 5">
+  <img src="https://img.shields.io/badge/data-Yahoo_Finance_%7C_TradingView-8f5b00" alt="Data: Yahoo Finance or TradingView">
   <img src="https://img.shields.io/badge/storage-SQLite_%7C_PostgreSQL-003B57?logo=sqlite&logoColor=white" alt="Storage: SQLite or PostgreSQL">
   <img src="https://img.shields.io/badge/alerts-Telegram-26A5E4?logo=telegram&logoColor=white" alt="Telegram alerts">
 </p>
@@ -56,9 +56,9 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **News brief**: Claude or OpenAI reads the news pages you pick and suggests a bias you can apply with one click.
 - **Risk-time warning**: a card in the corner an hour before high-impact US news, glowing in the last 30 minutes.
 - **Lab for machine learning**: tag candles by hand (order block, liquidity, inducement), train a model on your tags, export or import model files, and mark each block the model finds on the chart valid or invalid.
-- **Trading journal**: import an MT5 account (synced from the terminal or from its report) and see gain, drawdown, deposits and the growth curve, with the drawdown rebuilt from M1 prices so a statement can't hide it.
+- **Trading journal**: import an MT5 account from its history report and see gain, drawdown, deposits and the growth curve, with the drawdown rebuilt from M1 prices so a statement can't hide it.
 - **Pings you on Telegram** when price trades into an order block.
-- **Free data by default** (Yahoo Finance), MetaTrader 5 when you're ready; history stored in SQLite or PostgreSQL.
+- **Free data by default** (Yahoo Finance), or spot gold from TradingView (FX:XAUUSD), no account needed; history stored in SQLite or PostgreSQL.
 
 <table>
   <tr>
@@ -96,7 +96,7 @@ Click candles and tag them, mark the stretches you've fully reviewed, and train 
 
 ### Journal
 
-Sync an MT5 account, or import the terminal's history report, and get the numbers of a public track record: gain (time-weighted), absolute gain, drawdown, balance, equity, deposits, withdrawals and the growth curve. The drawdown is rebuilt from M1 prices minute by minute, and every deal price is checked against its bar, so a trade that sat deep in loss before closing green still counts. It opens on a sample portfolio of made-up trades, so every panel is filled before you connect an account; delete it with one click. More in [docs/journal.md](docs/journal.md).
+Import an MT5 account's history report and get the numbers of a public track record: gain (time-weighted), absolute gain, drawdown, balance, equity, deposits, withdrawals and the growth curve. The drawdown is rebuilt from M1 prices minute by minute, and every deal price is checked against its bar, so a trade that sat deep in loss before closing green still counts. It opens on a sample portfolio of made-up trades, so every panel is filled before you connect an account; delete it with one click. More in [docs/journal.md](docs/journal.md).
 
 <img src="docs/images/journal.png" alt="The journal on the sample portfolio: account numbers on the left, the growth curve on the right" width="100%">
 
@@ -122,8 +122,9 @@ and its stats count how often each one closed green or red, so you can check it 
    No Python or Node needed. Windows may say "Windows protected your PC" because the
    installer isn't code signed: click **More info > Run anyway**.
 2. Start **Wednesday** from the Start menu or the desktop.
-3. It starts on free Yahoo Finance data. For your broker's prices, open
-   **Settings > Data source**, pick **MetaTrader 5**, choose your terminal and save.
+3. It starts on free Yahoo Finance data (COMEX futures). For spot gold, open
+   **Settings > Data source**, pick **TradingView** and save.
+4. Upgrading? The installer asks whether to keep your data and settings or start fresh.
 
 More in [Windows desktop app](docs/desktop.md). Running from source, on a VPS or
 developing: [Windows and VPS](docs/deploy-windows.md) and [Development](docs/development.md).
@@ -134,14 +135,14 @@ developing: [Windows and VPS](docs/deploy-windows.md) and [Development](docs/dev
 | --- | --- |
 | [Detectors and the limit strategy](docs/detectors.md) | How order blocks, liquidity and inducement are found, and how setups are ranked |
 | [Dashboard](docs/dashboard.md) | Chart, level ladder, quarterly pane, panels |
-| [Data sources and storage](docs/data-sources.md) | Yahoo Finance, MT5, TradingView (FXCM), CSV, SQLite / PostgreSQL |
+| [Data sources and storage](docs/data-sources.md) | Yahoo Finance, TradingView (FXCM), CSV, SQLite / PostgreSQL |
 | [Bias and news brief](docs/bias.md) | Setting a bias, risk on / off labels, the LLM news brief |
-| [Position size](docs/risk.md) | Lot size per setup from your risk, MT5 balance and lot rules |
+| [Position size](docs/risk.md) | Lot size per setup from your risk, balance and lot rules |
 | [Lab: labels and models](docs/lab.md) | Tag candles, train models, model files, reviewing model blocks, the dataset |
-| [Journal](docs/journal.md) | MT5 sync and report import, gain and drawdown, how the numbers are checked |
+| [Journal](docs/journal.md) | MT5 report import, gain and drawdown, how the numbers are checked |
 | [Telegram alerts](docs/alerts.md) | Bot setup and when alerts fire |
 | [Configuration](docs/configuration.md) | Make targets, CLI options, `.env` |
-| [Windows and VPS](docs/deploy-windows.md) | Running 24/7 next to an MT5 terminal |
+| [Windows and VPS](docs/deploy-windows.md) | Running 24/7 on Windows or a VPS |
 | [Plugins](docs/plugins.md) | Add features from a separate Python package |
 | [Development](docs/development.md) | Project layout and how a scan flows |
 

@@ -8,12 +8,18 @@ them. Where those bars come from is a setting you can change live.
 | Source | Cost | Notes |
 | --- | --- | --- |
 | `yfinance` (default) | Free | COMEX gold futures `GC=F`, not spot; Yahoo only serves ~7 days of 1-minute bars |
-| `mt5` | Your broker | Spot XAUUSD from a running MT5 terminal on the same Windows machine |
-| `tradingview` | Free | Spot gold from TradingView, `FX:XAUUSD` (FXCM) by default; ~5 days of 1-minute bars at first. Needs Node 20+ (see [TradingView](#tradingview)) |
+| `tradingview` | Free | Spot gold from TradingView, `FX:XAUUSD` (FXCM) by default; ~5 days of 1-minute bars at first. Needs Node 20+ when run from source; the Windows app bundles it (see [TradingView](#tradingview)) |
 | `csv` | - | M1 bars from a file another process keeps appending to (`time, open, high, low, close[, volume]`) |
 | `synthetic` | - | Demo data, never stored: the newest real bars in the database, then a random walk from them (see below) |
 
-When the database holds real bars (MT5 first, otherwise Yahoo or CSV; never the
+MetaTrader 5 is no longer a data source: connecting to the terminal froze it when
+the Windows app started. A source saved as `mt5` by an older version, or
+`XAU_SOURCE=mt5`, falls back to Yahoo Finance with a warning in the log; pick
+another one in Settings. To use your broker's own prices, export M1 bars from
+MT5 and import them in [Lab > Data](lab.md#data), or keep a CSV up to date for
+the `csv` source.
+
+When the database holds real bars (the most recent stream of any real source; never the
 sample journal's), the demo shows them: the last 45 days of real candles as
 stored, then a random walk from the last real close to now, and on live. Before
 the first real bar a made-up walk leads into its open, since a scan needs more
@@ -23,7 +29,6 @@ demo is a random walk from 2650.
 
 ```bash
 uv sync                      # default setup (Yahoo Finance + SQLite)
-uv sync --extra mt5          # MetaTrader 5 feed (Windows only)
 uv sync --extra postgres     # PostgreSQL storage
 uv sync --extra llm          # Claude / OpenAI SDKs for the news brief
 uv sync --extra ml           # scikit-learn + pyarrow for the Lab (training, model files, Parquet)
@@ -38,17 +43,16 @@ a section). Saving restarts the feed live, no server restart needed.
 
 Where a setting comes from, strongest first:
 
-1. A command line flag (`--source mt5`)
+1. A command line flag (`--source tradingview`)
 2. The choice saved from the dashboard
 3. `XAU_SOURCE` in `.env`
 4. The default (`yfinance`)
 
 `--reset-settings` forgets the saved choice. Switching the source resets the
-symbol to that source's default (`GC=F` for Yahoo, `XAUUSD` for MT5, `FX:XAUUSD`
-for TradingView).
+symbol to that source's default (`GC=F` for Yahoo, `FX:XAUUSD` for TradingView,
+`XAUUSD` for CSV).
 
 ```bash
-uv run wednesday --source mt5 --symbol XAUUSD # MT5 terminal running and logged in
 uv run wednesday --source tradingview                  # FX:XAUUSD, FXCM spot gold
 uv run wednesday --source tradingview --symbol OANDA:XAUUSD
 uv run wednesday --source csv --csv data/xauusd_m1.csv
@@ -57,19 +61,20 @@ uv run wednesday --source synthetic --once    # demo data, one scan
 
 ## Feed clock
 
-Bar times are kept in the feed's own clock (candles line up with your MT5
-chart). The quarterly view converts them to New York time, so it needs to know
+Bar times are kept in the feed's own clock. Yahoo Finance and TradingView give
+UTC; a CSV file is in whatever clock wrote it. The quarterly view converts them to New York time, so it needs to know
 that clock. Set it in **Settings > Data source > Feed clock**, `XAU_CLOCK` or `--clock`:
 
 | Value | Meaning |
 | --- | --- |
 | `UTC` | Default for Yahoo Finance, TradingView, CSV and demo data |
-| `NY+7` | New York time plus 7 hours, default for MT5: the server time of most gold brokers (midnight there is the 17:00 NY close, UTC+2 in winter and UTC+3 in summer) |
+| `NY+7` | New York time plus 7 hours: the server time of most gold brokers (midnight there is the 17:00 NY close, UTC+2 in winter and UTC+3 in summer), for a CSV written in broker time |
 | `UTC+2`, `UTC+3`, ... | A fixed offset with no daylight saving |
 | `Europe/London`, `Asia/Jakarta`, ... | Any IANA time zone |
 
-If your broker doesn't follow the NY+7 convention, compare the time of the last
-candle in MT5 with the time in New York and pick the matching value.
+For a CSV in broker time whose broker doesn't follow the NY+7 convention,
+compare the time of the last candle in the broker's platform with the time in
+New York and pick the matching value.
 
 ## Live price
 
@@ -79,9 +84,7 @@ header price, the ladder and the chart's last candle move without waiting for th
 next scan. When the minute closes, the scan fetches only that closed bar (history
 already loaded is never fetched again) and it replaces the candle the ticks built,
 since ticks sampled every second or more can miss the minute's true high or low.
-With MT5 every tick since the last poll is read (`copy_ticks_from`), so the
-forming candle's high and low are exact and the interval only sets how quickly
-the price moves on screen. Ticks are polled on the feed thread, which never runs
+Ticks are polled on the feed thread, which never runs
 the scan, so a slow scan doesn't freeze the price.
 
 The dashboard gets the price pushed over `/api/stream` (server-sent events) the
@@ -94,7 +97,6 @@ Set the interval in **Settings > Data source > Live price every**, `XAU_TICK` in
 
 | Source | Default | Fastest |
 | --- | --- | --- |
-| MT5 | 0.25 s | 0.1 s |
 | TradingView | 1 s | 0.5 s: read from a quote stream kept open, not a request each time |
 | Demo data | 2 s | 0.5 s |
 | Yahoo Finance | 60 s (once a minute, with the scan) | 15 s: each update is a request to Yahoo |
@@ -103,29 +105,6 @@ Set the interval in **Settings > Data source > Live price every**, `XAU_TICK` in
 `0` turns live prices off. A tick only starts a forming candle within 5 minutes of
 the last closed bar, so a closed market doesn't draw a candle after the gap.
 
-## MetaTrader 5
-
-The MT5 Python API talks to a terminal running on the same Windows machine, so
-the screener and the terminal always live together. Test the connection first:
-
-```bash
-uv run wednesday --source mt5 --check
-```
-
-If the terminal is already open and logged in, no credentials are needed.
-Otherwise set the terminal, login and server in **Settings** (or `MT5_PATH`,
-`MT5_LOGIN`, `MT5_SERVER` in `.env`). Settings lists the MT5 terminals installed
-on the PC, for when there are several. The password is entered in Settings and
-kept in Windows Credential Manager (through `keyring`), never in the database;
-`MT5_PASSWORD` in the environment still works for older setups.
-
-Connecting starts the terminal at `MT5_PATH` once. If that fails, the feed
-records the error and stops instead of retrying (a retry would open the
-terminal again); a lost connection is retried up to 3 times, a minute apart,
-and only while the terminal is still running. **Reconnect** in Settings starts
-it again. Other sources keep retrying every minute.
-Full Windows and VPS setup: [deploy-windows.md](deploy-windows.md).
-
 ## TradingView
 
 The `tradingview` source reads TradingView's market data through
@@ -133,12 +112,12 @@ The `tradingview` source reads TradingView's market data through
 (`@mathieuc/tradingview`), a community library. It is **unofficial**: TradingView
 doesn't offer this as an API, its terms don't allow automated access to its data,
 and the library can stop working when TradingView changes its site. Use it for
-personal charts, and keep MT5 or Yahoo Finance as a fallback.
+personal charts, and keep Yahoo Finance as a fallback.
 
 It runs as a small Node helper (`tradingview/feed.mjs`) that the screener starts
-and keeps running, with one websocket open. It needs Node 20+ and Wednesday run
-from source; the Windows app has no Node, so there the source shows as
-unavailable.
+and keeps running, with one websocket open. The Windows app bundles Node.js and
+the helper, so there it works with nothing to install. Run from source, it needs
+Node 20+ on the PATH and the helper's packages:
 
 ```bash
 make install                      # also installs the helper (npm install in tradingview/)
@@ -188,9 +167,6 @@ scan uses. Drag it to the left and older candles load as you reach the edge,
 300 at a time, with no effect on the scan. They come from the M1 bars in
 memory first, then:
 
-- **MT5**: the terminal's own candles of that timeframe (H1, H4, ...), not M1,
-  so going back months is quick. How far depends on the history the terminal
-  has downloaded and on **Max bars in chart**.
 - **Yahoo Finance, TradingView and CSV**: the M1 bars stored in the database, so as far back
   as the screener has been running (Yahoo itself only gives ~7 days of M1), or
   as far as the files imported in [Lab > Data](lab.md#data).

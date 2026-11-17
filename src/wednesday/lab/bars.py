@@ -1,7 +1,7 @@
-"""More M1 history for the Lab (and the chart): import CSV files, backfill from MT5.
+"""More M1 history for the Lab (and the chart): import CSV files.
 
-Both write into the stored bars of the running source and symbol, as an upsert
-on time, so importing a file twice or overlapping a backfill adds nothing twice.
+Imports write into the stored bars of the running source and symbol, as an upsert
+on time, so importing a file twice or overlapping files adds nothing twice.
 
 File formats recognised:
 
@@ -18,11 +18,7 @@ from __future__ import annotations
 import io
 import logging
 import re
-import threading
-import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -31,13 +27,11 @@ from ..quarters import clock_error, convert_clock
 from ..timeframes import OHLCV_COLUMNS, normalize_ohlcv
 
 if TYPE_CHECKING:
-    from ..engine import Engine
     from ..storage import Store
 
 log = logging.getLogger(__name__)
 
 MAX_IMPORT_BYTES = 500 * 1024 * 1024
-BACKFILL_CHUNK = pd.Timedelta(days=5)  # ~7k M1 bars per terminal call; scans run in between
 HISTORY_BARS_DEFAULT = 400_000  # about a year of M1 bars
 HISTORY_BARS_MAX = 2_000_000  # about five years; ~100 MB in memory
 LAB_DATA_KEY = "lab_data"
@@ -170,75 +164,3 @@ def import_bars(store: Store, key: tuple[str, str], parsed: ParsedBars, file_clo
     after, _, _ = store.bar_bounds(*key)
     return {"read": len(bars), "added": after - before, "first": bars.index[0].isoformat(),
             "last": bars.index[-1].isoformat(), "stored": after}
-
-
-class Backfill:
-    """Pulls older M1 bars from the MT5 terminal into the database, a chunk at a time, on a thread."""
-
-    def __init__(self):
-        self._thread: threading.Thread | None = None
-        self._cancel = threading.Event()
-        self.state: dict = {"running": False, "start": None, "reached": None, "added": 0, "error": None,
-                            "note": None, "finished_at": None}
-
-    @property
-    def running(self) -> bool:
-        return bool(self._thread and self._thread.is_alive())
-
-    def start(self, engine: Engine, store: Store, start: pd.Timestamp, on_done: Callable[[], None] | None = None) -> None:
-        if self.running:
-            raise RuntimeError("A backfill is already running")
-        key = engine.buffer.key
-        if not engine.feed.native_history or key is None:
-            raise RuntimeError("Backfill reads from the MT5 terminal: make MT5 the data source first")
-        self._cancel.clear()
-        self.state = {"running": True, "start": start.isoformat(), "reached": None, "added": 0, "error": None,
-                      "note": None, "finished_at": None}
-        self._thread = threading.Thread(target=self._run, args=(engine, store, key, start, on_done),
-                                        name="lab-backfill", daemon=True)
-        self._thread.start()
-
-    def cancel(self) -> None:
-        self._cancel.set()
-
-    def _run(self, engine: Engine, store: Store, key: tuple[str, str], start: pd.Timestamp, on_done) -> None:
-        try:
-            _, first, _ = store.bar_bounds(*key)
-            _, _, live = engine.snapshot()
-            if first is not None:
-                end = pd.Timestamp(first, unit="s")
-            elif live is not None and len(live):
-                end = live.index[0]
-            else:
-                end = pd.Timestamp.now(tz="UTC").tz_localize(None).floor("min")
-            empty = 0
-            while end > start and not self._cancel.is_set():
-                begin = max(start, end - BACKFILL_CHUNK)
-                bars = engine.call(lambda feed, b=begin, e=end: feed.fetch_m1_range(b, e), timeout=120)
-                bars = bars[(bars.index >= begin) & (bars.index < end)]
-                if bars.empty:
-                    empty += 1
-                    if empty >= 3:  # 15 days with nothing: the terminal has no older M1 history
-                        self.state["note"] = ("The terminal has no M1 bars before "
-                                              f"{end:%Y-%m-%d}. In MT5, raise Tools > Options > Charts > Max bars "
-                                              "in chart and scroll the M1 chart back so it downloads more, then run "
-                                              "the backfill again.")
-                        break
-                else:
-                    empty = 0
-                    before, _, _ = store.bar_bounds(*key)
-                    store.save_bars(*key, bars)
-                    self.state["added"] += store.bar_bounds(*key)[0] - before
-                end = begin
-                self.state["reached"] = end.isoformat()
-                time.sleep(0.05)
-            if self._cancel.is_set():
-                self.state["note"] = "Stopped."
-        except Exception as exc:  # noqa: BLE001 - shown in the Lab
-            log.exception("backfill failed")
-            self.state["error"] = str(exc)
-        finally:
-            self.state["running"] = False
-            self.state["finished_at"] = datetime.now(timezone.utc).isoformat()
-            if on_done:
-                on_done()

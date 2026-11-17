@@ -1,5 +1,6 @@
 # PyInstaller spec for the Windows desktop app. Build on Windows from the repository root,
-# after `npm run build` in web/ and `uv sync --extra desktop --extra mt5 --extra llm --extra ml`:
+# after `npm run build` in web/, `npm ci --omit=dev` in tradingview/, node.exe (Node 22) copied to
+# packaging/node/ with its LICENSE, and `uv sync --extra desktop --extra llm --extra ml`:
 #
 #   uv run --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 #
@@ -13,12 +14,24 @@ ROOT = Path(SPECPATH).parent
 if not (ROOT / "web" / "dist" / "index.html").is_file():
     raise SystemExit("Build the dashboard first: cd web && npm ci && npm run build")
 
+# The TradingView data source: its Node helper and node.exe to run it (feeds.tradingview_command).
+NODE = ROOT / "packaging" / "node"
+if not (ROOT / "tradingview" / "node_modules" / "@mathieuc" / "tradingview").is_dir():
+    raise SystemExit("Install the TradingView helper first: cd tradingview && npm ci --omit=dev")
+if not (NODE / "node.exe").is_file() or not (NODE / "LICENSE").is_file():
+    raise SystemExit("Copy node.exe (Node 22) and its LICENSE into packaging/node/")
+
 datas = [
     (str(ROOT / "web" / "dist"), "web/dist"),
     (str(ROOT / "DISCLAIMER.md"), "."),  # shown in the app until accepted (terms.py)
     (str(ROOT / "LICENSE"), "."),
     (str(ROOT / "THIRD_PARTY_NOTICES.md"), "."),  # Lightweight Charts (Apache-2.0) and the other bundled packages
+    (str(ROOT / "tradingview" / "feed.mjs"), "tradingview"),
+    (str(ROOT / "tradingview" / "package.json"), "tradingview"),
+    (str(ROOT / "tradingview" / "node_modules"), "tradingview/node_modules"),
+    (str(NODE / "LICENSE"), "node"),
 ]
+binaries = [(str(NODE / "node.exe"), "node")]
 # Time zone database for zoneinfo: Windows has none of its own.
 datas += collect_data_files("tzdata")
 
@@ -37,6 +50,7 @@ a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],
     pathex=[str(ROOT / "src")],
     datas=datas,
+    binaries=binaries,
     hiddenimports=hiddenimports,
     excludes=["tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6", "qtpy", "gi", "pytest"],
     noarchive=False,

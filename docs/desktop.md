@@ -14,6 +14,23 @@ closing the window stops both.
    is not code signed: click **More info > Run anyway**.
 3. Start **Wednesday** from the Start menu or the desktop icon.
 
+### Reinstalling over an earlier install
+
+When `%LOCALAPPDATA%\Wednesday` already exists (Wednesday was installed on this
+PC before), the installer asks what to do with it:
+
+- **Keep my data and settings** (the default): settings, the database, journals,
+  Lab models and logs stay as they are. This is the normal upgrade.
+- **Fresh install: delete all previous data and settings**: asks you to confirm,
+  then deletes that folder and removes the secrets Wednesday saved in Windows
+  Credential Manager (API keys and the Telegram bot token, and the MT5 password
+  older versions kept there). Journals, Lab models and stored price history go
+  too, and it can't be undone. Close Wednesday first: files still in use can't be
+  deleted, and the installer says so.
+
+A silent install (`/SILENT` or `/VERYSILENT`) keeps the data; add `/FRESH=1` for
+a fresh install.
+
 The window is drawn by Microsoft Edge WebView2. Windows 11 has it; if a Windows 10
 PC lacks it, the installer offers to download it.
 
@@ -31,9 +48,8 @@ upgrading or uninstalling keeps it:
 | `webview\` | The window's storage: dashboard layout and preferences |
 
 Everything is set in the dashboard under **Settings**; the app needs no `.env`.
-The MT5 password, the Telegram bot token and the LLM API keys are kept in Windows
-Credential Manager (entries named `Wednesday` and `Wednesday MT5`), never in the
-database or a file. A `.env` in this folder is still read if you create one.
+The Telegram bot token and the LLM API keys are kept in Windows
+Credential Manager (entries named `Wednesday`), never in the database or a file. A `.env` in this folder is still read if you create one.
 
 On first start the app shows the [disclaimer and risk agreement](../DISCLAIMER.md);
 it can't be used until you accept it. The installer asks the same before
@@ -48,33 +64,22 @@ whose monitor is gone (a laptop undocked) opens on the main screen, fully
 visible. Named workspaces (see [Workspaces](dashboard.md#workspaces)) switch
 between saved window sets.
 
-The installer includes the MT5, news brief and Lab extras, so every source and
-feature works without installing Python.
+The installer includes the news brief and Lab extras, and Node.js with the
+TradingView helper, so every source and feature works without installing Python
+or Node.
 
-## Connecting to MetaTrader 5
+## Data source
 
-In **Settings > Data source**, pick **MetaTrader 5**, then:
+In **Settings > Data source**, pick Yahoo Finance (the default), TradingView,
+a CSV file or demo data; see [Data sources](data-sources.md). **Save and restart
+feed** applies it. The status says **Connecting…** until the first scan is in,
+and only then **Connected**.
 
-- **Terminal**: choose it from the list of MT5 terminals installed on this PC
-  (MetaQuotes' own and each broker's), or **Browse…** to its `terminal64.exe`,
-  or paste the path or its folder. With several terminals, pick the one logged in
-  to the account you want.
-- **Login**, **Server**, **Password**: optional when that terminal is already open
-  and logged in. Paste the account number and the broker's server name as MT5
-  shows them. The password is saved in Windows Credential Manager for that login,
-  never in the database or a file; leave it empty later to keep it, or
-  **Forget the saved password**.
-
-**Save and restart feed** starts the terminal once if it isn't running. The status
-says **Connecting…** until the first scan is in, and only then **Connected**. If
-it can't connect (wrong password, you closed the login window, symbol missing),
-it shows the error and stops: it doesn't open the terminal again. Fix the cause
-and press **Reconnect**.
-
-If the connection drops later, it tries again up to 3 times, a minute apart
-(**Trying to reconnect, attempt 1 of 3**), only while the terminal is still open.
-A terminal you closed is never reopened; after the third try the feed stops and
-waits for **Reconnect**.
+MetaTrader 5 is no longer a data source: connecting to it opened the terminal
+when the app started and froze it. If an older version was set to MT5, the app
+starts on Yahoo Finance instead; pick the source you want in Settings. The
+[journal](journal.md) still imports MT5's history report, and
+[Lab > Data](lab.md#data) imports M1 bars exported from MT5.
 
 Only one copy runs at a time; starting a second one says it is already running.
 The dashboard uses port `XAU_PORT` (8000) on `127.0.0.1`, or a free port when that
@@ -83,7 +88,7 @@ one is taken.
 ## Run from source
 
 ```bash
-uv sync --extra desktop --extra llm --extra ml   # add --extra mt5 on Windows
+uv sync --extra desktop --extra llm --extra ml
 make ui
 uv run wednesday-desktop
 ```
@@ -96,9 +101,11 @@ uv run wednesday-desktop
 `.github/workflows/release-windows.yml` builds on a Windows runner:
 
 1. the dashboard (`npm ci && npm run build` in `web/`),
-2. the Python environment (`uv sync --frozen --extra desktop --extra mt5 --extra llm --extra ml`),
-3. the program with PyInstaller (`packaging/wednesday.spec`, output `dist\Wednesday\`),
-4. the installer with Inno Setup (`packaging/wednesday.iss`, output `dist\WednesdaySetup-<version>.exe`).
+2. the TradingView helper (`npm ci --omit=dev` in `tradingview/`) and `node.exe`
+   with its license, copied into `packaging\node\`,
+3. the Python environment (`uv sync --frozen --extra desktop --extra llm --extra ml`),
+4. the program with PyInstaller (`packaging/wednesday.spec`, output `dist\Wednesday\`),
+5. the installer with Inno Setup (`packaging/wednesday.iss`, output `dist\WednesdaySetup-<version>.exe`).
 
 To publish a release, tag a commit and push the tag; the version comes from the
 tag:
@@ -128,7 +135,11 @@ The same steps on a Windows PC, from the repository root:
 
 ```powershell
 cd web; npm ci; npm run build; cd ..
-uv sync --frozen --extra desktop --extra mt5 --extra llm --extra ml
+npm ci --omit=dev --prefix tradingview
+New-Item -ItemType Directory -Force packaging\node
+Copy-Item (Get-Command node).Source packaging\node\node.exe   # Node 22
+Copy-Item (Join-Path (Split-Path (Get-Command node).Source) LICENSE) packaging\node\LICENSE
+uv sync --frozen --extra desktop --extra llm --extra ml
 uv run --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=0.2.0 packaging\wednesday.iss
 ```

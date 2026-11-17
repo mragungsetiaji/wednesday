@@ -1,7 +1,7 @@
 """HTTP API + static React dashboard.
 
 The scan engine runs on a background thread; request handlers only read its
-snapshots, so they never touch the data feed (MT5) directly.
+snapshots, so they never touch the data feed directly.
 """
 
 from __future__ import annotations
@@ -45,7 +45,6 @@ from .quarters import NEW_YORK, quarter_blocks, quarters_payload, utc_to_feed
 from .sessions import reference_levels
 from .snapshots import Snapshots, SnapshotError
 from .distribution import distribution as move_distribution, tables as distribution_tables_of
-from .mt5_terminals import find_terminals
 from .secret_store import get_secret, update_secrets
 from .sizing import RiskSettings, pip_size
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
@@ -137,7 +136,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                 "error_at": _iso(st.error_at),
                 "conn": st.conn,
                 "tick_seconds": engine.tick_seconds if 0 < engine.tick_seconds < 60 else 0,
-                "pip": pip_size(engine.symbol, st.result.price if st.result else None, st.spec),
+                "pip": pip_size(engine.symbol, st.result.price if st.result else None),
                 "clock_offset": clock_offset(current_clock()),
                 "poll": engine.poll,  # False with --no-poll: one scan, then nothing new
                 "app_version": __version__,
@@ -166,16 +165,13 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return scan_dict
 
     def risk_payload() -> dict:
-        engine = current()
-        with engine.state.lock:
-            spec = engine.state.spec
         sizer = runtime.sizer() if runtime else None
         return {"editable": runtime is not None, "settings": runtime.risk.to_dict() if runtime else None,
-                "mt5": spec, "sizer": sizer.to_dict() if sizer else None}
+                "sizer": sizer.to_dict() if sizer else None}
 
     @app.get("/api/risk")
     def get_risk() -> dict:
-        """Settings > Risk, what the terminal reports (MT5), and the sizing in use."""
+        """Settings > Risk and the sizing in use."""
         return risk_payload()
 
     @app.put("/api/risk")
@@ -321,7 +317,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         if before is not None:
             try:
                 older, more = older_candles(current(), timeframe, before, limit)
-            except RuntimeError as exc:  # MT5 closed or not connected
+            except RuntimeError as exc:  # the feed is down
                 raise HTTPException(503, str(exc)) from exc
             return {"timeframe": timeframe.name, "candles": _candle_rows(older), "has_more": more}
         _, result, m1 = current().snapshot()
@@ -721,8 +717,6 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             "editable": runtime is not None,
             "settings": runtime.settings.to_dict() if runtime else None,
             "sources": catalog(),
-            # Only whether a password is known and where it's kept; never the password itself.
-            "mt5_password": runtime.mt5_password_for(runtime.settings)[1] if runtime else None,
             "running": running,
             "storage": {**store.describe(), "series": store.bar_stats()} if store else None,
         }
@@ -735,9 +729,6 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     def put_settings(body: dict = Body(...)) -> dict:
         if runtime is None:
             raise HTTPException(409, "Settings can only be changed when the server runs with --serve")
-        body = dict(body)
-        password = str(body.pop("mt5_password", None) or "")
-        forget = bool(body.pop("forget_mt5_password", False))
         try:
             new = DataSettings.from_dict({**DataSettings().to_dict(), **body})
         except (TypeError, ValueError) as exc:
@@ -746,16 +737,8 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         ok, reason = source_availability(new.source) if not errors else (True, None)
         if not ok:
             errors.append(reason)
-        if not errors and (err := new.terminal_error()):
-            errors.append(err)
-        if password and new.mt5_login is None:
-            errors.append("Enter the MT5 login that goes with the password")
         if errors:
             raise HTTPException(422, "; ".join(errors))
-        if forget:
-            runtime.forget_mt5_password(new.mt5_login, new.mt5_server)
-        if password:
-            runtime.set_mt5_password(new.mt5_login, new.mt5_server, password)
         if runtime.store:
             runtime.store.set_setting(SETTINGS_KEY, new.to_dict())
         runtime.apply(new)
@@ -767,11 +750,6 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             raise HTTPException(409, "The feed can only be restarted when the server runs with --serve")
         runtime.reconnect()
         return settings_payload()
-
-    @app.get("/api/mt5/terminals")
-    def mt5_terminals() -> dict:
-        """MT5 terminals installed on this PC, to pick one in Settings."""
-        return {"terminals": find_terminals()}
 
     def alerts_payload() -> dict:
         alerts = runtime.alerts if runtime else None

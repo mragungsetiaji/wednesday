@@ -1,7 +1,7 @@
 """Scan engine shared by the console loop and the web server.
 
-Two threads. The **feed thread** owns the feed (MetaTrader 5 must only be used from
-the thread that connected it) and does only light work: live ticks, the M1 fetch at
+Two threads. The **feed thread** owns the feed (a feed's connection is only used from
+the thread that opened it) and does only light work: live ticks, the M1 fetch at
 each minute close, and short tasks queued through :meth:`Engine.call`. The **scan
 worker** runs the scan, the alerts and the plugins' after-scan hooks on the fetched
 bars, so a slow scan never stalls the live price (#25). Readers only get snapshots.
@@ -24,15 +24,14 @@ from .drawing_alerts import DrawingAlerts
 from .feeds import DataFeed, M1Buffer, build_feed
 from .plugins import Hooks
 from .scanner import ScanConfig, ScanResult, scan
-from . import secret_store
-from .settings import MT5_SERVICE, DataSettings, mt5_account
+from .settings import DataSettings
 from .sizing import RISK_KEY, RiskSettings, Sizer, resolve
 from .storage import Store
 
 log = logging.getLogger(__name__)
 
 
-# A feed that doesn't retry its connection (MT5) gets this many tries after losing it.
+# A feed that doesn't retry its connection (retry_connect = False) gets this many tries after losing it.
 RECONNECT_ATTEMPTS = 3
 # A queued feed task longer than this holds up the live price; it's logged so it can be found.
 SLOW_TASK = 0.2
@@ -56,7 +55,6 @@ class EngineState:
     # connecting -> connected; reconnecting while a lost connection is retried; failed once it gave up.
     conn: str = "connecting"
     attempt: int = 0  # reconnect attempts so far
-    spec: dict | None = None  # balance and contract spec from the feed (MT5), for position sizing
     # Between scans: {"price", "time", "bar"}; bar is the forming M1 candle built from ticks, or None.
     live: dict | None = None
     tick: int = 0  # bumps on every live price
@@ -95,22 +93,17 @@ class Engine:
         Errors are recorded in the state and re-raised."""
         return self._scan(*self._fetch())
 
-    def _fetch(self) -> tuple[pd.DataFrame, float | None, dict | None]:
-        """The feed's part of a scan, on the feed thread: new M1 bars, the last price and the trading spec."""
+    def _fetch(self) -> tuple[pd.DataFrame, float | None]:
+        """The feed's part of a scan, on the feed thread: new M1 bars and the last price."""
         try:
             m1 = self.buffer.update()
             price = self.feed.last_price()
         except Exception as exc:
             self._record_error(exc)
             raise
-        try:
-            spec = self.feed.trading_spec()
-        except Exception:  # sizing falls back to Settings > Risk; never fail a scan over it
-            log.debug("no trading spec", exc_info=True)
-            spec = None
-        return m1, price, spec
+        return m1, price
 
-    def _scan(self, m1: pd.DataFrame, price: float | None, spec: dict | None) -> ScanResult:
+    def _scan(self, m1: pd.DataFrame, price: float | None) -> ScanResult:
         """The heavy part, which never touches the feed: scan the bars and publish the result."""
         try:
             result = scan(m1, self.cfg, price)
@@ -121,7 +114,6 @@ class Engine:
             self.state.version += 1
             self.state.result = result
             self.state.m1 = m1
-            self.state.spec = spec
             self.state.scanned_at = datetime.now(timezone.utc)
             self.state.error = None
             self.state.error_at = None
@@ -133,7 +125,7 @@ class Engine:
     def tick(self) -> None:
         """Poll the live price and fold it into the forming M1 candle. Never raises.
 
-        A feed with ``new_ticks`` (MT5) hands over every tick since the last poll, so the forming
+        A feed with ``new_ticks`` hands over every tick since the last poll, so the forming
         candle's high and low are exact whatever the poll interval; others give the latest one."""
         try:
             got = self.feed.new_ticks() if hasattr(self.feed, "new_ticks") else [self.feed.last_tick()]
@@ -172,8 +164,8 @@ class Engine:
     def call(self, fn, timeout: float = 60):
         """Run ``fn(feed)`` on the scan thread between scans and return its result.
 
-        MT5 must only be used from the thread that connected it, so anything else
-        that needs the terminal (the journal's sync) goes through here.
+        A feed's connection is only used from the thread that opened it, so anything else
+        that reads the feed (scrolling the chart back, plugins) goes through here.
         """
         if self._thread is None or not self._thread.is_alive():
             if self.state.conn == "failed":
@@ -237,7 +229,7 @@ class Engine:
 
         Most feeds retry a failed connection or scan on the next minute, so a
         network blip doesn't kill the loop. A feed with ``retry_connect = False``
-        (MT5) gives up at once when the first connection fails, and after
+        gives up at once when the first connection fails, and after
         ``RECONNECT_ATTEMPTS`` failed minutes in a row once it had connected; the
         state then says ``failed`` until the dashboard restarts the feed.
         """
@@ -259,7 +251,7 @@ class Engine:
                     if not self.poll:
                         log.info("%s: polling off, keeping this scan", self.feed.name)
                         while not self._stop.is_set():
-                            self._idle(3600)  # still runs queued feed work (scrolling back, journal sync)
+                            self._idle(3600)  # still runs queued feed work (scrolling back)
                         break
                 except Exception as exc:
                     failures += 1
@@ -334,7 +326,9 @@ class ScanWorker:
             self._thread.join(timeout)
 
 
-REAL_SOURCES = ("mt5", "tradingview", "yfinance", "csv")  # stored bars that are market data (not "sample" or demo)
+# Stored bars that are market data (not "sample" or demo). "mt5": bars stored by the MT5 source of
+# older versions, still in some databases.
+REAL_SOURCES = ("tradingview", "yfinance", "csv", "mt5")
 
 
 DEMO_REAL_DAYS = 45  # how much real history the demo shows at most
@@ -342,7 +336,7 @@ DEMO_REAL_DAYS = 45  # how much real history the demo shows at most
 
 def _newest_real(store: Store) -> tuple[str, str, str, pd.Timestamp] | None:
     """(source, symbol, clock, last bar in UTC) of the stored market stream to build the demo from:
-    MT5 first, then the most recent of the others. The sample journal's bars are never used."""
+    the most recent one. The sample journal's bars are never used."""
     from .quarters import to_utc
     from .settings import SOURCES
 
@@ -353,12 +347,11 @@ def _newest_real(store: Store) -> tuple[str, str, str, pd.Timestamp] | None:
         got = store.last_bar(row["source"], row["symbol"])
         if got is None:
             continue
-        clock = SOURCES[row["source"]].get("default_clock", "UTC")
+        clock = SOURCES[row["source"]]["default_clock"] if row["source"] in SOURCES else "NY+7"  # old MT5 bars
         at = to_utc(pd.DatetimeIndex([pd.Timestamp(got[0], unit="s")]), clock)[0].tz_localize(None)
-        rank = (row["source"] == "mt5", at)
-        if best is None or rank > best[0]:
-            best = (rank, (row["source"], row["symbol"], clock, at))
-    return best[1] if best else None
+        if best is None or at > best[3]:
+            best = (row["source"], row["symbol"], clock, at)
+    return best
 
 
 def real_price(store: Store | None) -> tuple[pd.Timestamp, float] | None:
@@ -399,12 +392,11 @@ class Runtime:
     """Owns the running engine so the dashboard can switch data sources live."""
 
     def __init__(self, cfg: ScanConfig, settings: DataSettings, store: Store | None = None,
-                 mt5_password: str | None = None, delay: float = 2.0, on_result=None, alerts=None, brief=None,
+                 delay: float = 2.0, on_result=None, alerts=None, brief=None,
                  calendar=None, lab=None, journals=None, poll: bool = True):
         self.cfg = cfg
         self.poll = poll  # False: every engine scans once and stops (--no-poll)
         self.store = store
-        self.mt5_password = mt5_password  # MT5_PASSWORD from the environment, for setups that still use it
         self.delay = delay
         self.on_result = on_result
         self.alerts = alerts  # AlertManager or None
@@ -415,11 +407,6 @@ class Runtime:
         self.calendar = calendar  # news.Calendar or None
         self.lab = lab  # lab.service.Lab or None (needs a database)
         self.journals = journals  # journal.service.Journals or None (needs a database)
-        self.autosync = None
-        if journals is not None:
-            from .journal.autosync import AutoSync
-
-            self.autosync = AutoSync(journals)  # keeps journals in sync with the MT5 terminal after each scan
         self.hooks = Hooks()  # filled by plugins (see plugins.py)
         self.bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
         self.risk = load_risk(store)
@@ -429,27 +416,11 @@ class Runtime:
 
     def _build(self, settings: DataSettings) -> Engine:
         real = real_history(self.store) if settings.source == "synthetic" else None
-        feed = build_feed(settings, self.mt5_password_for(settings)[0], real=real)
+        feed = build_feed(settings, real=real)
         engine = Engine(feed, self.cfg, settings.resolved_symbol, self.store, tick_seconds=settings.resolved_tick,
                         poll=self.poll)
         engine.on_tick = lambda price, at: self._on_tick(engine, price, at)
         return engine
-
-    def mt5_password_for(self, settings: DataSettings) -> tuple[str | None, str | None]:
-        """The MT5 password for the settings' account and where it came from: saved, session or env."""
-        if settings.mt5_login is not None:
-            pw, source = secret_store.recall(MT5_SERVICE, mt5_account(settings.mt5_login, settings.mt5_server))
-            if pw:
-                return pw, source
-        if self.mt5_password:
-            return self.mt5_password, "env"
-        return None, None
-
-    def set_mt5_password(self, login: int, server: str | None, password: str) -> None:
-        secret_store.remember(MT5_SERVICE, mt5_account(login, server), password)
-
-    def forget_mt5_password(self, login: int | None, server: str | None) -> None:
-        secret_store.forget(MT5_SERVICE, mt5_account(login, server))
 
     def active_bias(self) -> TradeBias | None:
         """The trader's bias, unless it has expired."""
@@ -467,10 +438,8 @@ class Runtime:
                                         bias.direction if bias else None, bias.expires_at if bias else None)
 
     def sizer(self) -> Sizer | None:
-        """Position sizing from Settings > Risk and the terminal's balance and spec; None when off."""
-        with self.engine.state.lock:
-            spec = self.engine.state.spec
-        return resolve(self.risk, spec)
+        """Position sizing from Settings > Risk; None when off."""
+        return resolve(self.risk)
 
     def set_risk(self, risk: RiskSettings) -> None:
         self.risk = risk
@@ -492,11 +461,6 @@ class Runtime:
                 self.drawing_alerts.check(self.settings.source, engine.symbol, engine.state.m1, self.telegram_send())
             except Exception:  # noqa: BLE001 - never stop scanning over an alert
                 log.exception("drawing alert check failed")
-        if self.autosync is not None:
-            try:
-                self.autosync.check(engine.feed, engine.call)  # MT5 reads go through the feed thread
-            except Exception:  # noqa: BLE001 - never stop scanning over the journal
-                log.exception("journal auto-sync failed")
         self.hooks.run_after_scan(result, engine)
         if self.on_result:
             self.on_result(result)
@@ -522,7 +486,7 @@ class Runtime:
         self.engine.stop()
 
     def reconnect(self) -> None:
-        """Restart the feed with the current settings (after it gave up, or to pick up a new password)."""
+        """Restart the feed with the current settings (after it gave up)."""
         self.apply(self.settings)
 
     def apply(self, settings: DataSettings) -> None:

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  createJournal, fetchJournal, fetchJournals, restoreSample, saveTradeNote, syncJournal, type Journal, type JournalStats,
+  createJournal, fetchJournal, fetchJournals, restoreSample, saveTradeNote, type Journal, type JournalStats,
   type JournalTrade, type JournalsResponse,
   detachSnapshot,
   snapshotUrl,
@@ -74,7 +74,7 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
 
   useEffect(() => {
     loadList();
-    const id = setInterval(loadList, 30_000); // auto-sync status and new trades arrive on their own
+    const id = setInterval(loadList, 30_000); // another window may import a report
     return () => clearInterval(id);
   }, [loadList]);
 
@@ -86,7 +86,7 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
     return () => clearInterval(id);
   }, [selected?.id, loadStats]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A sync (by hand or automatic) changed the journal: reload its numbers.
+  // A report import changed the journal: reload its numbers.
   const syncedAt = selected?.synced_at ?? null;
   const firstSync = useRef(true);
   useEffect(() => {
@@ -113,21 +113,12 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
     }
   };
 
-  const refresh = async (id: string) => {
-    await loadList();
-    await loadStats(id);
-  };
-
-  // Create, then sync at once when the terminal is logged in to that account. If the sync fails the journal
-  // stays, empty, and the banner says why.
+  // Create an empty journal; its trades come from the account's history report.
   const create = (draft: NewDraft) => run(async () => {
-    const j = await createJournal(draft.name, draft.login, draft.sync);
+    const j = await createJournal(draft.name, draft.login);
     setCurrent(j.id);
     await loadList();
-    if (!draft.sync) return `Created ${j.name} for account ${j.login}. Import its history report, or turn on auto-sync in journal settings.`;
-    const r = await syncJournal(j.id);
-    await refresh(j.id);
-    return `Created ${j.name} and synced ${r.trades} trades and ${r.cash} deposits or withdrawals from account ${r.journal.login}.`;
+    return `Created ${j.name} for account ${j.login}. Import its history report in journal settings.`;
   });
 
   const restore = () => run(async () => {
@@ -182,7 +173,7 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
         <p className="empty">Working out the numbers…</p>
       ) : stats.trades.length === 0 && stats.cash.length === 0 ? (
         <>
-          <EmptyJournal journal={selected} />
+          <EmptyJournal />
           {!selected.sample && <JournalEntries journalId={selected.id} />}
         </>
       ) : (
@@ -213,7 +204,7 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
   );
 }
 
-// ---- head: the journal's name, its sync, and the way to its settings ------------------------
+// ---- head: the journal's name, its last import, and the way to its settings ------------------------
 
 function JournalHead({ journal, journals, onPick }: { journal: Journal; journals: Journal[]; onPick: (id: string) => void }) {
   const status = syncText(journal);
@@ -236,9 +227,7 @@ function JournalHead({ journal, journals, onPick }: { journal: Journal; journals
           ) : (
             <>
               {journal.login ? <span className="num">#{journal.login}{journal.server ? ` · ${journal.server}` : ""}</span> : <span>No account yet</span>}
-              {status.problem || journal.sync.state === "waiting"
-                ? <a href={JOURNAL_SETTINGS} className={status.problem ? "text-error" : undefined} title={status.title}>{status.text}</a>
-                : <span title={status.title}>{status.text}</span>}
+              <span title={status.title}>{status.text}</span>
             </>
           )}
         </p>
@@ -250,24 +239,14 @@ function JournalHead({ journal, journals, onPick }: { journal: Journal; journals
   );
 }
 
-function EmptyJournal({ journal }: { journal: Journal }) {
+function EmptyJournal() {
   return (
     <div className="journal-empty">
       <h3>No trades yet</h3>
-      {journal.auto_sync ? (
-        <p>
-          Auto-sync is on: trades show here within a minute of the MT5 terminal having them, while the data source is MT5
-          and the terminal is logged in to {journal.login ? <span className="num">#{journal.login}</span> : "this account"}.
-        </p>
-      ) : (
-        <ol>
-          <li><a href={JOURNAL_SETTINGS}>Turn on auto-sync</a> to read every deal from the MT5 terminal, when the data source is MT5.</li>
-          <li>
-            Or in the terminal: <em>History</em> tab, right click, <em>Report</em>, <em>HTML</em>, with <em>All history</em> selected.
-            Then <a href={JOURNAL_SETTINGS}>import the report</a>.
-          </li>
-        </ol>
-      )}
+      <ol>
+        <li>In the MT5 terminal: <em>History</em> tab, right click, <em>Report</em>, <em>HTML</em>, with <em>All history</em> selected.</li>
+        <li>Then <a href={JOURNAL_SETTINGS}>import the report</a> here.</li>
+      </ol>
     </div>
   );
 }
@@ -359,7 +338,7 @@ function Verification({ stats }: { stats: JournalStats }) {
               <CrossIcon />
               <span>
                 The balance doesn't match the terminal's (<span className="num">{fmtPrice(v.balance_reported as number)}</span>).
-                Set the terminal's History tab to all history, then sync again.
+                Export the report again with all history selected, then import it again.
               </span>
             </li>
           )}
@@ -397,7 +376,7 @@ function Verification({ stats }: { stats: JournalStats }) {
               ({v.offset_detected ? "detected" : <>set in <a href="#settings/journal">journal settings</a></>}). </>
             : "The trade times didn't line up with the stored prices at any offset. "}
           {from.length > 0 && <>Prices: {from.map(([sym, src]) => `${sym} from ${src}`).join(", ")}. </>}
-          {v.no_prices.length > 0 && <>No stored prices for {v.no_prices.join(", ")}: run the scanner on that symbol with MT5 to check them. </>}
+          {v.no_prices.length > 0 && <>No stored prices for {v.no_prices.join(", ")}: run the scanner on that symbol (TradingView or Yahoo Finance) to check them. </>}
         </p>
       </details>
     </div>

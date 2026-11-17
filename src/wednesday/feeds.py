@@ -11,17 +11,18 @@ import logging
 import queue
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
-from .timeframes import M1, OHLCV_COLUMNS, Timeframe, normalize_ohlcv
+from .timeframes import M1, OHLCV_COLUMNS, normalize_ohlcv
 
 if TYPE_CHECKING:
     from .settings import DataSettings
@@ -29,19 +30,11 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-# The MetaTrader5 module's constant for each chart timeframe.
-MT5_TIMEFRAMES = {"5M": "TIMEFRAME_M5", "15M": "TIMEFRAME_M15", "30M": "TIMEFRAME_M30",
-                  "1H": "TIMEFRAME_H1", "4H": "TIMEFRAME_H4"}
-
-
 class DataFeed(ABC):
     name = "base"
     persist = True  # store fetched bars in the database
-    # Keep retrying a failed connection every minute. MT5 doesn't: connecting starts the
-    # terminal, so retrying would reopen it every minute after the trader closed it.
+    # Keep retrying a failed connection every minute (False: give up after a few tries).
     retry_connect = True
-    # fetch_history serves each timeframe's own candles (the chart's older history).
-    native_history = False
 
     def connect(self) -> None:  # noqa: B027 - optional hook
         """Open connections / log in. Called once before the first fetch."""
@@ -62,259 +55,15 @@ class DataFeed(ABC):
         minute scans to build the forming candle. None when the feed has no live price."""
         return None
 
-    def trading_spec(self) -> dict | None:
-        """Account balance and the symbol's contract spec, for position sizing; None when the feed has none."""
-        return None
-
     def daily_history(self, clock: str, count: int) -> pd.DataFrame | None:
         """Up to ``count`` closed daily bars indexed by New York trading day (the day a
         17:00 New York close ends), for the move distribution's long lookbacks. None when
         the feed has none, or its days don't end at the New York close."""
         return None
 
-    def fetch_history(self, tf: Timeframe, before: pd.Timestamp, count: int) -> pd.DataFrame:
-        """Up to ``count`` closed ``tf`` candles opening before ``before`` (oldest first).
-
-        Only for feeds with ``native_history``; the others' history is the stored M1 bars.
-        """
-        raise NotImplementedError
-
     def describe(self) -> dict:
         """Connection details shown by ``--check``."""
         return {"feed": self.name}
-
-
-TICK_BATCH = 5000  # most ticks read per poll; a gold symbol rarely has more than a few hundred a second
-
-
-class MT5Feed(DataFeed):
-    """MetaTrader 5 terminal (Windows, ``uv sync --extra mt5``).
-
-    Bar times are broker server time, so resampled 4H/1H candles line up with
-    the MT5 chart.
-    """
-
-    name = "mt5"
-    native_history = True
-    retry_connect = False
-
-    def __init__(self, symbol: str = "XAUUSD", login: int | None = None,
-                 password: str | None = None, server: str | None = None, path: str | None = None,
-                 timeout_ms: int = 60_000):
-        self.symbol = symbol
-        self.login, self.password, self.server, self.path = login, password, server, path
-        self.timeout_ms = timeout_ms
-        self._mt5 = None
-
-    def connect(self) -> None:
-        try:
-            import MetaTrader5 as mt5
-        except ImportError as exc:  # pragma: no cover - platform specific
-            raise RuntimeError("MetaTrader5 is not installed. Run: uv sync --extra mt5 (Windows only)") from exc
-        # ``path`` (terminal64.exe) is positional; credentials are optional when the terminal is logged in.
-        args = [self.path] if self.path else []
-        kwargs = {k: v for k, v in {"login": self.login, "password": self.password,
-                                    "server": self.server}.items() if v is not None}
-        if not mt5.initialize(*args, timeout=self.timeout_ms, **kwargs):
-            err = mt5.last_error()
-            mt5.shutdown()
-            raise RuntimeError(f"MT5 initialize failed: {err}. Is the terminal installed, running and logged in?")
-        if not mt5.symbol_select(self.symbol, True):
-            err = mt5.last_error()
-            mt5.shutdown()
-            raise RuntimeError(f"MT5 symbol {self.symbol!r} not available: {err}. "
-                               "Check the exact name in Market Watch (e.g. XAUUSD.m, GOLD).")
-        self._mt5 = mt5
-
-    def reconnect(self) -> None:
-        """Connect again to a terminal that is still open; never start one the trader closed."""
-        log.warning("reconnecting to MT5")
-        self.close()
-        from .mt5_terminals import is_running
-
-        if self.path and not is_running(self.path):
-            raise RuntimeError("The MT5 terminal is closed. Open it, log in, then press Reconnect in Settings.")
-        self.connect()
-
-    def close(self) -> None:
-        if self._mt5 is not None:
-            self._mt5.shutdown()
-            self._mt5 = None
-
-    def _copy_rates(self, count: int):
-        mt5 = self._mt5
-        # Position 0 is the still-forming bar; start at 1 for closed bars only.
-        return mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M1, 1, count)
-
-    def fetch_m1(self, count: int) -> pd.DataFrame:
-        if self._mt5 is None:
-            self.reconnect()  # the connection was lost earlier
-        rates = self._copy_rates(count)
-        if rates is None or len(rates) == 0:
-            # Terminal restarted or lost its connection: re-initialise once and retry.
-            self.reconnect()
-            rates = self._copy_rates(count)
-        if rates is None or len(rates) == 0:
-            raise RuntimeError(f"MT5 returned no M1 data: {self._mt5.last_error()}")
-        if len(rates) < count:
-            log.warning("MT5 returned %d of %d requested M1 bars; raise Tools > Options > Charts > "
-                        "'Max bars in chart' or let the terminal download more history", len(rates), count)
-        df = pd.DataFrame(rates)
-        df.index = pd.to_datetime(df["time"], unit="s")  # broker server time
-        df = df.rename(columns={"tick_volume": "volume"})
-        return normalize_ohlcv(df)
-
-    def fetch_m1_range(self, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
-        """M1 bars opening in [start, end] (server time), for the Lab's backfill."""
-        if self._mt5 is None:
-            self.reconnect()
-        mt5 = self._mt5
-        rates = mt5.copy_rates_range(self.symbol, mt5.TIMEFRAME_M1, int(start.timestamp()), int(end.timestamp()))
-        if rates is None:
-            raise RuntimeError(f"MT5 returned no M1 history: {mt5.last_error()}")
-        if len(rates) == 0:
-            return pd.DataFrame(columns=OHLCV_COLUMNS, index=pd.DatetimeIndex([]), dtype=float)
-        df = pd.DataFrame(rates)
-        df.index = pd.to_datetime(df["time"], unit="s")
-        return normalize_ohlcv(df.rename(columns={"tick_volume": "volume"}))
-
-    def trading_spec(self) -> dict | None:
-        """Balance and lot rules from the terminal, and the money one lot makes per 1.00 move."""
-        mt5 = self._mt5
-        acc = mt5.account_info() if mt5 else None
-        sym = mt5.symbol_info(self.symbol) if mt5 else None
-        if not acc or not sym:
-            return None
-        tick = sym.trade_tick_size or sym.point
-        # Tick value is in the account currency; some brokers report 0 while the market is closed.
-        per_point = sym.trade_tick_value / tick if tick and sym.trade_tick_value > 0 else sym.trade_contract_size
-        return {"balance": float(acc.balance), "currency": acc.currency, "per_point": float(per_point),
-                "contract_size": float(sym.trade_contract_size), "min_lot": float(sym.volume_min),
-                "lot_step": float(sym.volume_step), "max_lot": float(sym.volume_max) or None,
-                "point": float(sym.point), "digits": int(sym.digits)}
-
-    def daily_history(self, clock: str, count: int) -> pd.DataFrame | None:
-        # A D1 bar runs from the broker's midnight; only on a New York +7 clock is that the
-        # 17:00 New York close, so the bar is one trading day.
-        if clock != "NY+7":
-            return None
-        if self._mt5 is None:
-            self.reconnect()
-        rates = self._mt5.copy_rates_from_pos(self.symbol, self._mt5.TIMEFRAME_D1, 1, count)  # 1: skip today's
-        if rates is None or len(rates) == 0:
-            return None
-        df = pd.DataFrame(rates)
-        df.index = pd.to_datetime(df["time"], unit="s").normalize()
-        return normalize_ohlcv(df.rename(columns={"tick_volume": "volume"}))
-
-    def fetch_history(self, tf: Timeframe, before: pd.Timestamp, count: int) -> pd.DataFrame:
-        """The terminal's own ``tf`` candles, so scrolling back needs no M1 history."""
-        if self._mt5 is None:
-            self.reconnect()
-        mt5 = self._mt5
-        frame = getattr(mt5, MT5_TIMEFRAMES[tf.name])
-        # Times are broker server time as unix seconds, both ways: pass ``before`` as-is.
-        rates = mt5.copy_rates_from(self.symbol, frame, int(before.timestamp()) - 1, count)
-        if rates is None:
-            raise RuntimeError(f"MT5 returned no {tf.name} history: {mt5.last_error()}")
-        if len(rates) == 0:
-            return pd.DataFrame(columns=OHLCV_COLUMNS, index=pd.DatetimeIndex([]), dtype=float)
-        df = pd.DataFrame(rates)
-        df.index = pd.to_datetime(df["time"], unit="s")
-        df = normalize_ohlcv(df.rename(columns={"tick_volume": "volume"}))
-        return df[df.index < before]
-
-    def last_price(self) -> float | None:
-        tick = self._mt5.symbol_info_tick(self.symbol) if self._mt5 else None
-        return float(tick.bid) if tick else None
-
-    def last_tick(self) -> tuple[pd.Timestamp, float] | None:
-        tick = self._mt5.symbol_info_tick(self.symbol) if self._mt5 else None
-        if not tick or not tick.bid:
-            return None
-        return pd.Timestamp(int(tick.time), unit="s"), float(tick.bid)  # broker server time, like the bars
-
-    def new_ticks(self) -> list[tuple[pd.Timestamp, float]]:
-        """Every tick since the last call (``copy_ticks_from`` after the last ``time_msc`` seen), so
-        the forming candle's high and low are exact however slowly it's polled. The first call, or
-        a terminal that returns nothing, falls back to the latest tick."""
-        mt5 = self._mt5
-        if mt5 is None:
-            return []
-        last = getattr(self, "_last_msc", None)
-        if last is not None and hasattr(mt5, "copy_ticks_from"):
-            got = mt5.copy_ticks_from(self.symbol, int(last // 1000), TICK_BATCH, mt5.COPY_TICKS_INFO)
-            if got is not None and len(got):
-                fresh = [t for t in got if int(t["time_msc"]) > last and float(t["bid"]) > 0]
-                if fresh:
-                    self._last_msc = int(fresh[-1]["time_msc"])
-                    return [(pd.Timestamp(int(t["time_msc"]), unit="ms"), float(t["bid"])) for t in fresh]
-                return []
-        tick = mt5.symbol_info_tick(self.symbol)
-        if not tick or not tick.bid:
-            return []
-        msc = int(getattr(tick, "time_msc", 0) or int(tick.time) * 1000)
-        if last is not None and msc <= last:
-            return []
-        self._last_msc = msc
-        return [(pd.Timestamp(msc, unit="ms"), float(tick.bid))]
-
-    def account_summary(self) -> dict:
-        """The logged-in account's number, server and company (no history). Runs on the scan thread."""
-        mt5 = self._mt5
-        if mt5 is None:
-            raise RuntimeError("The MT5 terminal isn't connected yet")
-        acc = mt5.account_info()
-        if acc is None:
-            raise RuntimeError(f"MT5 has no account logged in: {mt5.last_error()}")
-        return {"login": str(acc.login), "server": acc.server, "company": acc.company}
-
-    def account_activity(self) -> dict:
-        """A cheap look at the account for the journal's auto-sync: its number, how many deals it has and
-        how many positions are open. A change in either means a full sync is worth it. Scan thread only."""
-        mt5 = self._mt5
-        if mt5 is None:
-            raise RuntimeError("The MT5 terminal isn't connected yet")
-        acc = mt5.account_info()
-        if acc is None:
-            raise RuntimeError(f"MT5 has no account logged in: {mt5.last_error()}")
-        deals = mt5.history_deals_total(datetime(2000, 1, 1), datetime.now() + timedelta(days=3))
-        return {"login": str(acc.login), "deals": int(deals or 0), "positions": int(mt5.positions_total() or 0)}
-
-    def account_history(self) -> dict:
-        """The logged-in account, every deal in its history and the open positions (for the journal).
-
-        Runs on the scan thread (see ``Engine.call``). Only the account number and
-        server are read about the account, never its password or the holder's name.
-        """
-        mt5 = self._mt5
-        if mt5 is None:
-            raise RuntimeError("The MT5 terminal isn't connected yet")
-        acc = mt5.account_info()
-        if acc is None:
-            raise RuntimeError(f"MT5 has no account logged in: {mt5.last_error()}")
-        deals = mt5.history_deals_get(datetime(2000, 1, 1), datetime.now() + timedelta(days=3))
-        if deals is None:
-            raise RuntimeError(f"MT5 returned no deal history: {mt5.last_error()}")
-        return {
-            "account": {"login": str(acc.login), "server": acc.server, "company": acc.company,
-                        "currency": acc.currency, "balance": acc.balance, "equity": acc.equity},
-            "deals": [d._asdict() for d in deals],
-            "positions": [p._asdict() for p in (mt5.positions_get() or ())],
-        }
-
-    def describe(self) -> dict:
-        """Connection details for ``--check``."""
-        mt5 = self._mt5
-        term, acc, sym = mt5.terminal_info(), mt5.account_info(), mt5.symbol_info(self.symbol)
-        return {
-            "terminal": f"{term.name} build {mt5.version()[1]}" if term else None,
-            "connected": bool(term and term.connected),
-            "account": f"{acc.login} @ {acc.server}" if acc else None,
-            "symbol": self.symbol,
-            "digits": sym.digits if sym else None,
-            "bid/ask": f"{sym.bid} / {sym.ask}" if sym else None,
-        }
 
 
 class YFinanceFeed(DataFeed):
@@ -399,15 +148,25 @@ class CSVFeed(DataFeed):
 TRADINGVIEW_DIR = Path(__file__).resolve().parents[2] / "tradingview"  # the Node helper, beside src/
 
 
+def _bundled() -> tuple[Path, str | None]:
+    """The helper's folder and node.exe: the Windows app ships both (packaging/wednesday.spec)."""
+    base = getattr(sys, "_MEIPASS", None)
+    if getattr(sys, "frozen", False) and base:
+        node = Path(base) / "node" / ("node.exe" if sys.platform == "win32" else "node")
+        return Path(base) / "tradingview", str(node) if node.is_file() else None
+    return TRADINGVIEW_DIR, None
+
+
 def tradingview_command() -> tuple[list[str] | None, str | None]:
     """The command that starts the TradingView helper, or why it can't run here."""
-    script = TRADINGVIEW_DIR / "feed.mjs"
+    folder, bundled_node = _bundled()
+    script = folder / "feed.mjs"
     if not script.is_file():
-        return None, "Needs Wednesday run from source with Node 20+ (the Windows app has no Node)."
-    node = shutil.which("node")
+        return None, "The TradingView helper is missing from this install. Reinstall Wednesday, or run it from source."
+    node = bundled_node or shutil.which("node")
     if node is None:
         return None, "Needs Node 20+ (nodejs.org), then: npm install --prefix tradingview"
-    if not (TRADINGVIEW_DIR / "node_modules" / "@mathieuc" / "tradingview").is_dir():
+    if not (folder / "node_modules" / "@mathieuc" / "tradingview").is_dir():
         return None, "Install it with: npm install --prefix tradingview (or make install)"
     return [node, str(script)], None
 
@@ -717,13 +476,9 @@ class M1Buffer:
         return self.bars
 
 
-def build_feed(settings: DataSettings, mt5_password: str | None = None,
-               real: pd.DataFrame | None = None) -> DataFeed:
+def build_feed(settings: DataSettings, real: pd.DataFrame | None = None) -> DataFeed:
     """``real``: stored market bars (UTC) for the demo data to show and walk on from (see SyntheticFeed)."""
     source, symbol = settings.source, settings.resolved_symbol
-    if source == "mt5":
-        return MT5Feed(symbol, login=settings.mt5_login, password=mt5_password,
-                       server=settings.mt5_server, path=settings.mt5_path)
     if source == "yfinance":
         return YFinanceFeed(symbol)
     if source == "csv":

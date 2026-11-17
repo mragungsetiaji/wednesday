@@ -2,7 +2,7 @@
 
 Wednesday is a Smart Money Concepts screener for XAUUSD (gold): a Python scan loop
 (FastAPI, SQLAlchemy) and a React + Vite + TypeScript dashboard in `web/`. A single
-discretionary trader runs it, usually on a Windows VPS with MetaTrader 5, and acts on
+discretionary trader runs it, usually as the Windows desktop app, and acts on
 its levels by hand. It suggests; it never places trades.
 
 ## Commands
@@ -20,7 +20,9 @@ make scan ARGS="--source synthetic"   # one scan in the console
 Python is managed by uv (3.11 locally, `>=3.10` supported); use `uv run`, not a bare
 `python`. Run `make test` after Python changes, and `make typecheck` and `make test-ui`
 after changes in `web/`. Tests and local runs should use `--source synthetic`: the other sources hit
-Yahoo Finance or need an MT5 terminal, which only exists on Windows.
+Yahoo Finance or TradingView (through the Node helper in `tradingview/`). MetaTrader 5 was
+removed (the app opened the terminal on start and froze); don't bring it back as a
+live dependency. The journal reads MT5 only through an uploaded HTML report.
 
 ## Where things are
 
@@ -41,7 +43,7 @@ package is `src/wednesday/`.
 - **The bias is the trader's call.** `bias.py` is set by hand; the LLM brief
   (`brief.py`) only offers a suggestion the trader applies with a click. Don't make
   anything set the bias, or trade, on its own.
-- **Secrets never go into the database.** The MT5 password, Telegram bot token and
+- **Secrets never go into the database.** The Telegram bot token and
   LLM API keys are entered in Settings and kept in the OS credential store
   (`secret_store.py`, through `keyring`), with `.env` as a fallback. None may be
   written to the database, logs, API responses or the dashboard: APIs take them
@@ -63,12 +65,13 @@ package is `src/wednesday/`.
   refused unless `--insecure`. New `/api` routes are guarded by the middleware
   automatically (`tests/test_auth.py` walks them); only add to `auth.PUBLIC` what
   must work logged out. Don't add endpoints that expose secrets or files outside `data/`.
-- **Time zones are explicit.** Bar times come in the feed's clock (`XAU_CLOCK`, often
-  NY+7 on MT5 brokers); the quarterly view works in New York time. Convert with
-  `quarters.to_new_york` / `utc_to_feed` rather than assuming UTC.
+- **Time zones are explicit.** Bar times come in the feed's clock (`XAU_CLOCK`; UTC for
+  Yahoo and TradingView, a broker clock such as NY+7 for some CSV exports); the quarterly
+  view works in New York time. Convert with `quarters.to_new_york` / `utc_to_feed` rather
+  than assuming UTC.
 - **Storage runs on SQLite and PostgreSQL.** Go through `storage.py` (SQLAlchemy); no
   SQLite-only SQL.
-- **Optional extras stay optional.** `MetaTrader5`, `anthropic`/`openai` and
+- **Optional extras stay optional.** `anthropic`/`openai` and
   `scikit-learn`/`pyarrow` are extras; import them inside the function that needs
   them so the core runs without them, and report a missing one as an install hint
   (see `brief.py`).

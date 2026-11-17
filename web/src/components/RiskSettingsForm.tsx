@@ -23,10 +23,8 @@ export function RiskSettingsForm() {
         })
         .catch(() => {});
     load();
-    const id = setInterval(load, 20000); // the MT5 balance moves
     return () => {
       alive = false;
-      clearInterval(id);
     };
   }, []);
 
@@ -42,7 +40,6 @@ export function RiskSettingsForm() {
     );
   }
 
-  const mt5 = form.use_mt5 ? data.mt5 : null;
   const dirty = JSON.stringify(form) !== JSON.stringify(data.settings);
   const set = (patch: Partial<RiskSettings>) => {
     setForm({ ...form, ...patch });
@@ -67,9 +64,8 @@ export function RiskSettingsForm() {
   const summary = !data.settings.enabled
     ? "Off: setups show no lot size."
     : sizer
-      ? `Risking ${fmtMoney(sizer.budget, sizer.currency)} per trade${sizer.balance ? ` of a ${fmtMoney(sizer.balance, sizer.currency)} balance` : ""}` +
-        ` (${sizer.source === "mt5" ? "balance and lot rules from MT5" : "values below"}).`
-      : "Needs a balance: enter one below, or connect MT5.";
+      ? `Risking ${fmtMoney(sizer.budget, sizer.currency)} per trade${sizer.balance ? ` of a ${fmtMoney(sizer.balance, sizer.currency)} balance` : ""}.`
+      : "Needs a balance: enter one below.";
 
   return (
     <form className="settings-form" onSubmit={save} aria-labelledby="risk-h">
@@ -100,7 +96,7 @@ export function RiskSettingsForm() {
           </select>
         </label>
         <label className="field">
-          <span className="field-label">{form.mode === "percent" ? "Percent" : `Amount (${mt5?.currency ?? form.currency})`}</span>
+          <span className="field-label">{form.mode === "percent" ? "Percent" : `Amount (${form.currency})`}</span>
           <input type="number" min={0} step="any" required value={form.value} onChange={(e) => set({ value: Number(e.target.value) })} />
         </label>
         <label className="field field-span">
@@ -113,30 +109,8 @@ export function RiskSettingsForm() {
         </label>
       </fieldset>
 
-      <fieldset className="fields" disabled={busy || !form.enabled}>
+      <fieldset className="fields-grid" disabled={busy || !form.enabled}>
         <legend>Account and symbol</legend>
-        <label className="check">
-          <input type="checkbox" checked={form.use_mt5} onChange={(e) => set({ use_mt5: e.target.checked })} />
-          Read the balance and lot rules from MT5 when it is the data source
-        </label>
-        {form.use_mt5 && (
-          data.mt5 ? (
-            <dl className="facts">
-              <dt>Balance</dt>
-              <dd className="num">{fmtMoney(data.mt5.balance, data.mt5.currency)}</dd>
-              <dt>1 lot per 1.00 move</dt>
-              <dd className="num">{fmtMoney(data.mt5.per_point, data.mt5.currency)}</dd>
-              <dt>Lots</dt>
-              <dd className="num">min {data.mt5.min_lot}, step {data.mt5.lot_step}{data.mt5.max_lot ? `, max ${data.mt5.max_lot}` : ""}</dd>
-            </dl>
-          ) : (
-            <p className="field-note">MT5 isn't connected, so the values below are used.</p>
-          )
-        )}
-      </fieldset>
-
-      <fieldset className="fields-grid" disabled={busy || !form.enabled || !!mt5}>
-        <legend>{mt5 ? "Used when MT5 isn't connected" : "Without MT5"}</legend>
         <label className="field">
           <span className="field-label">Balance</span>
           <input type="number" min={0} step="any" value={form.balance ?? ""} placeholder="e.g. 10000"

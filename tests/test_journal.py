@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from wednesday import server
 from wednesday.snapshots import Snapshots
 from wednesday.engine import Runtime
-from wednesday.journal.imports import BALANCE, BUY, IN, INOUT, OUT, SELL, ReportError, from_deals, parse_report
+from wednesday.journal.imports import ReportError, parse_report
 from wednesday.journal.service import Journals, canonical
 from wednesday.journal.stats import analyse
 from wednesday.plugins import PluginInfo
@@ -17,37 +17,6 @@ from wednesday.storage import Store
 from wednesday.timeframes import TIMEFRAMES_BY_NAME
 
 T0 = int(pd.Timestamp("2026-03-02 00:00").timestamp())
-
-
-def deal(ticket, t, kind, entry=IN, position=0, volume=0.0, price=0.0, profit=0.0, commission=0.0, swap=0.0):
-    return {"ticket": ticket, "time": t, "time_msc": t * 1000, "type": kind, "entry": entry, "position_id": position,
-            "symbol": "XAUUSD" if kind in (BUY, SELL) else "", "volume": volume, "price": price, "profit": profit,
-            "commission": commission, "fee": 0.0, "swap": swap, "comment": ""}
-
-
-def test_deals_become_trades_with_partial_closes():
-    deals = [
-        deal(1, T0, BALANCE, profit=10_000),
-        deal(2, T0 + 60, BUY, IN, 7, 1.0, 2000.0, commission=-7),
-        deal(3, T0 + 600, SELL, OUT, 7, 0.4, 2010.0, profit=400),
-        deal(4, T0 + 900, SELL, OUT, 7, 0.6, 2005.0, profit=300),
-        deal(5, T0 + 1000, SELL, IN, 8, 0.5, 2004.0),
-        deal(6, T0 + 1200, BUY, INOUT, 8, 1.0, 2002.0, profit=100),  # closes the sell, opens a 0.5 buy
-        deal(7, T0 + 2000, BALANCE, profit=-500),
-    ]
-    trades, cash = from_deals(deals, positions=[{"ticket": 8, "price_current": 2003.0, "profit": 50.0, "swap": 0.0,
-                                                 "sl": 0.0, "tp": 0.0}])
-    assert [c["kind"] for c in cash] == ["deposit", "withdrawal"]
-    by = {t["id"]: t for t in trades}
-    a, b = by["p7:3"], by["p7:4"]
-    assert (a["volume"], b["volume"]) == (0.4, 0.6)
-    assert a["open_price"] == b["open_price"] == 2000.0
-    assert a["commission"] == pytest.approx(-2.8) and b["commission"] == pytest.approx(-4.2)
-    rev = by["p8:6"]
-    assert rev["side"] == "sell" and rev["volume"] == 0.5 and rev["profit"] == 100
-    still = by["p8"]  # the reversed half, still open
-    assert still["side"] == "buy" and still["close_time"] is None and still["volume"] == 0.5
-    assert still["open_price"] == 2002.0 and still["close_price"] == 2003.0
 
 
 REPORT = """<html><body><table>
@@ -236,10 +205,7 @@ def test_journal_api_flow(journal_api):
     assert api.get(f"/api/journals/{j['id']}").json()["verification"]["offset_detected"] is False
     assert api.patch(f"/api/journals/{j['id']}", json={"time_offset": 30}).status_code == 422
 
-    r = api.post(f"/api/journals/{j['id']}/sync")
-    assert r.status_code == 409 and "isn't MT5" in r.json()["detail"]
-    t = api.get("/api/journals/terminal").json()
-    assert t["connected"] is False and "isn't MT5" in t["detail"]
+    assert api.post(f"/api/journals/{j['id']}/sync").status_code in (404, 405)  # MT5 sync is gone; reports only
     assert api.delete(f"/api/journals/{j['id']}").json() == {"deleted": True}
     assert api.get(f"/api/journals/{j['id']}").status_code == 404
 
@@ -281,17 +247,13 @@ def test_chart_snapshots_attach_to_a_trade(journal_api, tmp_path):
     assert list((tmp_path / "shots").iterdir()) == []
 
 
-def test_sync_refuses_another_account(tmp_path):
-    store = Store(f"sqlite:///{tmp_path / 'j.db'}")
-    js = Journals(store)
+def test_import_refuses_another_account(tmp_path):
+    js = Journals(Store(f"sqlite:///{tmp_path / 'j.db'}"))
     j = js.create("Main", [])
-    history = {"account": {"login": "1", "balance": 100.0, "equity": 100.0, "currency": "USD"},
-               "deals": [deal(1, T0, BALANCE, profit=100)], "positions": []}
-    assert js.sync(j["id"], history)["cash"] == 1
-    st = js.stats(j["id"])
-    assert st["verification"]["balance_matches"] is True
-    with pytest.raises(ValueError, match="account 1"):
-        js.sync(j["id"], {**history, "account": {"login": "2"}})
+    assert js.import_report(j["id"], REPORT.encode("utf-16"))["journal"]["login"] == "51234567"
+    other = REPORT.replace("51234567 (USD", "7654321 (USD")
+    with pytest.raises(ValueError, match="account 51234567"):
+        js.import_report(j["id"], other.encode("utf-16"))
 
 
 def test_create_ties_the_journal_to_its_account(tmp_path):
@@ -303,10 +265,9 @@ def test_create_ties_the_journal_to_its_account(tmp_path):
     with pytest.raises(ValueError, match="digits"):
         js.create("Typo", ["journal.multi"], login="5123abc")
     prop = js.create("Prop", ["journal.multi"], login="777")
-    history = {"account": {"login": "51234567"}, "deals": [], "positions": []}
-    with pytest.raises(ValueError, match="logged in to account 51234567, but this journal follows account 777"):
-        js.sync(prop["id"], history)
-    assert js.sync(main["id"], history)["journal"]["login"] == "51234567"
+    with pytest.raises(ValueError, match="This journal is account 777"):
+        js.import_report(prop["id"], REPORT.encode("utf-16"))
+    assert js.import_report(main["id"], REPORT.encode("utf-16"))["journal"]["login"] == "51234567"
     assert len(js.list()) == 2
 
 

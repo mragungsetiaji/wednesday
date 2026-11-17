@@ -49,9 +49,7 @@ A bar under each chart (the main one and every full screen pane) holds:
 
 **Shift-drag** on the chart measures a move: the price change, in % and in pips,
 and how many bars and how long it spans. It goes away when you let go. A pip is
-ten of the symbol's points as the MT5 terminal reports them (0.1 on a two-digit
-gold); without MT5 it's the symbol's usual size (0.1 on gold, 0.01 on yen pairs
-and silver).
+the symbol's usual size (0.1 on gold, 0.01 on yen pairs and silver).
 
 When you scroll back and the live candle leaves the screen, a **Live** button
 at the bottom right brings it back.
@@ -61,7 +59,7 @@ chart's timeframe.
 
 ### Keyboard shortcuts
 
-During the NY open your hands stay on MT5; the chart takes keys too. None of them
+During the NY open your hands stay on your trading platform; the chart takes keys too. None of them
 fire while you're typing in a field, and **?** (or the **?** under a chart) lists
 them.
 
@@ -125,7 +123,7 @@ The column left of the chart holds drawing tools, TradingView style:
   the entry, stop and target, and the one on the entry line's right end to set how
   long it runs. The stop and target stay on their own side of the entry. Hover or
   select the position to see the prices, the distance to each, the R:R and, with
-  [position sizing](risk.md) set up in **Settings > Risk** (or read from MT5),
+  [position sizing](risk.md) set up in **Settings > Risk**,
   the lot size and the money at risk and to gain, sized the same way as the
   ladder's setups.
 
@@ -158,7 +156,7 @@ every timeframe and in full screen: a position from 10:00 to 11:00 is 12 candles
 wide on 5M, 4 on 15M and one on 1H. Time past the last candle runs at the
 timeframe's length, and moving a drawing shifts it by whole candles of time, so
 it keeps its duration across the daily break or a weekend. They are saved in the database per data
-source and symbol (MT5 times are the broker's clock, and Yahoo's `GC=F` isn't
+source and symbol (sources can differ in clock, and Yahoo's `GC=F` isn't
 spot XAUUSD), in the `drawings` table.
 
 ## Risk-time news card
@@ -182,7 +180,7 @@ The same releases are drawn on every chart as dashed vertical lines with their
 name at the top: amber for what's ahead (and the last 10 minutes), grey for what
 already came out this week. Upcoming ones get label space first; switch them off
 with **News** above the chart. Times are converted to the feed clock, so the
-lines match the candles with MT5 broker time too.
+lines match the candles whatever that clock is.
 
 ![News lines on the 1H chart](images/news-chart.png)
 
@@ -206,8 +204,8 @@ statement, …) it measures gold after past releases, from the M1 bars:
 
 Only releases with M1 bars from just before to an hour after count (the most
 recent 24 per event), and every figure says how many that was. The release's
-UTC time is converted to the feed clock the same way as the news lines, so MT5
-broker time lines up. These describe past moves; they don't say what the next
+UTC time is converted to the feed clock the same way as the news lines, so the
+times line up whatever that clock is. These describe past moves; they don't say what the next
 release will do.
 
 They show in three places: a line on the risk-time card (*CPI m/m: median 15m
@@ -260,9 +258,10 @@ at once. **Esc** or **Exit** goes back. On a phone the charts stack and scroll.
   TradingView, labelled **Price only**: levels, setups, alerts, the bias and
   drawings belong to the scanned symbol, so none are drawn on it. Clear the box,
   or type the scanned symbol, to bring the chart back. Each chart's symbol is
-  remembered by its place. It works with every data source, but needs Node.js
-  and the TradingView helper installed (`make install`, see
-  [Data sources](data-sources.md#tradingview)); without them the chart says so.
+  remembered by its place. It works with every data source. The Windows app
+  includes what it needs; run from source, it needs Node.js and the TradingView
+  helper installed (`make install`, see
+  [Data sources](data-sources.md#tradingview)), and without them the chart says so.
   In bar replay every chart shows the scanned symbol.
 - **Resizable panes**: drag a line between charts; each line moves only the two
   charts beside it. Arrow keys move a focused line (Shift for bigger steps), and
@@ -298,7 +297,7 @@ decide candle by candle as you would have live.
 - The status reads **Replay** instead of Live. **Exit replay** returns to the live chart.
 
 How far back it can go depends on the stored M1 history (Settings, Lab, Data
-pulls more from MT5).
+imports more from files).
 
 ## Charts in their own windows
 
@@ -468,9 +467,8 @@ the move and the sample count.
 what the next one did: facts about the history, not a forecast or advice.
 
 History: the stored M1 bars and the live window. Days and weeks reach further back
-with the feed's daily bars when it has them: Yahoo's daily history, or MT5's D1
-when the broker's clock is New York +7 (its daily candles then match the New York
-day; on other clocks they don't, so they're left out). The tables are rebuilt at
+with the feed's daily bars when it has them: Yahoo's or TradingView's daily
+history. The tables are rebuilt at
 most every 6 hours; the current period updates with every scan.
 
 ## Light theme and mobile

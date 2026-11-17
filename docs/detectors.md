@@ -4,8 +4,8 @@ Every minute Wednesday resamples closed M1 bars into **4H, 1H, 30M, 15M and 5M**
 candles, runs the detectors on the last `--lookback` candles of each timeframe,
 and reports the **nearest active level above and below** price per detector,
 from the highest timeframe down. Only closed candles are used; the candle still
-forming on each timeframe is dropped. Candle times follow the feed's clock, so
-with MT5 the 4H candles line up with the broker chart.
+forming on each timeframe is dropped. Candle times follow the feed's clock
+([Feed clock](data-sources.md#feed-clock)).
 
 All detectors share one market-structure pass and return the same kind of
 object (a `Level`: a zone, or a line when top equals bottom). Choose them with

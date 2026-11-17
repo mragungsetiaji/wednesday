@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from ..storage import Store, journal_cash_table, journal_notes_table, journal_trades_table
 from . import sample as sample_data
-from .imports import ReportError, from_deals, parse_report
+from .imports import ReportError, parse_report
 from .stats import analyse
 
 MULTI_FEATURE = "journal.multi"
@@ -50,7 +50,6 @@ class Journals:
         self._lock = threading.Lock()
         self._sample_lock = threading.Lock()
         self._sample_checked = False
-        self.status: dict[str, dict] = {}  # journal id -> {"state", "error"} from auto-sync (journal/autosync.py)
 
     # ---- journals ----
     def list(self) -> list[dict]:
@@ -99,30 +98,18 @@ class Journals:
 
     @staticmethod
     def options(j: dict) -> dict:
-        """The journal's own settings with their defaults: auto-sync on for journals filled from MT5."""
+        """The journal's own settings with their defaults."""
         saved = j.get("settings") or {}
-        auto = saved.get("auto_sync")
-        return {"auto_sync": bool(j.get("source") == "mt5") if auto is None else bool(auto),
-                "show_weekends": bool(saved.get("show_weekends", False))}
-
-    def sync_status(self, j: dict) -> dict:
-        """Where auto-sync stands: ok, syncing, waiting, error or off, with the last sync and any error."""
-        opts = self.options(j)
-        seen = self.status.get(j["id"], {})
-        if j.get("sample") or not opts["auto_sync"]:
-            state, error = "off", None
-        else:
-            state, error = seen.get("state") or ("ok" if j.get("synced_at") else "waiting"), seen.get("error")
-        return {"auto": opts["auto_sync"] and not j.get("sample"), "state": state, "at": j.get("synced_at"), "error": error}
+        return {"show_weekends": bool(saved.get("show_weekends", False))}
 
     def _public(self, j: dict) -> dict:
         off = j.get("time_offset")
-        return {**j, **self.options(j), "settings": None, "sync": self.sync_status(j),
+        return {**j, **self.options(j), "settings": None,
                 "time_offset": None if off is None else off / 3600, "sample": bool(j.get("sample"))}
 
-    def create(self, name: str, features: list[str], login: str | None = None, auto_sync: bool = False) -> dict:
-        """A new journal, tied to its MT5 account number from the start when one is given.
-        ``auto_sync``: made from the account the terminal is on, so keep it in sync from the start."""
+    def create(self, name: str, features: list[str], login: str | None = None) -> dict:
+        """A new journal, tied to its MT5 account number from the start when one is given, so a
+        report of another account is refused."""
         name = (name or "").strip()[:120]
         if not name:
             raise JournalError("Give the journal a name")
@@ -137,7 +124,7 @@ class Journals:
             raise JournalError(f"{taken['name']} already follows account {login}. Open it instead, or use another account")
         row = {"id": uuid.uuid4().hex[:12], "name": name, "login": login, "server": None, "company": None,
                "currency": None, "source": None, "account": None, "time_offset": None, "created_at": _now(),
-               "synced_at": None, "settings": {"auto_sync": bool(auto_sync and login)}}
+               "synced_at": None, "settings": {}}
         self.store.journal_put(row)
         return self._public(row)
 
@@ -157,15 +144,10 @@ class Journals:
                 if not -14 <= hours <= 14:
                     raise JournalError("The clock offset is between -14 and 14 hours")
                 j["time_offset"] = int(round(hours * 3600))
-        for key in ("auto_sync", "show_weekends"):
-            if key in body:
-                if not isinstance(body[key], bool):
-                    raise JournalError(f"{key} is true or false")
-                if key == "auto_sync" and body[key] and j.get("sample"):
-                    raise JournalError("The sample portfolio is made-up data, so it can't sync from MT5")
-                j["settings"] = {**(j.get("settings") or {}), key: body[key]}
-                if key == "auto_sync":
-                    self.status.pop(journal_id, None)
+        if "show_weekends" in body:
+            if not isinstance(body["show_weekends"], bool):
+                raise JournalError("show_weekends is true or false")
+            j["settings"] = {**(j.get("settings") or {}), "show_weekends": body["show_weekends"]}
         self.store.journal_put(j)
         self._changed(journal_id)
         return self._public(j)
@@ -183,35 +165,14 @@ class Journals:
     @staticmethod
     def check_writable(j: dict) -> None:
         if j.get("sample"):
-            raise JournalError("The sample portfolio is made-up data, so it can't be synced or imported into. "
+            raise JournalError("The sample portfolio is made-up data, so a report can't be imported into it. "
                                "Make a journal of your own for your account")
 
     # ---- imports ----
-    def _check_account(self, j: dict, login: str | None, terminal: bool = False) -> None:
+    def _check_account(self, j: dict, login: str | None) -> None:
         if j.get("login") and login and str(login) != str(j["login"]):
-            if terminal:
-                raise JournalError(f"The MT5 terminal is logged in to account {login}, but this journal follows account "
-                                   f"{j['login']}. Log in to {j['login']} in the terminal and sync again, "
-                                   "or import that account's history report")
             raise JournalError(f"This journal is account {j['login']}, but that history is account {login}. "
                                "Make a journal per account")
-
-    def sync(self, journal_id: str, history: dict) -> dict:
-        """Replace the journal's trades with the terminal's full history (see ``MT5Feed.account_history``)."""
-        j = self.get(journal_id)
-        self.check_writable(j)
-        acc = history.get("account") or {}
-        self._check_account(j, acc.get("login"), terminal=True)
-        trades, cash = from_deals(history.get("deals") or [], history.get("positions") or [])
-        self.store.journal_fill(journal_id, trades, cash, replace=True)
-        j.update(login=str(acc.get("login") or j.get("login") or "") or None, server=acc.get("server") or j.get("server"),
-                 company=acc.get("company") or j.get("company"), currency=acc.get("currency") or j.get("currency"),
-                 source="mt5", synced_at=_now(),
-                 account={"balance": acc.get("balance"), "equity": acc.get("equity"), "at": _now()})
-        self.store.journal_put(j)
-        self.status[journal_id] = {"state": "ok", "error": None}
-        self._changed(journal_id)
-        return {"trades": len(trades), "cash": len(cash), "journal": self._public(j)}
 
     def import_report(self, journal_id: str, data: bytes) -> dict:
         j = self.get(journal_id)
@@ -332,7 +293,7 @@ class Journals:
             matches = [s for s in stored if s["symbol"] == sym] or [s for s in stored if canonical(s["symbol"]) == want]
             if not matches:
                 continue
-            best = max(matches, key=lambda s: (s["source"] == "mt5", s["bars"]))
+            best = max(matches, key=lambda s: s["bars"])
             mine = [t for t in trades if t["symbol"] == sym]
             start = min(t["open_time"] for t in mine) - MARGIN
             end = max(t["close_time"] or int(time.time()) + 86400 for t in mine) + MARGIN
