@@ -3360,9 +3360,6 @@ fieldset:disabled .switch {
   gap: var(--s3);
   max-width: 640px;
 }
-.journal-terminal {
-  margin: 0;
-}
 .journal-notice {
   font-size: var(--text-sm);
   color: var(--text-2);

@@ -36,9 +36,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            tradingview/package-lock.json
 
       - name: Build dashboard
         working-directory: web
@@ -46,10 +48,27 @@ jobs:
           npm ci
           npm run build
 
+      # The TradingView data source: its helper and the node.exe that runs it ship with the app.
+      - name: Bundle Node and the TradingView helper
+        shell: pwsh
+        run: |
+          npm ci --omit=dev --prefix tradingview
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $node = (Get-Command node).Source
+          New-Item -ItemType Directory -Force packaging\node | Out-Null
+          Copy-Item $node packaging\node\node.exe
+          $license = Join-Path (Split-Path $node) LICENSE
+          if (Test-Path $license) {
+            Copy-Item $license packaging\node\LICENSE
+          } else {
+            Invoke-WebRequest "https://raw.githubusercontent.com/nodejs/node/$(node -v)/LICENSE" -OutFile packaging\node\LICENSE
+          }
+          & packaging\node\node.exe -v
+
       - uses: astral-sh/setup-uv@v6
 
       - name: Install Python dependencies
-        run: uv sync --frozen --no-dev --extra desktop --extra mt5 --extra llm --extra ml
+        run: uv sync --frozen --no-dev --extra desktop --extra llm --extra ml
 
       - name: Build app (PyInstaller)
         run: uv run --frozen --no-dev --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm

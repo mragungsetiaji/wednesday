@@ -7,8 +7,8 @@ Windows). Closing the window stops everything.
 The database, models and logs live in a per-user folder, not next to the
 program, so the app can be installed without admin rights and upgraded without
 touching data: ``%LOCALAPPDATA%\\Wednesday`` on Windows (``~/.wednesday``
-elsewhere, or ``WEDNESDAY_HOME``). Everything is set in the dashboard; the MT5
-password goes to Windows Credential Manager. A ``.env`` in that folder is still
+elsewhere, or ``WEDNESDAY_HOME``). Everything is set in the dashboard; API keys
+and bot tokens go to Windows Credential Manager. A ``.env`` in that folder is still
 read if one is there, but the app doesn't need or create one.
 """
 
@@ -207,16 +207,6 @@ class DesktopApi:
             return False
         return True
 
-    def pick_terminal(self) -> str | None:
-        """Pick a terminal64.exe with the Windows file dialog."""
-        import webview
-
-        start = os.environ.get("ProgramFiles") or str(Path.home())
-        dialog = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else webview.OPEN_DIALOG
-        picked = webview.windows[0].create_file_dialog(dialog, directory=start, file_types=("Programs (*.exe)",))
-        return picked[0] if picked else None
-
-
     def save_png(self, data: str, name: str) -> str | None:
         """Save a chart snapshot (base64 PNG) where the trader picks; WebView2 has no downloads."""
         import base64
@@ -298,6 +288,12 @@ def serve_in_window(app, host: str, port: int) -> None:
 
 
 def run() -> None:
+    if "--forget-secrets" in sys.argv[1:]:
+        # The installer's fresh install: it deletes the data folder itself, the saved secrets go here.
+        from .secret_store import forget_all
+
+        forget_all()
+        return
     home = home_dir()
     home.mkdir(parents=True, exist_ok=True)
     # A windowed exe has no console: print() and logging would fail on a missing stdout.

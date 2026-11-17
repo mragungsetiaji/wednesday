@@ -62,10 +62,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="wednesday", description=__doc__, parents=[pre])
     p.add_argument("--source", choices=list(SOURCES),
                    help="data source (default: saved in the dashboard, else XAU_SOURCE, else yfinance)")
-    p.add_argument("--symbol", help="default per source: GC=F for yfinance, XAUUSD for mt5, FX:XAUUSD for tradingview")
+    p.add_argument("--symbol", help="default per source: GC=F for yfinance, FX:XAUUSD for tradingview, XAUUSD for csv")
     p.add_argument("--csv", help="M1 CSV path for --source csv (XAU_CSV)")
-    p.add_argument("--clock", help="the feed's clock for the quarterly view: UTC, NY+7 (most MT5 brokers), UTC+3 or a "
-                                   "time zone like Europe/London (XAU_CLOCK; default: NY+7 for mt5, else UTC)")
+    p.add_argument("--clock", help="the feed's clock for the quarterly view: UTC, NY+7, UTC+3 or a "
+                                   "time zone like Europe/London (XAU_CLOCK; default UTC)")
     p.add_argument("--db", default=_env("XAU_DB_URL") or DEFAULT_DB_URL,
                    help="database URL for settings and M1 history (XAU_DB_URL); 'none' disables storage")
     p.add_argument("--reset-settings", action="store_true", help="forget data source settings saved from the dashboard")
@@ -102,10 +102,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--json-out", default=_env("XAU_JSON_OUT"), help="append each scan as a JSON line to this file")
     p.add_argument("--log-file", default=_env("XAU_LOG_FILE"), help="also write logs and scans to this file (rotated)")
     p.add_argument("--digits", type=int, default=2)
-    p.add_argument("--mt5-login", type=int, help="MT5_LOGIN")
-    p.add_argument("--mt5-password", default=_env("MT5_PASSWORD"), help="prefer MT5_PASSWORD in .env; never stored")
-    p.add_argument("--mt5-server", help="MT5_SERVER")
-    p.add_argument("--mt5-path", help="path to terminal64.exe (MT5_PATH)")
     p.add_argument("--telegram-chats", action="store_true",
                    help="list chats that messaged your bot (to find TELEGRAM_CHAT_ID) and exit")
     p.add_argument("--telegram-test", action="store_true", help="send a Telegram test message and exit")
@@ -244,7 +240,6 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
         store.delete_setting(SETTINGS_KEY)
     data = resolve({
         "source": args.source, "symbol": args.symbol, "csv_path": args.csv,
-        "mt5_login": args.mt5_login, "mt5_server": args.mt5_server, "mt5_path": args.mt5_path,
         "clock": args.clock,
     }, store)
     if errors := data.validate():
@@ -274,7 +269,7 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
     calendar = Calendar(store, CalendarSettings.from_dict(store.get_setting(CALENDAR_KEY) if store else None))
     lab = Lab(store, _env("XAU_MODELS_DIR") or "data/models", cfg.params) if store else None
     journals = Journals(store, sample=True) if store else None
-    runtime = Runtime(cfg, data, store, args.mt5_password, args.delay, publish, alerts, brief, calendar, lab, journals,
+    runtime = Runtime(cfg, data, store, args.delay, publish, alerts, brief, calendar, lab, journals,
                       poll=args.poll)
     engine = runtime.engine
     feed = engine.feed

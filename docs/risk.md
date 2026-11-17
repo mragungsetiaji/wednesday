@@ -24,15 +24,8 @@ lots = budget ÷ money per lot, rounded DOWN to the lot step
 
 ## Where the numbers come from
 
-With **MT5** as the data source and *Read the balance and lot rules from MT5*
-ticked, every scan reads from the terminal:
-
-- the account balance and currency;
-- money per 1.00 move per lot (`trade_tick_value ÷ trade_tick_size`, in the
-  account currency, so non-USD accounts are right too);
-- minimum lot, lot step and maximum lot.
-
-Otherwise, and whenever MT5 isn't connected, the values in Settings are used:
-balance, currency, contract size (XAUUSD is usually 100, i.e. $100 per 1.00
-move per lot on a USD account), minimum lot and lot step. With a fixed amount
-no balance is needed.
+The values come from **Settings > Risk**: balance, currency, contract size
+(XAUUSD is usually 100, i.e. $100 per 1.00 move per lot on a USD account),
+minimum lot and lot step. Copy them from your broker's symbol specification;
+Wednesday doesn't read them from your account. With a fixed amount no balance
+is needed.

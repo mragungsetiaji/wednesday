@@ -1,4 +1,4 @@
-"""Secrets entered in the dashboard: the MT5 password, the Telegram bot token and LLM API keys.
+"""Secrets entered in the dashboard: the Telegram bot token and LLM API keys.
 
 They are kept in the operating system's credential store (Windows Credential
 Manager, macOS Keychain; through ``keyring``), never in the database, logs or
@@ -11,6 +11,8 @@ from __future__ import annotations
 import os
 
 SERVICE = "Wednesday"
+# Services of older versions, removed by forget_all: the old MT5 password.
+OLD_SERVICES = ("Wednesday MT5",)
 
 # Secrets set from Settings, with the environment variable each falls back to.
 APP_SECRETS = {
@@ -118,3 +120,41 @@ def update_secrets(body: dict, names: list[str]) -> bool:
             changed = True
     return changed
 
+
+def forget_all() -> int:
+    """Remove every secret Wednesday saved in the credential store (the installer's fresh install).
+
+    Known names go through ``keyring``; on Windows, Credential Manager is also searched for any
+    other entry of these services (plugin secrets, the old MT5 password). Returns how many went.
+    """
+    _session.clear()
+    gone = 0
+    for name in APP_SECRETS:
+        if keyring_get(SERVICE, name) is not None:
+            keyring_delete(SERVICE, name)
+            gone += 1
+    if os.name == "nt":
+        gone += _forget_windows_credentials((SERVICE, *OLD_SERVICES))
+    return gone
+
+
+def _forget_windows_credentials(services: tuple[str, ...]) -> int:
+    """Delete generic credentials named ``<service>`` or ``<account>@<service>`` (keyring's naming)."""
+    try:
+        from win32ctypes.pywin32 import win32cred  # comes with keyring on Windows
+    except ImportError:
+        return 0
+    try:
+        found = win32cred.CredEnumerate("*Wednesday*", 0) or []
+    except Exception:  # nothing matches, or no CredEnumerate in this version
+        return 0
+    gone = 0
+    for cred in found:
+        target = cred.get("TargetName") or ""
+        if any(target == s or target.endswith("@" + s) for s in services):
+            try:
+                win32cred.CredDelete(target, win32cred.CRED_TYPE_GENERIC, 0)
+                gone += 1
+            except Exception:
+                pass
+    return gone

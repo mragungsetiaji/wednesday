@@ -1,8 +1,8 @@
 """Journal: trading accounts imported from MetaTrader 5, with numbers that can't be faked.
 
-1. **Import** (:mod:`.imports`): closed deals straight from the MT5 terminal
-   Wednesday is connected to, or the terminal's history report (HTML). Deals are
-   turned into trades (one per closing deal) and cash (deposits, withdrawals).
+1. **Import** (:mod:`.imports`): the history report (HTML) the MT5 terminal saves,
+   uploaded by the trader. Its positions become trades and its balance deals cash
+   (deposits, withdrawals).
 2. **Stats** (:mod:`.stats`): gain (time-weighted, so deposits don't count as
    profit), absolute gain, balance, equity, deposits, withdrawals and the growth
    curve. The drawdown is rebuilt from the price: every minute a trade was open,

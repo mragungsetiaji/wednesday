@@ -82,7 +82,6 @@ export interface Sizing {
   lot_step: number;
   max_lot: number | null;
   off_multiplier: number;
-  source: "mt5" | "settings";
 }
 
 export interface Scan {
@@ -111,7 +110,7 @@ export interface ScanResponse {
   error_at: string | null;
   conn: FeedConn;
   tick_seconds: number; // live price interval between scans; 0 = none
-  pip?: number; // one pip in price: ten of the terminal's points, or the symbol's usual size
+  pip?: number; // one pip in price: the symbol's usual size
   clock_offset?: number; // seconds the feed clock is ahead of UTC now
   poll?: boolean; // false: started with --no-poll, the scan never updates
   app_version: string;
@@ -346,9 +345,6 @@ export interface DataSettings {
   source: string;
   symbol: string | null;
   csv_path: string | null;
-  mt5_login: number | null;
-  mt5_server: string | null;
-  mt5_path: string | null;
   clock: string | null; // null = the source default
   tick_seconds: number | null; // null = the source default, 0 = off
 }
@@ -360,8 +356,6 @@ export interface SettingsResponse {
   editable: boolean;
   settings: DataSettings | null;
   sources: SourceInfo[];
-  /** Where the MT5 password for the saved account comes from; null = none. Never the password itself. */
-  mt5_password: "saved" | "session" | "env" | null;
   running: {
     source: string;
     symbol: string;
@@ -386,20 +380,11 @@ export interface SettingsResponse {
 
 export const fetchSettings = () => getJson<SettingsResponse>("/api/settings");
 
-/** Save and restart the feed. A password is sent only when typed; it's kept by the OS, never returned. */
-export const saveSettings = (settings: DataSettings, secret: { mt5_password?: string; forget_mt5_password?: boolean } = {}) =>
-  send<SettingsResponse>("PUT", "/api/settings", { ...settings, ...secret });
+/** Save and restart the feed. */
+export const saveSettings = (settings: DataSettings) => send<SettingsResponse>("PUT", "/api/settings", settings);
 
 /** Restart the feed with the saved settings, e.g. after it gave up connecting. */
 export const reconnectFeed = () => send<SettingsResponse>("POST", "/api/settings/reconnect");
-
-export interface Mt5Terminal {
-  path: string;
-  name: string;
-  running: boolean;
-}
-
-export const fetchMt5Terminals = () => getJson<{ terminals: Mt5Terminal[] }>("/api/mt5/terminals");
 
 export interface AlertSettings {
   enabled: boolean;
@@ -726,7 +711,6 @@ export interface RiskSettings {
   enabled: boolean;
   mode: "percent" | "amount";
   value: number;
-  use_mt5: boolean;
   balance: number | null;
   currency: string;
   contract_size: number;
@@ -735,22 +719,9 @@ export interface RiskSettings {
   risk_off_multiplier: number;
 }
 
-export interface Mt5Spec {
-  balance: number;
-  currency: string;
-  per_point: number;
-  contract_size: number;
-  min_lot: number;
-  lot_step: number;
-  max_lot: number | null;
-  point?: number;
-  digits?: number;
-}
-
 export interface RiskResponse {
   editable: boolean;
   settings: RiskSettings | null;
-  mt5: Mt5Spec | null; // what the terminal reports, when MT5 is the source
   sizer: Sizing | null;
 }
 
@@ -1045,27 +1016,15 @@ export const confirmLabels = (token: string, mapSymbol: boolean) =>
     "POST", `/api/lab/labels/import/${token}`, { map_symbol: mapSymbol });
 // ---- Lab > Data: more M1 history ----
 
-export interface BackfillState {
-  running: boolean;
-  start: string | null;
-  reached: string | null; // oldest date pulled so far
-  added: number;
-  error: string | null;
-  note: string | null;
-  finished_at: string | null;
-}
-
 export interface LabData {
   source: string;
   symbol: string;
   clock: string; // the feed's clock; imported bars are moved to it
   can_import: boolean;
-  can_backfill: boolean;
   stored: { bars: number; first_unix: number | null; last_unix: number | null };
   days: [number, number][]; // [day (unix midnight), M1 bars]
   history_bars: number;
   history_bars_max: number;
-  backfill: BackfillState;
 }
 
 export interface BarsPreview {
@@ -1088,8 +1047,6 @@ export interface BarsImported {
 
 export const fetchLabData = () => getJson<LabData>("/api/lab/data");
 export const saveLabHistory = (history_bars: number) => send<LabData>("PUT", "/api/lab/data", { history_bars });
-export const startBackfill = (start: string) => send<LabData>("POST", "/api/lab/data/backfill", { start });
-export const stopBackfill = () => send<LabData>("DELETE", "/api/lab/data/backfill");
 export const confirmBars = (token: string, clock: string) =>
   send<LabData & { imported: BarsImported }>("POST", `/api/lab/data/import/${token}`, { clock });
 export async function stageBars(file: File): Promise<BarsPreview> {
@@ -1160,7 +1117,7 @@ export const removeLicence = () => send<LicenceStatus>("DELETE", "/api/licence")
 
 export const fetchPlugins = () => getJson<PluginsResponse>("/api/plugins");
 
-// ---- Journal (trading accounts imported from MT5) ----
+// ---- Journal (trading accounts, from MT5 history reports) ----
 
 export interface Journal {
   id: string;
@@ -1169,23 +1126,13 @@ export interface Journal {
   server: string | null;
   company: string | null;
   currency: string | null;
-  source: "mt5" | "report" | null; // how it was last filled
-  account: { balance: number | null; equity: number | null; at: string } | null; // what the terminal said at the last sync
+  source: "mt5" | "report" | null; // how it was last filled ("mt5": synced by an older version)
+  account: { balance: number | null; equity: number | null; at: string } | null; // from an old MT5 sync
   time_offset: number | null; // hours from the deal clock to the price clock; null = detected
   created_at: string;
   synced_at: string | null;
-  sample: boolean; // the made-up sample portfolio: free, can't be synced or imported into
-  auto_sync: boolean; // sync from MT5 after each scan when something changed
+  sample: boolean; // the made-up sample portfolio: free, can't be imported into
   show_weekends: boolean; // Saturday and Sunday columns in the calendar
-  sync: JournalSync;
-}
-
-/** Where auto-sync stands; `at` is the last sync or import (ISO, UTC). */
-export interface JournalSync {
-  auto: boolean;
-  state: "ok" | "syncing" | "waiting" | "error" | "off";
-  at: string | null;
-  error: string | null;
 }
 
 export interface JournalsResponse {
@@ -1282,22 +1229,14 @@ export interface JournalStats {
 
 export const fetchJournals = () => getJson<JournalsResponse>("/api/journals");
 export const fetchJournal = (id: string) => getJson<JournalStats>(`/api/journals/${encodeURIComponent(id)}`);
-export const createJournal = (name: string, login: string | null, autoSync = false) =>
-  send<Journal>("POST", "/api/journals", { name, login, auto_sync: autoSync });
-
-/** The account the MT5 terminal is logged in to; `connected: false` with why when there's none to read. */
-export type TerminalAccount =
-  | { connected: true; login: string; server: string | null; company: string | null }
-  | { connected: false; detail: string };
-export const fetchTerminalAccount = () => getJson<TerminalAccount>("/api/journals/terminal");
-export type JournalPatch = { name?: string; time_offset?: number | null; auto_sync?: boolean; show_weekends?: boolean };
+export const createJournal = (name: string, login: string | null) =>
+  send<Journal>("POST", "/api/journals", { name, login });
+export type JournalPatch = { name?: string; time_offset?: number | null; show_weekends?: boolean };
 export const updateJournal = (id: string, patch: JournalPatch) =>
   send<Journal>("PATCH", `/api/journals/${encodeURIComponent(id)}`, patch);
 /** Bring the sample portfolio back after it was deleted. */
 export const restoreSample = () => send<Journal>("POST", "/api/journals/sample");
 export const deleteJournal = (id: string) => send<{ deleted: boolean }>("DELETE", `/api/journals/${encodeURIComponent(id)}`);
-export const syncJournal = (id: string) =>
-  send<{ trades: number; cash: number; journal: Journal }>("POST", `/api/journals/${encodeURIComponent(id)}/sync`);
 export const saveTradeNote = (id: string, tradeId: string, note: string, tags: string[]) =>
   send<{ note: string; tags: string[] }>("PUT", `/api/journals/${encodeURIComponent(id)}/trades/${encodeURIComponent(tradeId)}/note`, { note, tags });
 export const snapshotUrl = (id: string) => `/api/snapshots/${id}.png`;

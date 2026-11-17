@@ -71,28 +71,26 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
         m1 = history()
         return {"editable": True, "symbol": symbol(), "history": history_bounds(m1), **found.status(symbol())}
 
-    # ---- Data: more M1 history (import, MT5 backfill, coverage) ----------------------------
+    # ---- Data: more M1 history (import, coverage) --------------------------------------
     def stream() -> tuple[str, str] | None:
         """Where bars of the running source are stored; None for demo data (never stored)."""
         return get_engine().buffer.key
 
     def data_status() -> dict:
         found = lab()
-        engine = get_engine()
         key = stream()
         n, first, last = found.store.bar_bounds(*key) if key else (0, None, None)
         return {
             "source": get_source(), "symbol": symbol(), "clock": get_clock(),
-            "can_import": key is not None, "can_backfill": key is not None and engine.feed.native_history,
+            "can_import": key is not None,
             "stored": {"bars": n, "first_unix": first, "last_unix": last},
             "days": found.store.bar_days(*key) if key else [],
             "history_bars": found.history_bars, "history_bars_max": HISTORY_BARS_MAX,
-            "backfill": dict(found.backfill.state),
         }
 
     @r.get("/data")
     def get_data() -> dict:
-        """Stored M1 coverage per day, the Lab's history size, and the backfill's progress."""
+        """Stored M1 coverage per day and the Lab's history size."""
         return data_status()
 
     @r.put("/data")
@@ -107,7 +105,7 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
     async def stage_bars(request: Request) -> dict:
         """Upload an M1 file (raw body); returns a preview. Nothing is stored until the confirm call."""
         if stream() is None:
-            raise HTTPException(409, "Demo data isn't stored: switch to Yahoo Finance, MT5 or CSV first")
+            raise HTTPException(409, "Demo data isn't stored: switch to TradingView, Yahoo Finance or CSV first")
         data = await request.body()
         if len(data) > MAX_IMPORT_BYTES:
             raise HTTPException(413, "The file is larger than 500 MB")
@@ -121,7 +119,7 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
         """Store a staged file's bars, moved from the file's clock (``clock``) to the feed's."""
         key = stream()
         if key is None:
-            raise HTTPException(409, "Demo data isn't stored: switch to Yahoo Finance, MT5 or CSV first")
+            raise HTTPException(409, "Demo data isn't stored: switch to TradingView, Yahoo Finance or CSV first")
         found = lab()
         try:
             parsed = found.take_bars(token)
@@ -130,27 +128,6 @@ def lab_router(get_lab: Callable[[], Lab | None], get_engine: Callable, get_sour
             raise HTTPException(422, str(exc)) from exc
         found.forget_history()
         return {"imported": result, **data_status()}
-
-    @r.post("/data/backfill")
-    def start_backfill(body: dict = Body(...)) -> dict:
-        """Pull older M1 bars from the MT5 terminal back to ``start`` (YYYY-MM-DD, feed clock)."""
-        try:
-            start = pd.Timestamp(str(body.get("start")))
-        except ValueError:
-            start = pd.NaT
-        if pd.isna(start) or start >= pd.Timestamp.now():
-            raise HTTPException(422, "start must be a past date like 2024-01-01")
-        found = lab()
-        try:
-            found.backfill.start(get_engine(), found.store, start, on_done=found.forget_history)
-        except RuntimeError as exc:
-            raise HTTPException(409, str(exc)) from exc
-        return data_status()
-
-    @r.delete("/data/backfill")
-    def cancel_backfill() -> dict:
-        lab().backfill.cancel()
-        return data_status()
 
     @r.get("/candles")
     def candles(tf: str = Query("5M"), end: int | None = Query(None), limit: int = Query(300, ge=20, le=2000),

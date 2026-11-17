@@ -81,7 +81,7 @@ export function useCandles(tf: string, version: number, lookback: number,
       .then((res) => setLoaded((l) => (l.tf === tf
         ? { tf, candles: mergeCandles(res.candles, l.candles), more: res.has_more && res.candles.length > 0 }
         : l)))
-      // MT5 closed or not connected: stop asking until the timeframe or feed changes.
+      // The source has no older bars or failed: stop asking until the timeframe or feed changes.
       .catch(() => setLoaded((l) => (l.tf === tf ? { ...l, more: false } : l)))
       .finally(() => {
         busy.current = false;

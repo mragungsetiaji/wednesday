@@ -10,3 +10,4 @@ data/
 .env
 logs/
 tradingview/node_modules/
+packaging/node/

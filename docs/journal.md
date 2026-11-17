@@ -22,7 +22,7 @@ filled before you hand over an account. The screenshots on this page are of it.
   they say nothing about what trading returns.
 - It doesn't count as a journal: with the free plan you keep it and still make
   one journal of your own.
-- It can't be synced or imported into, and it has no MT5 account.
+- A report can't be imported into it, and it has no MT5 account.
 - **Delete…** next to it under Settings, Journal, Journals removes its trades and
   its prices. It stays deleted after a restart. To bring it back, **Show the
   sample** in the same place (or the link on the empty journal page).
@@ -37,28 +37,26 @@ so the checks below pass the way they would for a real account.
 ## The header and Journal settings
 
 The header holds the journal's name (a picker when there are several), one line
-with the account, server and sync state ("Synced 2 min ago", "Waiting for account
-51234567 in the terminal", "Last sync failed: …"), and a gear that opens
+with the account, server and when its report was last imported ("Imported 2 min
+ago", or "Not imported yet"), and a gear that opens
 **Settings, Journal** (`#settings/journal`). Everything that sets up or manages a
 journal lives there, saved field by field:
 
 | Section | |
 | --- | --- |
-| This journal | Name; the MT5 account, server, company and currency from the last sync or import. |
-| Sync | **Sync from MT5 automatically** (see below), the last sync and **Sync now**; **Import report**. |
+| This journal | Name; the MT5 account, server, company and currency from the last imported report. |
+| Report | When the report was last imported; **Import report**. |
 | Display | **Show Saturday and Sunday in the calendar**, off by default. |
 | Advanced | **Broker time offset (hours)**: leave empty to detect it from the deal prices. |
 | Data | **Export trades (CSV)**. |
-| Journals | Every journal with its account and last sync, **Open**, **Remove journal…**, and **New journal**. |
+| Journals | Every journal with its account and last import, **Open**, **Remove journal…**, and **New journal**. |
 
 ## Journals
 
-A new journal takes a name and the MT5 account number (the login under
-*Navigator*, *Accounts*). When the data source is MT5, the form fills in the
-account the terminal is logged in to and **Create and sync** reads its history
-straight away, with auto-sync on. For another account the journal starts empty:
-log in to that account in the terminal and sync, or import its report. One
-account has one journal; a second journal for the same number is refused.
+A new journal takes a name and the MT5 account number (the digits of the login,
+as MT5 shows it under *Navigator*, *Accounts*). It starts empty; its trades come
+from that account's history report (see below). One account has one journal; a
+second journal for the same number is refused.
 
 Under **Journals** in Settings, Journal, the open one says *Current*. **Remove
 journal…** asks first, then deletes its trades and notes from Wednesday and
@@ -66,35 +64,19 @@ changes nothing in MT5.
 
 ## Filling it
 
-- **Sync from MT5 automatically** (one switch per journal, on for journals made
-  from the terminal's account and for older journals filled from MT5) keeps the
-  journal current with nothing to press. After each scan, on the scan thread
-  (MT5 can only be used from the thread that connected it), it reads the deal
-  count and open positions, and syncs only when they changed, once after the
-  feed connects, and every 5 minutes while positions are open so their floating
-  result stays current. A closed trade shows within about a minute. A terminal
-  logged in to another account is waited for; a failure keeps the last good data
-  and tries again after 1, 2, 4… minutes (at most 30). **Sync now** does it by hand.
-  Wednesday reads the account number, server, company, currency, balance and
-  equity; never the password or the account holder's name.
-- **Import report**: in the terminal, *History* tab, right click, *Report*,
-  *HTML*, with *All history* selected. The *Positions* table gives the trades, the
-  *Deals* table the deposits and withdrawals. This works on any machine, so the
-  dashboard doesn't have to run next to the terminal.
+**Import report** in Settings, Journal. To make the report, in the MT5 terminal:
+*History* tab, right click, *Report*, *HTML*, with *All history* selected. The
+*Positions* table gives the trades, the *Deals* table the deposits and
+withdrawals. Wednesday reads the account number, server, company and currency
+from it; never a password or the account holder's name.
 
-Both are local. Sync talks to the MT5 terminal running on the same Windows
-machine as Wednesday (through the `MetaTrader5` package), and the report is a
-file you upload. Wednesday never logs in to the broker itself and never sees an
-investor password.
+The report is a file you upload, so the dashboard doesn't have to run on the same
+machine as MT5. Wednesday doesn't connect to the terminal or log in to the
+broker, and never sees a password.
 
-Either replaces the journal's trades, so sync or import the full history. A
-journal belongs to one account: syncing while the terminal is logged in to a
-different account, or importing another account's report, is refused.
-
-From the terminal, a position closed in parts becomes one trade per closing
-deal (with the average entry and the entry commission shared by volume); a
-reversal (in/out) closes one trade and opens the other way. Positions still open
-show with their floating result.
+An import replaces the journal's trades, so export the full history each time.
+A journal belongs to one account: a report of a different account is refused.
+To bring the journal up to date, export and import the report again.
 
 ## The numbers
 
@@ -114,8 +96,7 @@ whether it was checked, and your note.
 
 Under the curve, one line says how the drawdown was worked out ("Drawdown from
 closed results. Prices for 0 of 165 trades."), with **Details** for the full
-check. Deal prices outside their bars, or a balance that doesn't match the
-terminal, show in red with what to do.
+check. Deal prices outside their bars show in red with what to do.
 
 ## Monthly gain and the calendar
 
@@ -170,21 +151,20 @@ The box under the chart says how far the numbers are checked:
 
 - **Rebuilt from prices**: the trades with M1 bars for their whole life. The
   bars are the ones Wednesday stored while running (the `m1_bars` table), matched
-  by symbol: `XAUUSD.m`, `XAUUSDm`, `XAUUSD#` and `GOLD` are all XAUUSD, and bars
-  from MT5 are preferred. Trades without bars count at their closed result, and the
+  by symbol: `XAUUSD.m`, `XAUUSDm`, `XAUUSD#` and `GOLD` are all XAUUSD, and the
+  stream with the most bars is used. Trades without bars count at their closed result, and the
   drawdown badge says **closed only** when none could be rebuilt.
 - **Deal prices**: every entry and exit price has to sit inside its M1 bar (with
   0.03% to spare for the spread). A trade whose prices aren't in the market isn't
   used for the drawdown and is listed. That catches an edited report, or prices
   from a different feed than the bars.
-- **Balance**: after a sync, the balance worked out from the deals against the
-  balance the terminal reports.
 
 The broker's deal clock and the price feed's clock can be hours apart. Unless
 you set the offset (Broker time offset in Settings, Journal), the journal tries every
 whole hour from −14 to +14 and uses the one where most deal prices fit their bars.
-Bars from the same broker (the MT5 source) line up best; Yahoo's `GC=F` is
-futures, priced differently from spot, so it won't match.
+Spot gold bars (TradingView's `FX:XAUUSD`, or your broker's M1 bars imported in
+[Lab > Data](lab.md#data)) line up best; Yahoo's `GC=F` is futures, priced
+differently from spot, so it won't match.
 
 ## Trades
 
@@ -212,7 +192,7 @@ journal when it's removed, and the sample portfolio has none.
 
 Click a trade, or Tab to its close time and press Enter, to write a note and tags
 (`a+ setup`, `fomo`, `moved stop`); Escape closes it. They
-are kept by trade, survive a re-sync, and go into the CSV. They are the start of
+are kept by trade, survive a re-import, and go into the CSV. They are the start of
 what the second brain (#15) will read.
 
 A trade can also hold chart pictures: under any chart, press the camera and

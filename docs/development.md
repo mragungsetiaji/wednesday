@@ -38,7 +38,7 @@ src/wednesday/
   structure.py    shared swings / break of structure / ATR (computed once per timeframe)
   levels.py       Level: the common output of every detector
   detectors/      order blocks, liquidity (BSL/SSL, EQH/EQL), inducement + registry
-  feeds.py        MT5, yfinance, CSV, synthetic feeds + rolling M1 buffer
+  feeds.py        yfinance, TradingView, CSV, synthetic feeds + rolling M1 buffer
   scanner.py      multi-timeframe scan, nearest level above/below, limit setups
   quarters.py     quarterly theory blocks (weekday, session, 90m) in New York time + green stats
   report.py       console table
@@ -53,7 +53,7 @@ src/wednesday/
   storage.py      SQLAlchemy store: settings, M1 history, alert log, Lab labels, journals (SQLite / PostgreSQL)
   lab/            machine learning: tags, per-minute dataset + causal features, trade outcomes,
                   training, model files (zip + safe unpickler), the /api/lab routes
-  journal/        MT5 accounts: deal/report import, gain and drawdown rebuilt from M1 bars, the sample portfolio, /api/journals
+  journal/        MT5 accounts: HTML report import, gain and drawdown rebuilt from M1 bars, the sample portfolio, /api/journals
   plugins.py      loads plugins (entry point group wednesday.plugins): routes, hooks, jobs
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)
@@ -64,13 +64,13 @@ tests/
 
 ## How a scan flows
 
-Two threads (`engine.py`). The **feed thread** owns the feed: MetaTrader 5 may
-only be used from the thread that connected it. It does light work only: live
+Two threads (`engine.py`). The **feed thread** owns the feed: a feed's connection
+is only used from the thread that opened it. It does light work only: live
 ticks, the M1 fetch at each minute close, and short tasks queued with
-`Engine.call` (journal sync, account reads, scrolling back). Every task over
+`Engine.call` (scrolling back, plugins). Every task over
 0.2 s is logged, since the live price waits for it. The **scan worker**
 (`ScanWorker`) takes the fetched bars and does steps 2 to 5. If it falls behind,
-only the newest fetch is scanned. Anything after a scan that needs MT5 must go
+only the newest fetch is scanned. Anything after a scan that reads the feed must go
 through `engine.call`.
 
 1. `M1Buffer` loads stored bars, fetches the newest ones from the feed and saves them (feed thread).

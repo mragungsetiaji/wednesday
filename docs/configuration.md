@@ -30,9 +30,9 @@ wednesday ...` commands directly (see [deploy-windows.md](deploy-windows.md)).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--source` | `yfinance` | `yfinance`, `mt5`, `csv` or `synthetic` (`XAU_SOURCE`) |
+| `--source` | `yfinance` | `yfinance`, `tradingview`, `csv` or `synthetic` (`XAU_SOURCE`). A saved or env `mt5` (from older versions) falls back to `yfinance` with a warning |
 | `--symbol` | per source | Symbol to scan (`XAU_SYMBOL`) |
-| `--clock` | per source | The feed's clock for the quarterly view: `UTC`, `NY+7`, `UTC+3`, `Europe/London` (`XAU_CLOCK`; default `NY+7` for MT5, else `UTC`) |
+| `--clock` | per source | The feed's clock for the quarterly view: `UTC`, `NY+7`, `UTC+3`, `Europe/London` (`XAU_CLOCK`; default `UTC`) |
 | `--timeframes` | `4H,1H,30M,15M,5M` | Timeframes to scan (always processed high to low) |
 | `--lookback` | `200` | Closed candles per timeframe searched for levels |
 | `--swing-length` | `5` | Bars on each side needed to confirm a swing high/low |
@@ -69,7 +69,6 @@ bars are fetched each minute.
 | `XAU_CLOCK` | The feed's clock ([Feed clock](data-sources.md#feed-clock)) |
 | `XAU_TICK` | Live price interval in seconds, 0 = off ([Live price](data-sources.md#live-price)) |
 | `XAU_DB_URL` | Storage URL |
-| `MT5_LOGIN`, `MT5_SERVER`, `MT5_PATH` | MetaTrader 5 connection (also set in Settings). The password is entered in Settings; `MT5_PASSWORD` is still read for older setups |
 | `XAU_MAX_SL`, `XAU_DETECTORS` | Strategy settings |
 | `XAU_SERVE`, `XAU_HOST`, `XAU_PORT` | Dashboard |
 | `XAU_AUTH_PASSWORD`, `XAU_AUTH_PASSWORD_HASH` | Dashboard login ([deploy-windows.md](deploy-windows.md#opening-it-from-a-phone-or-laptop-login--https)); the hash wins when both are set |

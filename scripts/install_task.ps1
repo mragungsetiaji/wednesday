@@ -2,7 +2,7 @@
 # Run once on the VPS from the repo folder:  powershell -ExecutionPolicy Bypass -File scripts\install_task.ps1
 param(
     [string]$TaskName = "Wednesday",
-    [int]$DelaySeconds = 60  # give the MT5 terminal time to start and log in first
+    [int]$DelaySeconds = 60  # let the network come up after logon first
 )
 $root = Split-Path -Parent $PSScriptRoot
 $script = Join-Path $PSScriptRoot "run_wednesday.ps1"
@@ -15,7 +15,7 @@ $trigger.Delay = "PT${DelaySeconds}S"
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
-# Interactive: MT5's Python API only works in the same desktop session as the terminal.
+# Interactive: runs in the logged-on desktop session, like starting it by hand.
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `

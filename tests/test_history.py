@@ -1,19 +1,15 @@
-"""Older candles for the chart as it scrolls left: engine memory, then MT5's own candles or stored M1."""
+"""Older candles for the chart as it scrolls left: engine memory, then stored M1."""
 
-import sys
 import time
 import types
 
-import numpy as np
 import pandas as pd
 from fastapi.testclient import TestClient
 
-from wednesday.feeds import MT5Feed, SyntheticFeed
+from wednesday.feeds import SyntheticFeed
 from wednesday.history import older_candles
 from wednesday.storage import Store
 from wednesday.timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
-
-from test_mt5_and_cli import FakeMT5
 
 H1 = TIMEFRAMES_BY_NAME["1H"]
 M1_BARS = SyntheticFeed(seed=3, history=60 * 24 * 10, end=pd.Timestamp("2026-03-02 12:00")).fetch_m1(60 * 24 * 10)
@@ -62,42 +58,6 @@ def test_memory_only_feed_stops():
     engine = fake_engine(SyntheticFeed(), m1=M1_BARS.tail(600))
     df, more = older_candles(engine, H1, unix(M1_BARS.index[-1]), limit=100)
     assert 0 < len(df) < 100 and more is False
-
-
-class HistoryMT5(FakeMT5):
-    TIMEFRAME_H1 = 16385
-
-    def __init__(self, end, bars):
-        super().__init__()
-        self.end, self.bars, self.calls = end, bars, []
-
-    def copy_rates_from(self, symbol, timeframe, date_from, count):
-        self.calls.append((timeframe, date_from, count))
-        assert timeframe == self.TIMEFRAME_H1 and isinstance(date_from, int)
-        times = np.arange(self.end - 3600 * self.bars, self.end, 3600)
-        times = times[times <= date_from][-count:]
-        dtype = [("time", "i8"), ("open", "f8"), ("high", "f8"), ("low", "f8"), ("close", "f8"),
-                 ("tick_volume", "i8"), ("spread", "i4"), ("real_volume", "i8")]
-        rates = np.zeros(len(times), dtype=dtype)
-        rates["time"] = times
-        rates["open"] = rates["high"] = rates["low"] = rates["close"] = 2650.0
-        return rates
-
-
-def test_mt5_serves_the_timeframe_itself(monkeypatch):
-    end = unix(pd.Timestamp("2026-03-02 00:00"))
-    mt5 = HistoryMT5(end, bars=120)
-    monkeypatch.setitem(sys.modules, "MetaTrader5", mt5)
-    feed = MT5Feed("XAUUSD")
-    feed.connect()
-    engine = fake_engine(feed)  # nothing in memory: straight to the terminal
-
-    df, more = older_candles(engine, H1, end, limit=50)
-    assert len(df) == 50 and more is True
-    assert unix(df.index[-1]) == end - 3600  # strictly before
-    got = pages(engine, H1, end, limit=50)
-    assert len(got) == 120 and got.index.is_unique
-    assert all(tf == mt5.TIMEFRAME_H1 for tf, _, _ in mt5.calls)  # never M1
 
 
 def test_candles_endpoint_pages_back(tmp_path):

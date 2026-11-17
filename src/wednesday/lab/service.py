@@ -22,7 +22,7 @@ import pandas as pd
 from ..detectors.base import DetectorParams
 from ..storage import Store, lab_labels_table, lab_reviewed_table, lab_reviews_table
 from ..timeframes import TIMEFRAMES_BY_NAME
-from .bars import HISTORY_BARS_DEFAULT, HISTORY_BARS_MAX, LAB_DATA_KEY, Backfill, BarsFileError, ParsedBars, parse_bars
+from .bars import HISTORY_BARS_DEFAULT, HISTORY_BARS_MAX, LAB_DATA_KEY, BarsFileError, ParsedBars, parse_bars
 from . import dataset
 from .dataset import FAMILIES, FeatureParams, ts, unix
 from .model import ModelBundle, ModelFileError, load, load_bytes, read_manifest
@@ -123,7 +123,6 @@ class Lab:
         self._signatures: dict[str, tuple] = {}
         self._queue: dict[tuple, pd.DataFrame] = {}
         self._blocks: dict[tuple, list] = {}
-        self.backfill = Backfill()
         self._staged_bars: dict[str, ParsedBars] = {}
         self._staged_labels: dict[str, dict] = {}
         saved = store.get_setting(LAB_DATA_KEY) or {}
@@ -148,7 +147,7 @@ class Lab:
         self.forget_history()
 
     def forget_history(self) -> None:
-        """Drop the cached history, after bars were imported or backfilled."""
+        """Drop the cached history, after bars were imported."""
         self._history.clear()
 
     def stage_bars(self, data: bytes) -> dict:

@@ -1047,23 +1047,6 @@ wheels = [
 ]
 
 [[package]]
-name = "metatrader5"
-version = "5.0.6180"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9a/de/3badfc0f83ffbcc74a66e9e04ac80a87dffe611785cb2215c88987b07a2f/metatrader5-5.0.6180-cp310-cp310-win_amd64.whl", hash = "sha256:8e11602f04eb1a98eaa1698f50bbb90115b397b5ec1a2620fb2b850693ca6afa", size = 48030, upload-time = "2026-09-05T04:59:45.023Z" },
-    { url = "https://files.pythonhosted.org/packages/0f/c3/f2a533ce00a9ab57bafb49586896d0eefcfd27c5a30ae1c980ff8cb09500/metatrader5-5.0.6180-cp311-cp311-win_amd64.whl", hash = "sha256:af901f0ca6cc487874af482b53f297f21f07887fe0b81017025ae7355d6df90b", size = 48026, upload-time = "2026-09-05T04:59:46.077Z" },
-    { url = "https://files.pythonhosted.org/packages/5b/84/e9be814b53711be44e3be5518fada7b92015345fbbd4b3a4b51f98c1ab12/metatrader5-5.0.6180-cp312-cp312-win_amd64.whl", hash = "sha256:7870e1497026d3f0d9b296904e3bcef48292d5b665b1fff1fb44efd41631b998", size = 47969, upload-time = "2026-09-05T04:59:46.938Z" },
-    { url = "https://files.pythonhosted.org/packages/00/cb/edc9bd6efff880c65b63ceffaa971f0cf70b8e4ec781eafd4fdee6c3c26c/metatrader5-5.0.6180-cp313-cp313-win_amd64.whl", hash = "sha256:41a89f9c87ab690f7c404ca0dd1bbdfd41630fff3860d4145ed464547860fb97", size = 47970, upload-time = "2026-09-05T04:59:47.948Z" },
-    { url = "https://files.pythonhosted.org/packages/f3/44/6354e8f17760467b26b781da0ca41e67e70c95e91badd06a43250d3f1487/metatrader5-5.0.6180-cp314-cp314-win_amd64.whl", hash = "sha256:9cbaf92dc525cb7bdeac7656d9a1b3e9e467dd9d34eb3a0107b58d651be3a5fc", size = 49531, upload-time = "2026-09-05T04:59:48.952Z" },
-]
-
-[[package]]
 name = "more-itertools"
 version = "11.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3030,10 +3013,6 @@ ml = [
     { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-learn", version = "1.9.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
-mt5 = [
-    { name = "keyring" },
-    { name = "metatrader5", marker = "sys_platform == 'win32'" },
-]
 postgres = [
     { name = "psycopg", extra = ["binary"] },
 ]
@@ -3050,8 +3029,6 @@ requires-dist = [
     { name = "cryptography", specifier = ">=42" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "keyring", marker = "extra == 'desktop'", specifier = ">=25" },
-    { name = "keyring", marker = "extra == 'mt5'", specifier = ">=25" },
-    { name = "metatrader5", marker = "sys_platform == 'win32' and extra == 'mt5'", specifier = ">=5.0.45" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openai", marker = "extra == 'llm'", specifier = ">=1.0" },
     { name = "pandas", specifier = ">=2.2" },
@@ -3063,7 +3040,7 @@ requires-dist = [
     { name = "uvicorn", specifier = ">=0.30" },
     { name = "yfinance", specifier = ">=0.2.40" },
 ]
-provides-extras = ["mt5", "postgres", "llm", "ml", "desktop"]
+provides-extras = ["postgres", "llm", "ml", "desktop"]
 
 [package.metadata.requires-dev]
 dev = [

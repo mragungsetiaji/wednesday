@@ -57,7 +57,8 @@ def test_the_running_block_is_live_and_left_out_of_stats():
 
 
 def test_clock_setting_defaults_per_source():
-    assert DataSettings(source="mt5").resolved_clock == "NY+7"
+    assert DataSettings(source="tradingview").resolved_clock == "UTC"
+    assert DataSettings(source="tradingview", clock="NY+7").resolved_clock == "NY+7"
     assert DataSettings(source="yfinance").resolved_clock == "UTC"
     assert DataSettings(source="csv", csv_path="x.csv", clock="Asia/Jakarta").resolved_clock == "Asia/Jakarta"
     assert DataSettings(source="synthetic", clock="nope").validate()

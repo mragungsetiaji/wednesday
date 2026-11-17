@@ -34,7 +34,7 @@ def test_anchor_after_the_end_or_before_the_start():
     assert earlier._bars["open"].iloc[0] == 4000.0
 
 
-def test_real_price_prefers_mt5_ignores_the_sample_and_converts_the_clock(tmp_path):
+def test_real_price_takes_the_newest_ignores_the_sample_and_converts_the_clock(tmp_path):
     store = Store(f"sqlite:///{tmp_path / 'd.db'}")
     assert real_price(store) is None
     store.save_bars("sample", "XAUUSD", bars(2500.0, "2026-10-03 11:00"))

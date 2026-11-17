@@ -2,16 +2,14 @@
 
 import threading
 import time
-from types import SimpleNamespace
 
-import numpy as np
 import pandas as pd
 import pytest
 
 from wednesday import engine as engine_mod
 from wednesday.detectors import DetectorParams
 from wednesday.engine import Engine
-from wednesday.feeds import MT5Feed, SyntheticFeed
+from wednesday.feeds import SyntheticFeed
 from wednesday.scanner import ScanConfig
 
 CFG = ScanConfig(lookback=60, params=DetectorParams(swing_length=3))
@@ -69,34 +67,6 @@ def test_call_gives_up_at_once_when_stopping(monkeypatch):
     with pytest.raises(RuntimeError, match="stopping"):
         eng.call(lambda f: None, timeout=30)
     assert time.monotonic() - started < 1
-
-
-class TickMT5:
-    """copy_ticks_from and symbol_info_tick over a fixed list of ticks."""
-
-    COPY_TICKS_INFO = 2
-
-    def __init__(self, ticks):
-        dt = np.dtype([("time_msc", "i8"), ("bid", "f8")])
-        self.ticks = np.array(ticks, dtype=dt)
-
-    def symbol_info_tick(self, symbol):
-        t = self.ticks[0]
-        return SimpleNamespace(time=int(t["time_msc"]) // 1000, time_msc=int(t["time_msc"]), bid=float(t["bid"]))
-
-    def copy_ticks_from(self, symbol, start, count, flags):
-        return self.ticks[self.ticks["time_msc"] >= start * 1000][:count]
-
-
-def test_mt5_reads_every_tick_since_the_last_poll():
-    base = int(pd.Timestamp("2026-03-02 12:00:00").value // 1_000_000)
-    feed = MT5Feed("XAUUSD")
-    feed._mt5 = TickMT5([(base, 2400.0), (base + 100, 2405.0), (base + 200, 2398.0), (base + 300, 2401.0)])
-    first = feed.new_ticks()
-    assert [p for _, p in first] == [2400.0]  # the first poll takes the latest tick to start from
-    rest = feed.new_ticks()
-    assert [p for _, p in rest] == [2405.0, 2398.0, 2401.0]  # the high and low between polls aren't lost
-    assert feed.new_ticks() == []  # nothing new
 
 
 def test_folding_several_ticks_keeps_the_high_and_low():
