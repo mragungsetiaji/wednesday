@@ -96,6 +96,37 @@ uv run wednesday-desktop
 `WEDNESDAY_HOME` points the app at another settings folder (default
 `~/.wednesday` outside Windows).
 
+## Tauri shell (in progress)
+
+The desktop app is moving from pywebview to [Tauri v2](https://tauri.app) (#92).
+The new shell lives in `src-tauri/`. For now the Python server still does the work:
+the shell starts it as a sidecar (`wednesday-server`, same settings folder, lock and
+`.env`), waits for it to answer, and shows the dashboard in native windows. Pop-out
+charts are Tauri windows that can sit on any monitor. Where the windows were when
+the app closed is kept in the shell's own data folder (`windows.json`) and restored
+on the next start; a window left on an unplugged monitor comes back onto the
+first one. The server stops with the app, and by itself if the shell crashes.
+
+```bash
+make tauri        # the shell, starting `uv run wednesday-server` from this checkout
+make test-tauri   # its Rust tests
+```
+
+It needs Rust 1.77.2 or newer. `WEDNESDAY_HOME` and `XAU_SOURCE=synthetic` work as
+for the pywebview app. In a debug build, `WEDNESDAY_SELFTEST=1` makes the dashboard
+call the shell's commands (open a chart window, read and arrange the windows) and
+print the result; `WEDNESDAY_SELFTEST=channel` checks that `BroadcastChannel`, which
+link groups and drawings use, reaches another window.
+
+**Actions > Tauri Windows > Run workflow** builds a test installer: the server with
+PyInstaller (`WEDNESDAY_BUILD=server`, output `dist\wednesday-server\`), then the
+shell with `cargo tauri build --config tauri.release.conf.json`, which bundles
+that folder into an NSIS installer. Releases still come from the pywebview build
+below until the Tauri one has been tried on real machines. The Tauri shell keeps
+the dashboard's own layout preferences in its own WebView storage, so they start
+from the defaults once; settings, drawings and workspaces are in the database and
+carry over.
+
 ## Build and release
 
 `.github/workflows/release-windows.yml` builds on a Windows runner:

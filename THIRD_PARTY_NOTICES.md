@@ -36,6 +36,22 @@ in `tradingview/node_modules`; the Windows app bundles it, with Node.js itself:
   Otto Stangvik, (c) 2013 Arnout Kazemier and contributors, (c) 2016 Luigi Pinca and
   contributors.
 
+## Tauri desktop shell
+
+The Tauri build of the desktop app (`src-tauri/`, not yet released) is a Rust
+program built with these crates, each under the MIT License or the Apache License
+2.0 at your option:
+
+- Tauri 2 (<https://github.com/tauri-apps/tauri>), Copyright (c) 2017 - Present
+  Tauri Apps Contributors, with `tauri-plugin-dialog` and
+  `tauri-plugin-single-instance` (<https://github.com/tauri-apps/plugins-workspace>)
+  and the crates they depend on, listed in `src-tauri/Cargo.lock`.
+- `serde` and `serde_json` (<https://github.com/serde-rs>), `base64`
+  (<https://github.com/marshallpierce/rust-base64>) and `log`
+  (<https://github.com/rust-lang/log>).
+
+On Windows its windows are drawn by Microsoft Edge WebView2, which Windows provides.
+
 ## React
 
 `react`, `react-dom` and `scheduler` (<https://react.dev>), MIT License:

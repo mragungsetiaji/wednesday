@@ -206,3 +206,14 @@ def test_arrange_replaces_the_pop_outs(monkeypatch):
     assert (main.width, main.height) == (1000, 700)
     assert [w["route"] for w in api.window_layout()] == ["#", "#popout/4H/B"]
     assert api.arrange([{"route": "javascript:alert(1)", "x": 0, "y": 0, "width": 1, "height": 1}]) is False
+
+
+def test_the_sidecar_notices_when_a_process_is_gone():
+    # run_sidecar stops once the Tauri shell that started it is gone (--parent-pid).
+    import os
+    import subprocess
+
+    assert desktop._process_alive(os.getpid())
+    child = subprocess.Popen([sys.executable, "-c", "pass"])
+    child.wait()
+    assert not desktop._process_alive(child.pid)

@@ -64,6 +64,12 @@ dev-ui:
 desktop: $(UI_BUILD) ## Dashboard in its own window, like the Windows app (settings in ~/.wednesday)
 	$(UV) run --extra desktop wednesday-desktop
 
+tauri: $(UI_BUILD) ## The Tauri desktop shell (src-tauri, #92) with the Python server as its sidecar
+	cd src-tauri && cargo run
+
+test-tauri: ## Run the Tauri shell's Rust tests
+	cd src-tauri && cargo test
+
 scan: ## One scan in the console
 	$(UV) run wednesday --once $(ARGS)
 

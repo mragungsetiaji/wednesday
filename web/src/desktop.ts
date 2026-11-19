@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
-/** Methods the Windows desktop app exposes to the page (see DesktopApi in desktop.py). */
+/**
+ * Methods the desktop app exposes to the page: the Tauri shell's commands (src-tauri/src/lib.rs),
+ * or the older pywebview app's (DesktopApi in desktop.py). Same names and arguments in both.
+ */
 export interface DesktopApi {
   save_png(data: string, name: string): Promise<string | null>; // base64 PNG; the path saved to, or null (cancelled)
   open_chart(tf: string, group: string | null): Promise<boolean>; // a chart in a new native window
@@ -11,12 +14,25 @@ export interface DesktopApi {
 declare global {
   interface Window {
     pywebview?: { api?: Partial<DesktopApi> };
+    __TAURI__?: { core?: { invoke?: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> } };
   }
 }
 
-/** The desktop app's API, or null in a browser. pywebview injects it shortly after load. */
+/** The Tauri shell's commands as a DesktopApi, or null outside it. Tauri injects them before the page runs. */
+function tauriApi(): DesktopApi | null {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (!invoke) return null;
+  return {
+    save_png: (data, name) => invoke("save_png", { data, name }),
+    open_chart: (tf, group) => invoke("open_chart", { tf, group }),
+    window_layout: () => invoke("window_layout"),
+    arrange: (windows) => invoke("arrange", { windows }),
+  };
+}
+
+/** The desktop app's API, or null in a browser. pywebview injects its own shortly after load. */
 export function useDesktopApi(): Partial<DesktopApi> | null {
-  const [api, setApi] = useState<Partial<DesktopApi> | null>(() => window.pywebview?.api ?? null);
+  const [api, setApi] = useState<Partial<DesktopApi> | null>(() => tauriApi() ?? window.pywebview?.api ?? null);
   useEffect(() => {
     if (api) return;
     const ready = () => setApi(window.pywebview?.api ?? null);

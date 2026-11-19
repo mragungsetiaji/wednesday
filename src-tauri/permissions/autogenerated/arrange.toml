@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-arrange"
+description = "Enables the arrange command without any pre-configured scope."
+commands.allow = ["arrange"]
+
+[[permission]]
+identifier = "deny-arrange"
+description = "Denies the arrange command without any pre-configured scope."
+commands.deny = ["arrange"]

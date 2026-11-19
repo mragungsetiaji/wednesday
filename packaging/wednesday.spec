@@ -5,6 +5,10 @@
 #   uv run --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 #
 # Output: dist/Wednesday/Wednesday.exe (one folder; packaging/wednesday.iss turns it into an installer).
+#
+# With WEDNESDAY_BUILD=server it builds the Tauri shell's server instead (src-tauri, #92):
+# dist/wednesday-server/wednesday-server.exe, no window of its own, bundled into the Tauri installer.
+import os
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
@@ -46,8 +50,11 @@ hiddenimports = (collect_submodules("wednesday") + collect_submodules("uvicorn")
 hiddenimports += (["argparse", "ast", "platform", "secrets", "tempfile", "hashlib", "urllib.request",
                    "urllib.error", "zipfile"] + collect_submodules("cryptography"))
 
+SERVER = os.environ.get("WEDNESDAY_BUILD") == "server"
+NAME = "wednesday-server" if SERVER else "Wednesday"
+
 a = Analysis(
-    [str(ROOT / "packaging" / "launcher.py")],
+    [str(ROOT / "packaging" / ("server_launcher.py" if SERVER else "launcher.py"))],
     pathex=[str(ROOT / "src")],
     datas=datas,
     binaries=binaries,
@@ -62,9 +69,9 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Wednesday",
+    name=NAME,
     icon=str(ROOT / "packaging" / "wednesday.ico"),
     console=False,
     upx=False,
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="Wednesday", upx=False)
+coll = COLLECT(exe, a.binaries, a.datas, name=NAME, upx=False)
