@@ -13,7 +13,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
-import { createContext, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
+import { createContext, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore, type Ref } from "react";
 
 import type { Candle, QuarterBlock, QuarterRow, QuartersResponse, SwingPoint } from "../api";
 import { countdown, measure, PRESETS, presetStart, type Preset } from "../chartNav";
@@ -114,6 +114,66 @@ const timesOf = (candles: Candle[], live: Candle | null) => {
 
 const fmtSigned = (v: number, digits: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(digits)}`;
 
+/** The candle holding time t: the last one opening at or before it (the first one before them all). */
+function barAt(bars: Candle[], t: number): Candle {
+  let lo = 0;
+  let hi = bars.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (bars[mid].time <= t) lo = mid;
+    else hi = mid - 1;
+  }
+  return bars[lo];
+}
+
+/**
+ * The candle under the crosshair, outside React state: the crosshair moves on every mouse move
+ * (and on every linked chart), and re-rendering the whole chart for it cost hundreds of renders
+ * a second. Only the legend reads it.
+ */
+function hoverStore() {
+  let value: Candle | null = null;
+  const subs = new Set<() => void>();
+  return {
+    get: () => value,
+    set(next: Candle | null) {
+      if (next === value || (next && value && next.time === value.time && next.close === value.close && next.high === value.high
+        && next.low === value.low)) return;
+      value = next;
+      for (const fn of subs) fn();
+    },
+    subscribe(fn: () => void) {
+      subs.add(fn);
+      return () => {
+        subs.delete(fn);
+      };
+    },
+  };
+}
+type HoverStore = ReturnType<typeof hoverStore>;
+
+/** O H L C of the hovered candle (else the live or last one), and the quarter blocks it sits in. */
+function ChartLegend({ hover, fallback, quarters, quarterRows }: {
+  hover: HoverStore; fallback: Candle | undefined; quarters: QuartersResponse | null; quarterRows: QuarterRow[];
+}) {
+  const shown = useSyncExternalStore(hover.subscribe, hover.get) ?? fallback;
+  if (!shown) return null;
+  const quarterNow = blocksAt(quarters, quarterRows, shown.time);
+  return (
+    <div className="chart-legend num" aria-hidden="true">
+      <span><i>O</i>{fmtPrice(shown.open)}</span>
+      <span><i>H</i>{fmtPrice(shown.high)}</span>
+      <span><i>L</i>{fmtPrice(shown.low)}</span>
+      <span><i>C</i>{fmtPrice(shown.close)}</span>
+      {quarterNow.map((b) => (
+        <span key={b.row} className={`q ${b.change > 0 ? "up" : b.change < 0 ? "down" : ""}`}>
+          <i>{b.label}</i>{fmtChange(b.change)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 const fmtChange = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmtPrice(Math.abs(v))}`;
 
 /** The block of each row that contains t. */
@@ -163,6 +223,7 @@ const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
   ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe, rangeLink = null, precision = 2 }: Props) {
+  counters.renders++; // the perf overlay's renders/s: panning and dragging a drawing should add none
   const liveBar = useLiveTick(live)?.bar ?? null; // only the chart re-renders on a tick, not its parent
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -186,7 +247,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const needOlderRef = useRef(onNeedOlder);
   needOlderRef.current = onNeedOlder;
   const fittedKey = useRef<string | null>(null);
-  const [hover, setHover] = useState<Candle | null>(null);
+  const hover = useMemo(hoverStore, []);
   const liveCandle = useMemo(() => (liveBar ? withLive(candles, liveBar) : null), [liveBar, candles]);
   const liveRef = useRef(liveCandle);
   liveRef.current = liveCandle;
@@ -227,7 +288,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     quartersPrimitive.update({ font: FONT });
     chart.subscribeCrosshairMove((param) => {
       const bar = param.seriesData.get(series) as Candle | undefined;
-      setHover(bar && "open" in bar ? { ...bar, time: param.time as number } : null);
+      hover.set(bar && "open" in bar ? { ...bar, time: param.time as number } : null);
       quartersPrimitive.update({ hoverTime: param.time === undefined ? null : (param.time as number) });
       const tip = param.point && param.paneIndex === 0 ? newsPrimitive.markAt(param.point.x) : null;
       setNewsTip((cur) => (cur?.mark === tip?.mark ? cur : tip));
@@ -589,15 +650,14 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       if (!chart || !series) return;
       if (!p || !bars.length || p.time < bars[0].time) {
         chart.clearCrosshairPosition();
-        setHover(null);
+        hover.set(null);
         quartersRef.current?.update({ hoverTime: null });
         return;
       }
-      const t = candleAt(bars.map((c) => c.time), p.time);
-      const bar = bars.find((c) => c.time === t) ?? bars[bars.length - 1];
-      chart.setCrosshairPosition(p.price ?? bar.close, t as UTCTimestamp, series);
+      const bar = barAt(bars, p.time); // runs on every mouse move of every linked chart: no copies, no scans
+      chart.setCrosshairPosition(p.price ?? bar.close, bar.time as UTCTimestamp, series);
       // The readout and the quarterly pane follow too.
-      setHover(bar);
+      hover.set(bar);
       quartersRef.current?.update({ hoverTime: p.time });
     });
   }, [sync]);
@@ -651,7 +711,6 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     chart.panes()[QUARTER_PANE]?.setHeight(quarterPaneHeight.current);
   }, [candles, quarters, quarterRows]);
 
-  const shown = hover ?? liveCandle ?? candles[candles.length - 1];
   let rulerView = null;
   if (ruler && containerRef.current) {
     const times = timesOf(candles, liveCandle);
@@ -676,22 +735,9 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       </div>
     );
   }
-  const quarterNow = shown ? blocksAt(quarters, quarterRows, shown.time) : [];
   return (
     <div className="chart-wrap has-nav" aria-busy={loading} onMouseLeave={onLeave}>
-      {shown && (
-        <div className="chart-legend num" aria-hidden="true">
-          <span><i>O</i>{fmtPrice(shown.open)}</span>
-          <span><i>H</i>{fmtPrice(shown.high)}</span>
-          <span><i>L</i>{fmtPrice(shown.low)}</span>
-          <span><i>C</i>{fmtPrice(shown.close)}</span>
-          {quarterNow.map((b) => (
-            <span key={b.row} className={`q ${b.change > 0 ? "up" : b.change < 0 ? "down" : ""}`}>
-              <i>{b.label}</i>{fmtChange(b.change)}
-            </span>
-          ))}
-        </div>
-      )}
+      <ChartLegend hover={hover} fallback={liveCandle ?? candles[candles.length - 1]} quarters={quarters} quarterRows={quarterRows} />
       {loading && <div className="chart-skeleton" aria-hidden="true" />}
       <div ref={containerRef} className="chart" role="img" aria-label="Price chart with order blocks, liquidity and inducement levels" />
       {rulerView}

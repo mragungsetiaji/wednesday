@@ -32,6 +32,31 @@ export function requestAlertForm(id: string) {
   window.dispatchEvent(new CustomEvent(OPEN_DRAWING_ALERT, { detail: id }));
 }
 
+/**
+ * A drawing being dragged, shared by every chart in this window without going through React:
+ * each pointer move would otherwise re-render the app and every chart. Charts draw it in
+ * place of the saved one; the drop saves it through the DrawingCtl as usual.
+ */
+type DragListener = (d: Drawing | null) => void;
+const dragListeners = new Set<DragListener>();
+let dragCurrent: Drawing | null = null;
+export const dragBus = {
+  publish(d: Drawing | null): void {
+    dragCurrent = d;
+    for (const fn of dragListeners) fn(d);
+  },
+  /** Stop showing `d` (if it is still the one shown): its drop is in the saved items now, or never came. */
+  clear(d: Drawing): void {
+    if (dragCurrent === d) this.publish(null);
+  },
+  subscribe(fn: DragListener): () => void {
+    dragListeners.add(fn);
+    return () => {
+      dragListeners.delete(fn);
+    };
+  },
+};
+
 /** The drawings that can carry a price alert. */
 export const canAlert = (d: Drawing) => d.kind === "hline" || d.kind === "trendline" || d.kind === "rect";
 

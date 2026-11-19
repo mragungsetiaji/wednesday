@@ -13,6 +13,7 @@ import type {
 import type { Candle, Drawing, DrawingAlert, DrawingKind, DrawingPoint, Sizing } from "./api";
 import {
   canAlert,
+  dragBus,
   HANDLE_HIT,
   RECT_CORNERS,
   handlesOf,
@@ -373,6 +374,8 @@ export class DrawingEditor {
   private liveTime: number | null = null;
   private step = 60; // seconds per candle
   private draft: Drawing | null = null; // the drawing being placed
+  private dragging: Drawing | null = null; // one being dragged on any chart in this window (dragBus)
+  private readonly unsubscribeDrag: () => void;
   private placing: { start: XY; moved: boolean } | null = null;
   private drag: { orig: Drawing; last: Drawing; handle: number | null; startL: number; startP: number; moved: boolean } | null = null;
 
@@ -390,9 +393,14 @@ export class DrawingEditor {
     el.addEventListener("dblclick", this.onDoubleClick, true);
     el.addEventListener("contextmenu", this.onContextMenu, true);
     window.addEventListener("keydown", this.onKey);
+    this.unsubscribeDrag = dragBus.subscribe((d) => {
+      this.dragging = d;
+      this.render();
+    });
   }
 
   destroy(): void {
+    this.unsubscribeDrag();
     this.stopTracking();
     this.el.removeEventListener("pointerdown", this.onDown, true);
     this.el.removeEventListener("pointermove", this.onHover);
@@ -406,6 +414,8 @@ export class DrawingEditor {
   update(patch: { ctl?: DrawingCtl | null; candles?: Candle[]; live?: Candle | null; palette?: ChartPalette; font?: string }): void {
     if (patch.ctl !== undefined) {
       this.ctl = patch.ctl;
+      const moving = this.dragging;
+      if (moving && !this.drag && patch.ctl?.items.includes(moving)) dragBus.clear(moving); // the drop is saved
       if (this.draft && (!this.ctl || this.ctl.tool !== this.draft.kind)) this.cancelPlacing(); // Esc, or another tool
     }
     if (patch.candles) {
@@ -431,7 +441,9 @@ export class DrawingEditor {
 
   private render(): void {
     const ctl = this.ctl;
-    const shown = ctl && !ctl.hidden ? ctl.items.filter((d) => !d.hidden) : [];
+    const moving = this.dragging;
+    const items = ctl && moving ? ctl.items.map((d) => (d.id === moving.id ? moving : d)) : ctl?.items ?? [];
+    const shown = ctl && !ctl.hidden ? items.filter((d) => !d.hidden) : [];
     this.primitive.update({
       times: this.times,
       shown: this.draft ? [...shown, this.draft] : shown,
@@ -545,7 +557,7 @@ export class DrawingEditor {
       if (!next) return;
       this.drag.moved = true;
       this.drag.last = next;
-      this.ctl?.change(next, false);
+      dragBus.publish(next); // every chart redraws it; React hears only the drop
     } else if (this.draft && this.placing) {
       const pt = this.pointAt(p);
       if (!pt) return;
@@ -560,7 +572,11 @@ export class DrawingEditor {
       const { moved, last } = this.drag;
       this.drag = null;
       this.stopTracking();
-      if (moved) this.ctl?.change(last, true);
+      if (moved) {
+        this.ctl?.change(last, true);
+        // Keep drawing it until the saved items hold it (React may commit a frame later), or 1 s at most.
+        window.setTimeout(() => dragBus.clear(last), 1000);
+      }
     } else if (this.draft && this.draft.kind !== "path" && this.placing?.moved) {
       const pt = this.pointAt(this.local(e));
       if (pt) this.finish(pt); // pressed and dragged: done on release
