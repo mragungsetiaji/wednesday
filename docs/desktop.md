@@ -134,13 +134,15 @@ Setup build before installing.
    tauri.release.conf.json` in `src-tauri/`, which bundles the server folder),
    copied to `dist\WednesdaySetup-<version>.exe`.
 
-To publish a release, tag a commit and push the tag; the version comes from the
-tag:
+To publish a release, tag main and push the tag; the version comes from the tag:
 
 ```bash
-git tag v0.3.1
-git push origin v0.3.1
+make release v0.3.2
 ```
+
+It checks that you're on main with nothing uncommitted, in step with `origin/main`,
+and that the tag is new and higher than main's version, then tags and pushes
+(`scripts/release.sh`; the same as `git tag -a v0.3.2 && git push origin v0.3.2`).
 
 The installer is attached to a GitHub release named after the tag.
 Once the build passes, the workflow commits `Version 0.2.0` to `main`: the tag's

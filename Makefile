@@ -14,7 +14,7 @@ WEB  := web
 UI_BUILD   := $(WEB)/dist/index.html
 UI_SOURCES := $(shell find $(WEB)/src -type f 2>/dev/null) $(WEB)/index.html $(WEB)/vite.config.ts $(WEB)/package.json
 
-.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui desktop scan check test test-ui typecheck telegram-chats telegram-test clean
+.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui desktop scan check test test-ui typecheck telegram-chats telegram-test clean release
 
 help: ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -90,6 +90,17 @@ telegram-chats: ## List chats that messaged your bot, to find TELEGRAM_CHAT_ID
 
 telegram-test: ## Send a Telegram test message
 	$(UV) run wednesday --telegram-test
+
+# make release v0.3.2: the version is the goal after `release` (VERSION=0.3.2 works too).
+ifeq (release,$(firstword $(MAKECMDGOALS)))
+  RELEASE_VERSION := $(or $(word 2,$(MAKECMDGOALS)),$(VERSION))
+  ifneq ($(word 2,$(MAKECMDGOALS)),)
+    $(eval $(word 2,$(MAKECMDGOALS)):;@:)
+  endif
+endif
+
+release: ## Tag main and push it, which builds and publishes the Windows installer: make release v0.3.2
+	@scripts/release.sh "$(RELEASE_VERSION)"
 
 clean: ## Remove build output and caches (keeps data/ and .env)
 	rm -rf $(WEB)/dist .pytest_cache dist build
