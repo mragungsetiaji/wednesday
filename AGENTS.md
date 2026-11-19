@@ -15,6 +15,8 @@ make test-ui     # node --test on web/src/*.test.ts (Node 22.18+)
 make demo        # dashboard on synthetic data, no market data or keys needed
 make dev         # synthetic API + Vite hot reload on http://localhost:5173
 make scan ARGS="--source synthetic"   # one scan in the console
+make tauri       # the Tauri desktop shell (src-tauri) with the server as a sidecar
+make test-tauri  # its Rust tests (cargo test)
 ```
 
 Python is managed by uv (3.11 locally, `>=3.10` supported); use `uv run`, not a bare
@@ -34,6 +36,12 @@ the dashboard, its screenshot reference if the layout changed.
 
 `src/xau_screener/` holds only stale `__pycache__` from the project's old name; the
 package is `src/wednesday/`.
+
+The desktop app is moving to Tauri v2 (#92): `src-tauri/` is the shell, which starts
+the Python server as a sidecar (`wednesday-server`, `run_sidecar` in `desktop.py`) and
+exposes the commands `web/src/desktop.ts` calls. Its commands must be listed in
+`src-tauri/build.rs` and granted in `src-tauri/capabilities/default.json`, since the
+page comes from `http://127.0.0.1:<port>`. Run `make test-tauri` after changes there.
 
 ## Rules that matter here
 

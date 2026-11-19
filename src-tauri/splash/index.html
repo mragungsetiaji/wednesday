@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wednesday</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f4f3ef; --text: #1d1d1b; --muted: #6b6a66; --error: #b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #151515; --text: #ececea; --muted: #9a9a96; --error: #f97066; } }
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; place-items: center; background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 460px; padding: 24px; text-align: center; }
+  h1 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+  p { margin: 0; color: var(--muted); }
+  p.error { color: var(--error); white-space: pre-wrap; text-align: left; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Wednesday</h1>
+  <p id="status">Starting the screener and loading price history…</p>
+</main>
+<script>
+  // The shell calls this when the local server fails to start.
+  window.wednesdayFailed = (message) => {
+    const el = document.getElementById("status");
+    el.className = "error";
+    el.textContent = message;
+  };
+</script>
+</body>
+</html>

@@ -23,6 +23,7 @@ desktop = ["pywebview>=5", "keyring>=25"]
 
 [project.scripts]
 wednesday = "wednesday.cli:main"
+wednesday-server = "wednesday.desktop:run_sidecar"  # the Tauri shell's server (src-tauri)
 
 [project.gui-scripts]
 wednesday-desktop = "wednesday.desktop:run"

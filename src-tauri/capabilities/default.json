@@ -1,0 +1,22 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The dashboard (served by the local Python sidecar on 127.0.0.1) may call the shell's commands.",
+  "windows": [
+    "main",
+    "chart-*"
+  ],
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:*"
+    ]
+  },
+  "permissions": [
+    "core:default",
+    "allow-open-chart",
+    "allow-window-layout",
+    "allow-arrange",
+    "allow-save-png",
+    "allow-selftest-result"
+  ]
+}
