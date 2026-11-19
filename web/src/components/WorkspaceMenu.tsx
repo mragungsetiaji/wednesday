@@ -3,6 +3,7 @@ import { useEffect, useId, useState } from "react";
 import { deleteWorkspace, fetchWorkspace, fetchWorkspaces, saveWorkspace, type WorkspaceWindow } from "../api";
 import { useDesktopApi } from "../desktop";
 import { applyLayout, currentLayout } from "../workspaces";
+import { TcIcon } from "../tcIcons";
 import { usePopover } from "./usePopover";
 
 type Item = { name: string; saved_at: string; windows: number };
@@ -65,9 +66,11 @@ export function WorkspaceMenu() {
 
   return (
     <div className="workspace-menu" ref={ref}>
-      <button type="button" className="button quiet" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
+      <button type="button" className="tb-btn" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
         title="Workspaces: save this layout and its windows, open a saved one">
-        Workspace
+        <TcIcon name="save" />
+        <span>Workspace</span>
+        <span className="tb-caret"><TcIcon name="chevronDown" size={12} /></span>
       </button>
       {open && (
         <div className="chart-pop workspace-pop" id={id} role="group" aria-label="Workspaces">

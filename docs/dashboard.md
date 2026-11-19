@@ -23,10 +23,11 @@ found on it:
 - **Recent sweeps** as markers on the candle that swept.
 
 The timeframe tabs carry each timeframe's structure direction (↑ / ↓). Beside
-them, the detectors (**Order blocks**, **Liquidity**, **Inducement**) and the
-overlays (**Mid OBs**, **HTF**, **Swings**, **Quarters**, **News**, **ML**) switch on and off.
+them, the **Layers** menu switches the detectors (**Order blocks**, **Liquidity**,
+**Inducement**) and the overlays (**Mid OBs**, **HTF**, **Swings**, **Quarters**,
+**News**, **ML**) on and off.
 
-The button at the far right of the bar under the chart hides the right pane
+The button at the far right of the chart's top bar hides the right pane
 (bias, levels, structure and events) so the chart takes the full width, and
 shows it again. The dashboard remembers the choice in this browser.
 
@@ -114,7 +115,17 @@ once, each where it sits in the grid with its timeframe on it, and one footer.
 
 ## Drawings
 
-The column left of the chart holds drawing tools, TradingView style:
+The chart's top bar holds, left to right: the timeframes (an arrow shows each
+one's bias), **Layers** (the detectors and overlays: Mid OBs, HTF, Swings,
+Quarters, News, ML), **Sessions**, undo and redo, **Workspace**, bar replay (▶) and
+the link button; at the right end the pop-out, full screen and levels-pane
+buttons.
+
+The column left of the chart holds the drawing tools, TradeCanvas style: the
+cursor, then the line tools, path and positions, then rectangle and text, then the
+eye. A button with a small triangle in its corner is a group: it draws with the
+tool last picked in it, and hovering it (or clicking the triangle) opens the rest:
+trendline and horizontal line, or long and short position.
 
 - **Trendline**: click two points, or press and drag.
 - **Horizontal line**: click a price; its price shows at the right edge.
@@ -161,8 +172,8 @@ it too): see [Alerts on your drawings](alerts.md#alerts-on-your-drawings). A dra
 with an alert carries a small bell, filled while it is on and struck through once it
 fired.
 
-Below the tools, **Undo** and **Redo** (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; Cmd on a
-Mac) step back through the last 100 changes; a drag counts as one. The eye hides
+**Undo** and **Redo** in the top bar (Ctrl+Z, Ctrl+Shift+Z or Ctrl+Y; Cmd on a
+Mac; in full screen and pop-out windows, in the tool row) step back through the last 100 changes; a drag counts as one. The eye hides
 or shows every drawing, and Esc cancels a tool or the selection.
 
 Drawings are anchored to time and price, not pixels, so one drawing shows on
@@ -251,7 +262,7 @@ screen, TradingView style. Pick a layout at the top:
 
 Each chart has its own timeframe tabs; the first one follows the dashboard's
 timeframe, the others are remembered in this browser, as is the layout. The
-toggles at the top (Mid OBs, HTF, Swings, Quarters, News, Sessions) switch for every chart
+layers at the top (Mid OBs, HTF, Swings, Quarters, News, Sessions) switch for every chart
 at once. **Esc** or **Exit** goes back. On a phone the charts stack and scroll.
 
 - **Per-chart layers**: the layers button at the right of a chart's tabs gives
@@ -292,7 +303,7 @@ at once. **Esc** or **Exit** goes back. On a phone the charts stack and scroll.
 ## Bar replay
 
 With the right side of the chart in view, every order block looks obvious.
-**Replay** (under the chart, beside the link button) hides the future: it puts
+**Replay** (▶ in the chart's top bar, beside the link button) hides the future: it puts
 the chart back at a past minute and plays the stored history forward, so you
 decide candle by candle as you would have live.
 
@@ -316,7 +327,7 @@ imports more from files).
 ## Charts in their own windows
 
 For a second or third monitor, a chart can open in a window of its own: the
-**pop-out** button at the bottom right of the main chart (next to full screen),
+**pop-out** button at the right end of the main chart's top bar (next to full screen),
 or the same button at the right of a full screen chart's tabs. It opens that
 timeframe, with the layers and session levels of the main window's toggles.
 
@@ -346,7 +357,7 @@ linked with each other.
 
 ### Workspaces
 
-**Workspace** under the chart saves the current setup under a name ("London
+**Workspace** in the chart's top bar saves the current setup under a name ("London
 prep", "NY execution"): the chart layout (timeframe, full screen layout and pane
 sizes, layer toggles, link groups) and, in the desktop app, every window with its
 position, size, monitor and chart. Opening one puts the layout back, closes the

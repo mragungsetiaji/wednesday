@@ -1,65 +1,160 @@
+import { useEffect, useRef, useState } from "react";
+
 import type { DrawTool } from "../drawings";
 import type { Drawings } from "../drawingsData";
-import {
-  CursorIcon,
-  EyeIcon,
-  HLineIcon,
-  PathIcon,
-  PositionIcon,
-  RectIcon,
-  RedoIcon,
-  TextIcon,
-  TrendlineIcon,
-  UndoIcon,
-} from "../icons";
+import { usePref } from "../prefs";
+import { TcIcon, type TcIconName } from "../tcIcons";
 
 const ICON = 20; // px; 18 in the full screen row
 
-const LongIcon = (p: { size?: number }) => <PositionIcon {...p} />;
-const ShortIcon = (p: { size?: number }) => <PositionIcon {...p} short />;
+type Tool = { tool: DrawTool; label: string; icon: TcIconName; keys?: string };
 
-const TOOLS: { tool: DrawTool; label: string; Icon: (p: { size?: number }) => React.ReactNode }[] = [
-  { tool: "cursor", label: "Cursor", Icon: CursorIcon },
-  { tool: "trendline", label: "Trendline: click two points (Alt+T)", Icon: TrendlineIcon },
-  { tool: "hline", label: "Horizontal line: click a price (Alt+H)", Icon: HLineIcon },
-  { tool: "rect", label: "Rectangle: click two corners (Alt+B)", Icon: RectIcon },
-  { tool: "path", label: "Path: click each point, click the last one again (or Enter) to end", Icon: PathIcon },
-  { tool: "text", label: "Text: click where it goes, then type", Icon: TextIcon },
-  { tool: "long", label: "Long position: click the entry", Icon: LongIcon },
-  { tool: "short", label: "Short position: click the entry", Icon: ShortIcon },
+/** The tool groups, TradeCanvas style: a group's button draws with its last tool, its menu holds the rest. */
+const GROUPS: { id: string; name: string; tools: Tool[] }[] = [
+  {
+    id: "lines",
+    name: "Lines",
+    tools: [
+      { tool: "trendline", label: "Trend line", icon: "trendLine", keys: "Alt+T" },
+      { tool: "hline", label: "Horizontal line", icon: "horizontalLine", keys: "Alt+H" },
+    ],
+  },
+  { id: "path", name: "Path", tools: [{ tool: "path", label: "Path: click each point, click the last one again (or Enter) to end", icon: "path" }] },
+  {
+    id: "position",
+    name: "Positions",
+    tools: [
+      { tool: "long", label: "Long position", icon: "trendingUp" },
+      { tool: "short", label: "Short position", icon: "trendingDown" },
+    ],
+  },
+];
+const SHAPES: Tool[] = [
+  { tool: "rect", label: "Rectangle", icon: "rectangle", keys: "Alt+B" },
+  { tool: "text", label: "Text: click where it goes, then type", icon: "text" },
 ];
 
 const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = mac ? "⌘" : "Ctrl+";
+/** How long a group's menu stays after the pointer leaves it, so the way to it can cross a gap. */
+const CLOSE_MS = 150;
 
 /**
- * Drawing tools, TradingView style: a column beside the chart (a row in full screen), then
- * undo, redo and hide all. The selected drawing's own controls float over the chart
- * (DrawingStyleBar).
+ * Drawing tools, TradeCanvas style: a column beside the chart (a row in full screen and pop-out
+ * windows). Grouped tools keep the last one picked on their button and show the rest in a menu
+ * on hover (or on the corner mark, by click or keyboard). `history` adds undo and redo, for
+ * windows without the chart's top bar.
  */
-export function DrawingToolbar({ ctl, row }: { ctl: Drawings; row?: boolean }) {
+export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row?: boolean; history?: boolean }) {
+  const [last, setLast] = usePref<Record<string, DrawTool>>("wed.drawGroups", {});
+  const [menu, setMenu] = useState<string | null>(null);
+  const [at, setAt] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+  const timer = useRef<number>(0);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (!menu) return;
+    const away = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setMenu(null);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setMenu(null);
+      }
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", esc, true);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", esc, true);
+    };
+  }, [menu]);
+
   if (!ctl.available) return null;
   const size = row ? ICON - 2 : ICON;
+  const pick = (tool: DrawTool) => ctl.setTool(ctl.tool === tool && tool !== "cursor" ? "cursor" : tool);
+  // The menu is fixed to the page, so the column's scrolling doesn't clip it: beside the group, or under it in a row.
+  const show = (id: string, group: HTMLElement) => {
+    const r = group.getBoundingClientRect();
+    setAt(row ? { left: r.left, top: r.bottom + 4 } : { left: r.right + 4, top: r.top });
+    setMenu(id);
+  };
+  const hover = (id: string | null, group?: HTMLElement) => {
+    window.clearTimeout(timer.current);
+    if (id && group) show(id, group);
+    else timer.current = window.setTimeout(() => setMenu(null), CLOSE_MS);
+  };
+
+  const title = (t: Tool) => (t.keys ? `${t.label} (${t.keys})` : t.label);
+  const button = (t: Tool) => (
+    <button key={t.tool} type="button" className="draw-tool" aria-pressed={ctl.tool === t.tool} title={title(t)} aria-label={t.label}
+      onClick={() => pick(t.tool)}>
+      <TcIcon name={t.icon} size={size} />
+    </button>
+  );
+
   return (
-    <div className={`draw-tools${row ? " is-row" : ""}`} role="toolbar" aria-label="Drawing tools"
+    <div ref={ref} className={`draw-tools${row ? " is-row" : ""}`} role="toolbar" aria-label="Drawing tools"
       aria-orientation={row ? "horizontal" : "vertical"}>
-      {TOOLS.map(({ tool, label, Icon }) => (
-        <button key={tool} type="button" className="draw-tool" aria-pressed={ctl.tool === tool} title={label} aria-label={label}
-          onClick={() => ctl.setTool(ctl.tool === tool && tool !== "cursor" ? "cursor" : tool)}>
-          <Icon size={size} />
-        </button>
-      ))}
+      <button type="button" className="draw-tool" aria-pressed={ctl.tool === "cursor"} title="Cursor (Esc)" aria-label="Cursor"
+        onClick={() => ctl.setTool("cursor")}>
+        <TcIcon name="crosshairCursor" size={size} />
+      </button>
       <span className="draw-sep" aria-hidden="true" />
-      <button type="button" className="draw-tool" disabled={!ctl.canUndo} title={`Undo (${MOD}Z)`} aria-label="Undo" onClick={ctl.undo}>
-        <UndoIcon size={size} />
-      </button>
-      <button type="button" className="draw-tool" disabled={!ctl.canRedo} title={`Redo (${MOD}${mac ? "⇧Z" : "Y"})`} aria-label="Redo" onClick={ctl.redo}>
-        <RedoIcon size={size} />
-      </button>
+      {GROUPS.map((g) => {
+        const shown = g.tools.find((t) => t.tool === last[g.id]) ?? g.tools[0];
+        const on = g.tools.find((t) => t.tool === ctl.tool);
+        const current = on ?? shown;
+        if (g.tools.length === 1) return button(current);
+        const open = menu === g.id;
+        return (
+          <div key={g.id} className="draw-group" onMouseEnter={row ? undefined : (e) => hover(g.id, e.currentTarget)} onMouseLeave={row ? undefined : () => hover(null)}>
+            <button type="button" className="draw-tool" aria-pressed={!!on} title={title(current)} aria-label={current.label}
+              onClick={() => pick(current.tool)}>
+              <TcIcon name={current.icon} size={size} />
+            </button>
+            <button type="button" className="draw-group-more" aria-label={`${g.name}: more tools`} aria-expanded={open}
+              aria-haspopup="menu" onClick={(e) => (open ? setMenu(null) : show(g.id, e.currentTarget.parentElement!))} />
+            {open && (
+              <div className={`draw-flyout${row ? " is-below" : ""}`} role="menu" aria-label={g.name} style={at}>
+                <div className="draw-flyout-head">{g.name}</div>
+                {g.tools.map((t) => (
+                  <button key={t.tool} type="button" role="menuitemradio" aria-checked={ctl.tool === t.tool}
+                    className={`draw-flyout-item${t.tool === current.tool ? " is-active" : ""}`}
+                    onClick={() => {
+                      setLast({ ...last, [g.id]: t.tool });
+                      setMenu(null);
+                      ctl.setTool(t.tool);
+                    }}>
+                    <TcIcon name={t.icon} size={16} />
+                    {t.label}
+                    {t.keys && <kbd>{t.keys}</kbd>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <span className="draw-sep" aria-hidden="true" />
+      {SHAPES.map(button)}
+      <span className="draw-sep" aria-hidden="true" />
+      {history && (
+        <>
+          <button type="button" className="draw-tool" disabled={!ctl.canUndo} title={`Undo (${MOD}Z)`} aria-label="Undo" onClick={ctl.undo}>
+            <TcIcon name="undo" size={size} />
+          </button>
+          <button type="button" className="draw-tool" disabled={!ctl.canRedo} title={`Redo (${MOD}${mac ? "⇧Z" : "Y"})`} aria-label="Redo" onClick={ctl.redo}>
+            <TcIcon name="redo" size={size} />
+          </button>
+        </>
+      )}
       <button type="button" className="draw-tool" aria-pressed={ctl.hidden} disabled={!ctl.items.length && !ctl.hidden}
         title={ctl.hidden ? "Show drawings" : "Hide drawings"} aria-label={ctl.hidden ? "Show drawings" : "Hide drawings"}
         onClick={() => ctl.setHidden(!ctl.hidden)}>
-        <EyeIcon size={size} off={ctl.hidden} />
+        <TcIcon name={ctl.hidden ? "eyeOff" : "eye"} size={size} />
       </button>
       {ctl.error && <span className="draw-error" role="alert" title={ctl.error}>!</span>}
     </div>

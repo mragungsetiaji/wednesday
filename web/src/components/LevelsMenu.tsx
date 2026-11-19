@@ -1,6 +1,6 @@
 import { useId } from "react";
 
-import { ChevronUp } from "../icons";
+import { TcIcon } from "../tcIcons";
 import { LEVEL_GROUPS, type LevelGroup } from "../refLevels";
 import { usePopover } from "./usePopover";
 
@@ -10,10 +10,11 @@ export function LevelsMenu({ value, onChange }: { value: LevelGroup[]; onChange:
   const id = useId();
   return (
     <div className="levels-menu" ref={ref}>
-      <button type="button" className={`levels-btn${value.length ? " is-on" : ""}`} aria-expanded={open} aria-controls={id}
+      <button type="button" className={`levels-btn tb-btn${value.length ? " is-on" : ""}`} aria-expanded={open} aria-controls={id}
         title="Killzones and reference levels: previous day, week and month high / low, Asia range, opens" onClick={() => setOpen(!open)}>
-        Sessions{value.length > 0 && <span className="levels-count num">{value.length}</span>}
-        <span className="levels-caret"><ChevronUp size={12} /></span>
+        <TcIcon name="calendar" />
+        <span>Sessions</span>{value.length > 0 && <span className="levels-count num">{value.length}</span>}
+        <span className="tb-caret"><TcIcon name="chevronDown" size={12} /></span>
       </button>
       {open && <LevelChecks id={id} className="chart-pop levels-pop" value={value} onChange={onChange} />}
     </div>

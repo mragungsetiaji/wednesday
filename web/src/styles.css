@@ -364,14 +364,26 @@ p {
   min-height: 0;
 }
 
+/* The chart's top bar and the drawing column follow TradeCanvas's widget (MIT, see
+   THIRD_PARTY_NOTICES.md): a 38px bar of 28px controls split by short rules, a 44px column of
+   36px tools with 20px icons, grouped tools marked by a corner triangle. */
 .chart-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--s2) var(--s4);
-  padding: var(--s2) var(--s3);
+  gap: 0;
+  height: 38px;
+  flex-shrink: 0;
+  padding: 0 12px;
   border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  position: relative;
+  z-index: 20;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+}
+.chart-toolbar::-webkit-scrollbar {
+  display: none;
 }
 
 .tabs {
@@ -472,60 +484,191 @@ p {
 
 .draw-tools {
   flex: none;
+  width: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 6px;
+  padding: 5px 0;
   border-inline-end: 1px solid var(--line);
   background: var(--surface);
+  overflow-y: auto;
+  overflow-x: visible;
+  scrollbar-width: none;
+}
+.draw-tools::-webkit-scrollbar {
+  display: none;
+}
+.draw-tools > * {
+  flex-shrink: 0;
 }
 .draw-tools.is-row {
+  width: auto;
   flex-direction: row;
   padding: 0;
   border: 0;
   background: none;
+  overflow: visible;
 }
 .draw-tool {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
+  margin: 1px 0;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   background: transparent;
   color: var(--text-3);
-  transition: background-color 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
+  transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.draw-tool .icon {
+  width: 20px;
+  height: 20px;
 }
 .draw-tool:hover:not(:disabled) {
   background: var(--hover);
   color: var(--text);
 }
-.draw-tool:active:not(:disabled) {
-  transform: scale(0.96);
-}
 .draw-tool[aria-pressed="true"] {
-  background: var(--hover);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
 }
 .draw-tool:disabled {
   opacity: 0.35;
 }
 .draw-sep {
-  width: 24px;
+  width: 22px;
   height: 1px;
-  margin: var(--s1) 0;
-  background: var(--line-strong);
+  margin: 6px 0;
+  background: var(--line);
 }
 .draw-tools.is-row .draw-tool {
   width: 34px;
   height: 34px;
+  margin: 0;
+}
+.draw-tools.is-row .draw-tool .icon {
+  width: 18px;
+  height: 18px;
 }
 .draw-tools.is-row .draw-sep {
   width: 1px;
-  height: 20px;
-  margin: 0 var(--s1);
+  height: 18px;
+  margin: 0 6px;
 }
+/* A group with more tools: the button draws, the triangle in its corner opens the rest. */
+.draw-group {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  justify-content: center;
+}
+.draw-tools.is-row .draw-group {
+  align-self: center;
+}
+.draw-group-more {
+  position: absolute;
+  inset-block-end: 2px;
+  inset-inline-end: 4px;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+}
+.draw-tools.is-row .draw-group-more {
+  inset-inline-end: 0;
+}
+.draw-group-more::after {
+  content: "";
+  position: absolute;
+  inset-block-end: 1px;
+  inset-inline-end: 1px;
+  width: 5px;
+  height: 5px;
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+  background: var(--text-3);
+  opacity: 0.8;
+}
+.draw-group-more:hover {
+  background: var(--hover);
+}
+.draw-group-more:hover::after,
+.draw-group-more[aria-expanded="true"]::after {
+  width: 7px;
+  height: 7px;
+  background: var(--text);
+  opacity: 1;
+}
+.draw-flyout {
+  position: fixed;
+  z-index: 40;
+  min-width: 200px;
+  padding: 4px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 4px 12px rgb(0 0 0 / 0.2), 0 1px 3px rgb(0 0 0 / 0.12);
+  animation: draw-flyout-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* Spans the gap back to the column: crossing it stays inside the menu. */
+.draw-flyout::before {
+  content: "";
+  position: absolute;
+  inset-block: -1px;
+  inset-inline-end: 100%;
+  width: 8px;
+}
+.draw-flyout.is-below::before {
+  inset-block: auto 100%;
+  inset-inline: -1px;
+  width: auto;
+  height: 8px;
+}
+@keyframes draw-flyout-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.draw-flyout-head {
+  padding: 6px 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.draw-flyout-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 30px;
+  padding: 2px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  white-space: nowrap;
+}
+.draw-flyout-item kbd {
+  margin-inline-start: auto;
+  padding-inline-start: 16px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.draw-flyout-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.draw-flyout-item.is-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* The selected drawing's controls, floating at the top of the chart. */
 .draw-style {
   position: absolute;
@@ -4835,4 +4978,116 @@ fieldset:disabled .switch {
   gap: 3px;
   margin-inline-start: var(--s1);
   white-space: nowrap;
+}
+
+/* The chart's top bar (TradeCanvas layout). */
+.tb-tfs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: none;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.tb-btn:hover:not(:disabled),
+.tb-btn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--text);
+}
+.tb-btn:active:not(:disabled) {
+  transform: translateY(0.5px);
+}
+.tb-btn:disabled {
+  opacity: 0.35;
+}
+.tb-btn .icon {
+  flex: none;
+}
+.tb-icon {
+  width: 28px;
+  padding: 0;
+}
+.tb-btn.is-on,
+.tb-btn[aria-pressed="true"]:not(.tb-icon) {
+  color: var(--accent);
+}
+.tb-tf {
+  padding: 0 8px;
+  font-weight: 500;
+}
+.tb-tf[aria-selected="true"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+.tb-caret {
+  display: inline-flex;
+  margin-inline-start: -2px;
+  color: var(--text-3);
+}
+.tb-sep {
+  flex: none;
+  width: 1px;
+  height: 17px;
+  margin: 0 6px;
+  background: var(--line);
+}
+.tb-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+.tb-menu {
+  position: relative;
+  flex: none;
+}
+.chart-toolbar .levels-btn {
+  padding: 0 8px;
+  min-height: 0;
+}
+.chart-toolbar .link-btn {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 4px;
+}
+.chart-toolbar .link-btn {
+  background: transparent;
+  color: var(--text-2);
+}
+.chart-toolbar .link-btn:hover {
+  background: var(--hover);
+}
+.chart-toolbar .link-btn.link-A,
+.chart-toolbar .link-btn.link-B,
+.chart-toolbar .link-btn.link-C {
+  color: var(--link);
+  box-shadow: inset 0 0 0 1px var(--link);
+}
+/* Menus under the top bar open downward. */
+.chart-toolbar .chart-pop {
+  position: fixed;
+  inset: auto;
+}
+.layers-pop {
+  min-width: 220px;
+}
+.pop-head {
+  padding: 4px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
 }

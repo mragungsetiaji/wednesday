@@ -31,7 +31,9 @@ import { LiveTickerPrice } from "./components/TickerPrice";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtPrice } from "./format";
-import { BookIcon, ChartIcon, Direction, ExpandIcon, FlaskIcon, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
+import { BookIcon, ChartIcon, Direction, FlaskIcon, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
+import { TcIcon } from "./tcIcons";
+import { LayersMenu } from "./components/LayersMenu";
 import { predictionMark } from "./labPrimitive";
 import { useMl } from "./mlData";
 import { usePref } from "./prefs";
@@ -43,6 +45,9 @@ import { useReplay } from "./replayData";
 import { ReplayBar } from "./components/ReplayBar";
 import { useLiveFeed } from "./liveData";
 import { useChartPalette } from "./theme";
+
+const MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+const MOD = MAC ? "⌘" : "Ctrl+";
 
 const POLL_MS = 5000;
 const STALE_MS = 150_000; // no successful scan for 2.5 minutes
@@ -366,12 +371,12 @@ export default function App() {
         <>
           <main className={`workspace${showRail ? "" : " is-rail-hidden"}`}>
             <section className="chart-area" aria-label="Chart">
-              <div className="chart-toolbar">
-                <div className="tabs" role="tablist" aria-label="Chart timeframe">
+              <div className="chart-toolbar" role="toolbar" aria-label="Chart">
+                <div className="tb-tfs" role="tablist" aria-label="Chart timeframe">
                   {(timeframes.length ? timeframes : ["4H", "1H", "30M", "15M", "5M"]).map((name) => {
                     const b = scan?.timeframes.find((t) => t.timeframe === name)?.bias;
                     return (
-                      <button key={name} type="button" role="tab" aria-selected={name === tf} className="tab" onClick={() => setTf(name)}
+                      <button key={name} type="button" role="tab" aria-selected={name === tf} className="tb-btn tb-tf" onClick={() => setTf(name)}
                         title={b ? `${name}: ${b.direction} ${b.event} at ${fmtPrice(b.level)}` : name}>
                         {name}
                         {b && (
@@ -383,50 +388,53 @@ export default function App() {
                     );
                   })}
                 </div>
-                <div className="toolbar-layers">
-                <div className="toggles" role="group" aria-label="Detectors">
-                  {allDetectors.map((d) => (
-                    <label key={d.name} className="toggle" title={d.title}>
-                      <input type="checkbox" checked={!hidden.includes(d.name)} onChange={() => toggleLayer(d.name)} />
-                      {d.title.replace(/\s*\(.*\)$/, "")}
-                    </label>
-                  ))}
-                </div>
-                <div className="toggles" role="group" aria-label="Overlays">
-                  <label className="toggle">
-                    <input type="checkbox" checked={showMidOb} onChange={(e) => setShowMidOb(e.target.checked)} />
-                    Mid OBs
-                  </label>
-                  <label className="toggle" title="Higher timeframes">
-                    <input type="checkbox" checked={showHigherTf} onChange={(e) => setShowHigherTf(e.target.checked)} />
-                    HTF
-                  </label>
-                  <label className="toggle">
-                    <input type="checkbox" checked={showSwings} onChange={(e) => setShowSwings(e.target.checked)} />
-                    Swings
-                  </label>
-                  <label className="toggle">
-                    <input type="checkbox" checked={showQuarters} onChange={(e) => setShowQuarters(e.target.checked)} />
-                    Quarters
-                  </label>
-                  <label className="toggle">
-                    <input type="checkbox" checked={showNews} onChange={(e) => setShowNews(e.target.checked)} />
-                    News
-                  </label>
-                  <label className="toggle" title="The active model's blocks, from the Lab">
-                    <input type="checkbox" checked={showMl} onChange={(e) => {
-                      setShowMl(e.target.checked);
-                      if (e.target.checked) setDockTab("ml"); // show the model's blocks to review right away
-                    }} />
-                    ML
-                  </label>
-                  <LevelsMenu value={levelGroupsOn} onChange={setLevelGroups} />
-                </div>
-                </div>
+                <span className="tb-sep" aria-hidden="true" />
+                <LayersMenu detectors={allDetectors} hidden={hidden} onToggle={toggleLayer} overlays={[
+                  { key: "mid", label: "Mid OBs", on: showMidOb, set: setShowMidOb },
+                  { key: "htf", label: "HTF", title: "Higher timeframes", on: showHigherTf, set: setShowHigherTf },
+                  { key: "swings", label: "Swings", on: showSwings, set: setShowSwings },
+                  { key: "quarters", label: "Quarters", on: showQuarters, set: setShowQuarters },
+                  { key: "news", label: "News", on: showNews, set: setShowNews },
+                  { key: "ml", label: "ML", title: "The active model's blocks, from the Lab", on: showMl, set: (v) => {
+                    setShowMl(v);
+                    if (v) setDockTab("ml"); // show the model's blocks to review right away
+                  } },
+                ]} />
+                <LevelsMenu value={levelGroupsOn} onChange={setLevelGroups} />
+                <span className="tb-sep" aria-hidden="true" />
+                <button type="button" className="tb-btn tb-icon" disabled={!drawings.canUndo} title={`Undo (${MOD}Z)`} aria-label="Undo" onClick={drawings.undo}>
+                  <TcIcon name="undo" />
+                </button>
+                <button type="button" className="tb-btn tb-icon" disabled={!drawings.canRedo} title={`Redo (${MOD}${MAC ? "⇧Z" : "Y"})`} aria-label="Redo" onClick={drawings.redo}>
+                  <TcIcon name="redo" />
+                </button>
+                <span className="tb-sep" aria-hidden="true" />
+                <WorkspaceMenu />
+                <span className="tb-sep" aria-hidden="true" />
+                <button type="button" className={`tb-btn tb-icon${replaying ? " is-on" : ""}`} disabled={!liveScan}
+                  aria-pressed={replaying} onClick={() => (replaying ? replay.stop() : replay.start())}
+                  title={replaying ? "Stop the replay" : "Bar replay: play the stored history forward candle by candle, without seeing what came next"}
+                  aria-label={replaying ? "Stop the replay" : "Bar replay"}>
+                  <TcIcon name={replaying ? "stop" : "play"} />
+                </button>
+                <LinkMenu value={mainGroup} onChange={setMainGroup} />
+                <span className="tb-spacer" />
+                <button type="button" className="tb-btn tb-icon" onClick={() => openChartWindow(desktop, tf, mainGroup)} disabled={!scan || replaying}
+                  title={`Open ${tf} in its own window, for another monitor`} aria-label="Open the chart in its own window">
+                  <PopOutIcon size={16} />
+                </button>
+                <button type="button" className="tb-btn tb-icon" onClick={() => setFocus(true)} disabled={!scan || replaying}
+                  title="Full screen: one, two or four charts (F)" aria-label="Full screen charts">
+                  <TcIcon name="maximize" />
+                </button>
+                <button type="button" className="tb-btn tb-icon" onClick={() => setShowRail(!showRail)} aria-pressed={showRail}
+                  title={showRail ? "Hide the levels pane" : "Show the levels pane"} aria-label={showRail ? "Hide the levels pane" : "Show the levels pane"}>
+                  <SidePanelIcon size={16} open={showRail} />
+                </button>
               </div>
               {replaying && <ReplayBar replay={replay} tf={tf} clockName={CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed"} />}
               <div className="chart-body">
-              <DrawingToolbar ctl={drawings} />
+              <DrawingToolbar ctl={drawings} history={false} />
               <DrawingStyleBar ctl={drawings} />
               <PriceChart
                 candles={chart?.candles ?? []}
@@ -467,27 +475,6 @@ export default function App() {
                   {levels.lines.length > 0 && <li><span className="key key-reflevel" /> Session levels, faint once swept</li>}
                   <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
                 </ul>
-                <div className="chart-foot-tools">
-                <button type="button" className={`button quiet replay-toggle${replaying ? " is-on" : ""}`} disabled={!liveScan}
-                  aria-pressed={replaying} onClick={() => (replaying ? replay.stop() : replay.start())}
-                  title="Bar replay: play the stored history forward candle by candle, without seeing what came next">
-                  Replay
-                </button>
-                <WorkspaceMenu />
-                <LinkMenu value={mainGroup} onChange={setMainGroup} />
-                <button type="button" className="icon-button" onClick={() => openChartWindow(desktop, tf, mainGroup)} disabled={!scan || replaying}
-                  title={`Open ${tf} in its own window, for another monitor`} aria-label="Open the chart in its own window">
-                  <PopOutIcon size={15} />
-                </button>
-                <button type="button" className="icon-button" onClick={() => setFocus(true)} disabled={!scan || replaying}
-                  title="Full screen: one, two or four charts (F)" aria-label="Full screen charts">
-                  <ExpandIcon size={15} />
-                </button>
-                <button type="button" className="icon-button" onClick={() => setShowRail(!showRail)} aria-pressed={showRail}
-                  title={showRail ? "Hide the levels pane" : "Show the levels pane"} aria-label={showRail ? "Hide the levels pane" : "Show the levels pane"}>
-                  <SidePanelIcon size={15} open={showRail} />
-                </button>
-                </div>
               </div>
               {scan && config && (
                 <Dock open={dockTab} onOpen={setDockTab} tabs={[
