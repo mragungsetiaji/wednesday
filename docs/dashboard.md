@@ -59,6 +59,10 @@ the symbol's usual size (0.1 on gold, 0.01 on yen pairs and silver).
 When you scroll back and the live candle leaves the screen, a **Live** button
 at the bottom right brings it back.
 
+Each chart keeps its zoom and scroll while the app is open: go to Settings or
+the Journal and back, or full screen and back, and the view is where you left
+it. A new timeframe starts fitted to its candles.
+
 The time left on the forming candle counts down beside the price label, for the
 chart's timeframe.
 

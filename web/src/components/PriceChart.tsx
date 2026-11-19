@@ -101,6 +101,7 @@ interface Props {
   nav?: Ref<ChartNav | null>; // for the keyboard shortcuts
   timeframe?: string; // named in a snapshot's footer; resetKey when not given
   snapshotButton?: boolean; // the camera under the chart; false where a toolbar holds one
+  viewKey?: string; // keep the zoom and scroll under this name for the session: leaving the page and coming back keeps them
   rangeLink?: { group: LinkGroup; id: string } | null; // scroll and zoom shared with a link group (windowLink.ts)
   precision?: number; // price decimals: 2 for gold, more for a pane's own symbol (e.g. 3 for silver)
 }
@@ -109,6 +110,34 @@ const ROW_PX = 22;
 const NO_SWINGS: SwingPoint[] = []; // stable defaults, so the effects don't rerun every render
 const NO_NEWS: NewsMark[] = [];
 const NO_ML: LabMark[] = [];
+/**
+ * A chart's zoom and scroll, kept for the session (sessionStorage) so a chart built again (back from
+ * Settings, out of full screen) opens where it was. Counted in bars back from the last closed candle,
+ * so newer candles or older pages loaded since don't move it. Only for the same reset key (timeframe):
+ * another timeframe still opens fitted.
+ */
+interface SavedView {
+  reset: string;
+  fromEnd: number;
+  toEnd: number;
+}
+const VIEW_PREFIX = "wed.view:";
+function loadView(key: string): SavedView | null {
+  try {
+    const v = sessionStorage.getItem(VIEW_PREFIX + key);
+    return v ? (JSON.parse(v) as SavedView) : null;
+  } catch {
+    return null;
+  }
+}
+function saveView(key: string, v: SavedView): void {
+  try {
+    sessionStorage.setItem(VIEW_PREFIX + key, JSON.stringify(v));
+  } catch {
+    /* storage unavailable: the view just isn't kept */
+  }
+}
+
 const QUARTER_PANE = 1;
 const RSI_PANE_PX = 110;
 
@@ -266,7 +295,7 @@ function candleAt(times: number[], t: number): number {
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
-  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe, rangeLink = null, precision = 2, snapshotButton = true }: Props) {
+  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe, rangeLink = null, precision = 2, snapshotButton = true, viewKey }: Props) {
   counters.renders++; // the perf overlay's renders/s: panning and dragging a drawing should add none
   const liveBar = useLiveTick(live)?.bar ?? null; // only the chart re-renders on a tick, not its parent
   const containerRef = useRef<HTMLDivElement>(null);
@@ -291,6 +320,10 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const needOlderRef = useRef(onNeedOlder);
   needOlderRef.current = onNeedOlder;
   const fittedKey = useRef<string | null>(null);
+  const resetKeyRef = useRef(resetKey);
+  resetKeyRef.current = resetKey;
+  const viewKeyRef = useRef(viewKey);
+  viewKeyRef.current = viewKey;
   const hover = useMemo(hoverStore, []);
   const liveCandle = useMemo(() => (liveBar ? withLive(candles, liveBar) : null), [liveBar, candles]);
   const liveRef = useRef(liveCandle);
@@ -312,6 +345,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const [newsTip, setNewsTip] = useState<{ mark: NewsMark; x: number } | null>(null); // the news line under the pointer
 
   useEffect(() => {
+    fittedKey.current = null; // a new chart (StrictMode makes two) sets or restores its view again
     const chart = createChart(containerRef.current!, {
       autoSize: true,
       crosshair: { mode: CrosshairMode.Normal },
@@ -354,6 +388,12 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     quartersRef.current = quartersPrimitive;
     // Near the left edge: page in older candles. New data keeps the view anchored on the right.
     chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      // Keep the view for the session, once this timeframe's view is set (not the default before it).
+      const vk = viewKeyRef.current;
+      const last = candlesRef.current.length - 1;
+      if (vk && range && last >= 0 && fittedKey.current === resetKeyRef.current) {
+        saveView(vk, { reset: resetKeyRef.current, fromEnd: last - range.from, toEnd: last - range.to });
+      }
       if (range && range.from < 10) needOlderRef.current?.();
       const n = timesOf(candlesRef.current, liveRef.current).length;
       setOffLive(!!range && n > 0 && range.to < n - 1);
@@ -560,8 +600,28 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       }));
     markersRef.current?.setMarkers([...markers, ...swingMarkers].sort((a, b) => (a.time as number) - (b.time as number)));
     if (candles.length && fittedKey.current !== resetKey) {
-      chartRef.current?.timeScale().fitContent();
-      fittedKey.current = resetKey;
+      const saved = viewKey ? loadView(viewKey) : null;
+      const last = candles.length - 1;
+      const chart = chartRef.current;
+      const ts = chart?.timeScale();
+      if (chart && ts && saved && saved.reset === resetKey) {
+        // Just mounted, the chart has no width until autoSize measures it, and a range set before
+        // that is lost: wait for the width, and save nothing until the view is back.
+        const range = { from: last - saved.fromEnd, to: last - saved.toEnd };
+        let tries = 0;
+        const restore = () => {
+          if (chartRef.current !== chart) return; // the chart was replaced
+          if (ts.width() > 0 || tries++ > 60) {
+            ts.setVisibleLogicalRange(range);
+            fittedKey.current = resetKey;
+          } else requestAnimationFrame(restore);
+        };
+        fittedKey.current = `restoring:${resetKey}`;
+        restore();
+      } else {
+        ts?.fitContent();
+        fittedKey.current = resetKey;
+      }
     }
   }, [candles, zones, events, swings, palette, resetKey]);
 

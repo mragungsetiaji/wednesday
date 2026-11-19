@@ -482,6 +482,7 @@ export default function App() {
                 sync={mainLink.sync}
                 rangeLink={mainLink.rangeLink}
                 snapshotButton={false}
+                viewKey="main"
               />
               </div>
               <div className="chart-foot">

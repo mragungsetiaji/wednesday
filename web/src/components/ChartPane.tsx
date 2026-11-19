@@ -136,6 +136,7 @@ function ScanPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers:
         highlight={null}
         palette={palette}
         resetKey={tf}
+        viewKey={`pane:${label}`}
         loading={!chart}
         onNeedOlder={loadOlder}
         quarters={quarters}
@@ -188,6 +189,7 @@ function MarketPane({ symbol, tf, onTf, timeframes, version, lookback, palette, 
         highlight={null}
         palette={palette}
         resetKey={`${symbol}|${tf}`}
+        viewKey={`pane:${label}`}
         timeframe={tf}
         loading={!chart && !error}
         onNeedOlder={loadOlder}
