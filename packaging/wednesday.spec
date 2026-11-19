@@ -9,6 +9,7 @@
 # With WEDNESDAY_BUILD=server it builds the Tauri shell's server instead (src-tauri, #92):
 # dist/wednesday-server/wednesday-server.exe, no window of its own, bundled into the Tauri installer.
 import os
+import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
@@ -20,10 +21,11 @@ if not (ROOT / "web" / "dist" / "index.html").is_file():
 
 # The TradingView data source: its Node helper and node.exe to run it (feeds.tradingview_command).
 NODE = ROOT / "packaging" / "node"
+NODE_EXE = "node.exe" if sys.platform == "win32" else "node"  # what feeds._bundled looks for
 if not (ROOT / "tradingview" / "node_modules" / "@mathieuc" / "tradingview").is_dir():
     raise SystemExit("Install the TradingView helper first: cd tradingview && npm ci --omit=dev")
-if not (NODE / "node.exe").is_file() or not (NODE / "LICENSE").is_file():
-    raise SystemExit("Copy node.exe (Node 22) and its LICENSE into packaging/node/")
+if not (NODE / NODE_EXE).is_file() or not (NODE / "LICENSE").is_file():
+    raise SystemExit(f"Copy {NODE_EXE} (Node 22) and its LICENSE into packaging/node/")
 
 datas = [
     (str(ROOT / "web" / "dist"), "web/dist"),
@@ -35,7 +37,7 @@ datas = [
     (str(ROOT / "tradingview" / "node_modules"), "tradingview/node_modules"),
     (str(NODE / "LICENSE"), "node"),
 ]
-binaries = [(str(NODE / "node.exe"), "node")]
+binaries = [(str(NODE / NODE_EXE), "node")]
 # Time zone database for zoneinfo: Windows has none of its own.
 datas += collect_data_files("tzdata")
 
