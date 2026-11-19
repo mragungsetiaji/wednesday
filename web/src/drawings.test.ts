@@ -2,8 +2,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import type { IChartApi } from "lightweight-charts";
+
 import type { Candle, Drawing } from "./api";
-import { trackPosition } from "./drawings.ts";
+import { trackPosition, xOfLogical } from "./drawings.ts";
+import { logicalOfTime } from "./timeMap.ts";
 
 const utc = (s: string) => Date.parse(`${s}Z`) / 1000;
 
@@ -31,4 +34,16 @@ test("a position tracks the same start and end times on every timeframe", () => 
   const early = long("2026-09-28T10:00", "2026-09-28T10:30");
   assert.equal(trackPosition(early, candles("2026-09-28T08:00", 96, 300, spike, 98.9), null)?.state, "missed");
   assert.equal(trackPosition(early, candles("2026-09-28T08:00", 8, 3600, spike, 98.9), null)?.state, "ended");
+});
+
+test("a 5M line keeps its times on 15M, between candle centres", () => {
+  // Like the chart: whole bars only (anything else answers 0), 12px apart, bar 0 at x=6.
+  const chart = {
+    timeScale: () => ({ logicalToCoordinate: (l: number) => (Number.isInteger(l) ? 6 + l * 12 : 0) }),
+  } as unknown as IChartApi;
+  const m15 = Array.from({ length: 20 }, (_, i) => utc("2026-11-19T00:00:00") + i * 900);
+  const x = (s: string) => xOfLogical(chart, logicalOfTime(m15, utc(s)))!;
+  // 02:35 to 03:05 is six 5M candles: two 15M candles, each end a third into its candle.
+  assert.equal(x("2026-11-19T02:35:00"), 6 + (10 + 1 / 3) * 12);
+  assert.equal(x("2026-11-19T03:05:00") - x("2026-11-19T02:35:00"), 2 * 12);
 });

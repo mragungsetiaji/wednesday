@@ -65,7 +65,10 @@ def test_paths_texts_and_styles():
     pts = [{"t": i, "p": 2400 + i} for i in range(5)]
     path = clean_drawing(ID, {"kind": "path", "points": pts, "style": {"color": "#22c55e", "width": 3, "dash": "dotted"}})
     assert len(path["points"]) == 5 and path["style"] == {"color": "#22c55e", "width": 3, "dash": "dotted"}
-    assert path["props"] is None  # stray props are dropped
+    assert path["props"] is None  # no label, no props
+    labelled = clean_drawing(ID, {"kind": "trendline", "points": pts[:2], "props": {"text": "H1 OB", "stop": 1}})
+    assert labelled["props"] == {"text": "H1 OB"}  # the label stays, anything else goes
+    assert clean_drawing(ID, {"kind": "hline", "points": pts[:1], "props": {"text": " "}})["props"] is None
     text = clean_drawing(ID, {"kind": "text", "points": pts[:1], "props": {"text": "NY open"}, "style": {"size": 16}})
     assert text["props"] == {"text": "NY open"} and text["style"]["size"] == 16
     for bad in (
@@ -74,6 +77,7 @@ def test_paths_texts_and_styles():
         {"kind": "text", "points": pts[:1], "props": {"text": "  "}},
         {"kind": "text", "points": pts[:1], "props": {"text": "x" * 501}},
         {"kind": "text", "points": pts[:1], "props": {"text": "ok"}, "style": {"size": 99}},
+        {"kind": "rect", "points": pts[:2], "props": {"text": "x" * 501}},
     ):
         with pytest.raises(ValueError):
             clean_drawing(ID, bad)

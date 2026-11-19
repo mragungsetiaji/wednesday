@@ -44,9 +44,21 @@ export const newId = (): string =>
         return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
       });
 
+/**
+ * The x pixel of a (fractional) logical position. The chart's logicalToCoordinate only takes
+ * whole bars (it answers 0 for anything else), so a 5M point inside a 15M candle would land on
+ * the left edge: interpolate between bar 0 and bar 1 instead.
+ */
+export function xOfLogical(chart: IChartApi, l: number): number | null {
+  const ts = chart.timeScale();
+  const a = ts.logicalToCoordinate(0 as Logical);
+  const b = ts.logicalToCoordinate(1 as Logical);
+  return a === null || b === null ? null : a + l * (b - a);
+}
+
 /** Chart pixels (CSS px, relative to the price pane) of a point; null when the price is off scale. */
 export function toXY(chart: IChartApi, series: ISeriesApi<SeriesType>, times: number[], pt: DrawingPoint) {
-  const x = chart.timeScale().logicalToCoordinate(logicalOfTime(times, pt.t) as Logical);
+  const x = xOfLogical(chart, logicalOfTime(times, pt.t));
   const y = series.priceToCoordinate(pt.p);
   return x === null || y === null ? null : { x, y };
 }
@@ -153,6 +165,7 @@ export function trackPosition(d: Drawing, candles: Candle[], live: Candle | null
 export const RECT_CORNERS: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]];
 
 export const TEXT_SIZE = 14; // a text drawing's default font size
+export const LABEL_SIZE = 12; // a line's label, unless its size is set
 
 let measureCtx: CanvasRenderingContext2D | null = null;
 let textFont = "system-ui, sans-serif";

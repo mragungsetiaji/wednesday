@@ -31,7 +31,7 @@ import { LiveTickerPrice } from "./components/TickerPrice";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtPrice } from "./format";
-import { BookIcon, ChartIcon, Direction, ExpandIcon, FlaskIcon, PopOutIcon, SlidersIcon } from "./icons";
+import { BookIcon, ChartIcon, Direction, ExpandIcon, FlaskIcon, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
 import { predictionMark } from "./labPrimitive";
 import { useMl } from "./mlData";
 import { usePref } from "./prefs";
@@ -106,6 +106,7 @@ export default function App() {
   const [showMl, setShowMl] = usePref("wed.ml", false);
   const [mlThreshold, setMlThreshold] = usePref("wed.mlCut", 0);
   const [mlHot, setMlHot] = useState<string | null>(null);
+  const [showRail, setShowRail] = usePref("wed.rail", true);
   const [focus, setFocus] = useState(false);
   const [quarters, setQuarters] = useState<QuartersResponse | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
@@ -363,7 +364,7 @@ export default function App() {
         <JournalPage palette={palette} />
       ) : (
         <>
-          <main className="workspace">
+          <main className={`workspace${showRail ? "" : " is-rail-hidden"}`}>
             <section className="chart-area" aria-label="Chart">
               <div className="chart-toolbar">
                 <div className="tabs" role="tablist" aria-label="Chart timeframe">
@@ -482,6 +483,10 @@ export default function App() {
                   title="Full screen: one, two or four charts (F)" aria-label="Full screen charts">
                   <ExpandIcon size={15} />
                 </button>
+                <button type="button" className="icon-button" onClick={() => setShowRail(!showRail)} aria-pressed={showRail}
+                  title={showRail ? "Hide the levels pane" : "Show the levels pane"} aria-label={showRail ? "Hide the levels pane" : "Show the levels pane"}>
+                  <SidePanelIcon size={15} open={showRail} />
+                </button>
                 </div>
               </div>
               {scan && config && (
@@ -514,7 +519,7 @@ export default function App() {
               )}
             </section>
 
-            {scan ? (
+            {!showRail ? null : scan ? (
               <Rail items={rail} sizing={scan.sizing} price={scan.price} live={live} status={chartStatus} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf}
                 bias={tradeBias} onBiasChanged={refreshScan} onOpenSettings={openSettings}
                 panels={config ? [

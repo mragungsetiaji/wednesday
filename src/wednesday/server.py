@@ -34,6 +34,7 @@ from .news import CALENDAR_KEY, CalendarSettings
 from .news_stats import CalendarImportError, NewsReactions, brief_line, event_key, history_summary, parse_csv
 from .drawings import clean_drawing, drawing_payload
 from .drawing_alerts import clean_alert
+from .drawing_templates import DrawingTemplates, TemplateError
 from .engine import RECONNECT_ATTEMPTS, Engine, Runtime
 from .lab.api import lab_router
 from .journal.api import journal_router
@@ -869,6 +870,30 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     @app.delete("/api/workspaces/{name}")
     def delete_workspace(name: str) -> dict:
         return {"deleted": workspaces().delete(name)}
+
+    # ---- drawing templates: named drawing styles (drawing_templates.py) ----
+    def drawing_templates() -> DrawingTemplates:
+        store = runtime.store if runtime else target.store
+        if store is None:
+            raise HTTPException(409, "Drawing templates need a database")
+        return DrawingTemplates(store)
+
+    @app.get("/api/drawing-templates")
+    def list_drawing_templates() -> dict:
+        return {"templates": drawing_templates().list()}
+
+    @app.put("/api/drawing-templates/{family}/{name}")
+    def put_drawing_template(family: str, name: str, body: dict = Body(...)) -> dict:
+        try:
+            return drawing_templates().save(family, name, body)
+        except TemplateError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.delete("/api/drawing-templates/{family}/{name}")
+    def delete_drawing_template(family: str, name: str) -> dict:
+        if not drawing_templates().delete(family, name):
+            raise HTTPException(404, "No such template")
+        return {"deleted": name}
 
     app.include_router(journal_router(lambda: runtime.journals if runtime else None, current,
                                       lambda: features(app.state.plugins), shots, market_now))

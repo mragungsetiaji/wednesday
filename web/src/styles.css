@@ -352,6 +352,10 @@ p {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
+/* Rail hidden from the chart bar: the chart takes the full width. */
+.workspace.is-rail-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
 
 .chart-area {
   display: flex;
@@ -531,7 +535,7 @@ p {
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: var(--s2);
+  gap: 2px;
   max-width: calc(100% - var(--s8));
   padding: 4px 6px;
   border: 1px solid var(--line);
@@ -552,9 +556,161 @@ p {
   height: 20px;
   margin: 0;
 }
+.draw-grip {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  cursor: grab;
+  touch-action: none;
+}
+.draw-grip:active {
+  cursor: grabbing;
+}
+.draw-menu-anchor {
+  position: relative;
+}
+/* Pencil and T: the icon over a bar in the colour it sets. */
+.draw-ink {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+.draw-ink-bar {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text);
+}
+.draw-ink-bar.is-theme {
+  background: var(--draw);
+}
+.draw-ink-bar.is-empty {
+  background: var(--line-strong);
+}
+.draw-style .draw-tool:has(.draw-width) {
+  width: auto;
+  padding: 0 var(--s2);
+}
+.draw-width {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.chart-pop.draw-pop {
+  position: static;
+  min-width: 0;
+}
+.draw-menu {
+  display: grid;
+  gap: 2px;
+}
+.draw-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 30px;
+  padding: 0 var(--s2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  text-align: start;
+}
+.draw-menu-item:hover:not(:disabled),
+.draw-menu-item[aria-pressed="true"] {
+  background: var(--hover);
+}
+.draw-menu-item:disabled {
+  opacity: 0.45;
+}
+.draw-menu-item .width-mark,
+.draw-menu-item .dash-mark {
+  flex: none;
+}
+.draw-menu-sep {
+  margin: var(--s1) 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.draw-template-list {
+  display: grid;
+  gap: 2px;
+  max-height: min(360px, 50vh);
+  overflow-y: auto;
+}
+.draw-template {
+  position: relative;
+  display: grid;
+}
+.draw-template .draw-menu-item {
+  padding-inline-end: 30px;
+}
+.draw-template-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.draw-template-delete {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 2px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  margin-block: auto;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-3);
+  opacity: 0;
+}
+.draw-template:hover .draw-template-delete,
+.draw-template-delete:focus-visible {
+  opacity: 1;
+}
+.draw-template-delete:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+@media (hover: none) {
+  .draw-template-delete {
+    opacity: 1;
+  }
+}
+.draw-template-save {
+  display: flex;
+  gap: var(--s2);
+}
+.draw-template-save input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+}
+.draw-template-error {
+  margin: 0;
+  padding: 0 var(--s2);
+  color: var(--error);
+  font-size: var(--text-sm);
+}
+.draw-text-fields {
+  display: flex;
+  gap: var(--s2);
+}
 .draw-colors {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .color-swatch {
   width: 20px;
@@ -589,11 +745,12 @@ p {
 }
 .dash-mark.dash-dashed { border-top-style: dashed; }
 .dash-mark.dash-dotted { border-top-style: dotted; }
-.draw-style .draw-text {
-  width: 180px;
+.draw-text-fields .draw-text {
+  flex: 1;
+  min-width: 0;
   height: 30px;
 }
-.draw-style .draw-size {
+.draw-text-fields .draw-size {
   width: auto;
   height: 30px;
 }

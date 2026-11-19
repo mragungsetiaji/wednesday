@@ -4,7 +4,6 @@ import type {
   IPrimitivePaneRenderer,
   IPrimitivePaneView,
   ISeriesApi,
-  Logical,
   ISeriesPrimitive,
   SeriesAttachedParameter,
   SeriesType,
@@ -19,6 +18,7 @@ import {
   handlesOf,
   hits,
   isPosition,
+  LABEL_SIZE,
   newId,
   positionBox,
   positionOf,
@@ -32,6 +32,7 @@ import {
   trackPosition,
   type DrawingCtl,
   type PositionTrack,
+  xOfLogical,
 } from "./drawings";
 import { logicalOfTime, stepOf, timeShift } from "./timeMap";
 import { fmtMoney, fmtPrice, fmtSigned } from "./format";
@@ -105,6 +106,18 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
         ctx.fillText(text, x + 5 * hr, cy);
         return h;
       };
+      // A line's label in its colour: left or right aligned at x, its bottom just above y.
+      const label = (d: Drawing, x: number, y: number, align: "left" | "right") => {
+        const text = d.props?.text;
+        if (!text) return;
+        ctx.setLineDash([]);
+        ctx.font = `500 ${Math.round((d.style.size ?? LABEL_SIZE) * vr)}px ${font}`;
+        ctx.textBaseline = "bottom";
+        ctx.textAlign = align;
+        ctx.fillStyle = d.style.color ?? palette.draw;
+        ctx.fillText(text, x, y - 4 * vr);
+        ctx.textAlign = "left";
+      };
       for (const d of shown) {
         const xy = d.points.map((pt) => toXY(chart, series, times, pt));
         if (xy.some((p) => p === null)) continue;
@@ -149,7 +162,7 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
           const money = (v: number) => (size && sizing ? `  ${v < 0 ? "−" : "+"}${fmtMoney(Math.abs(v), sizing.currency)}` : "");
           if (track && track.fillT !== null) {
             // Filled: shade entry to where price stands (or where it closed), green in profit, red in loss.
-            const xAt = (t: number) => chart.timeScale().logicalToCoordinate(logicalOfTime(times, t) as Logical);
+            const xAt = (t: number) => xOfLogical(chart, logicalOfTime(times, t));
             const xf = xAt(track.fillT);
             const xt = xAt(track.t);
             const yp = yOf(track.price);
@@ -208,6 +221,9 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
           ctx.moveTo(pts[0].x, pts[0].y);
           for (const q of pts.slice(1)) ctx.lineTo(q.x, q.y);
           ctx.stroke();
+          // Over the right end, like a level's name.
+          const right = pts.reduce((a, q) => (q.x > a.x ? q : a));
+          label(d, right.x, right.y, "right");
           const al = d.kind === "trendline" ? alerts[d.id] : undefined;
           if (al) {
             ctx.setLineDash([]);
@@ -232,6 +248,7 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
           ctx.moveTo(0, y);
           ctx.lineTo(W, y);
           ctx.stroke();
+          label(d, 8 * hr, y, "left");
           ctx.setLineDash([]);
           // Its price in a pill at the right edge, like the chart's own price labels.
           const fontPx = Math.round(10 * vr);
@@ -253,6 +270,7 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
           ctx.fillStyle = withAlpha(color, 0.14);
           ctx.fillRect(x, y, w, h);
           ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w), Math.round(h));
+          label(d, x, y, "left"); // over its top left corner
           const al = alerts[d.id];
           if (al) {
             ctx.setLineDash([]);

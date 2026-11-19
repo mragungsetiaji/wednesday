@@ -63,6 +63,15 @@ export const CollapseIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** A window with its right pane: show or hide the rail. */
+export const SidePanelIcon = ({ open, ...p }: IconProps & { open?: boolean }) => (
+  <Svg {...p}>
+    <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+    <path d="M10 2.5v11" />
+    {open && <path d="M11.75 5.5v5" />}
+  </Svg>
+);
+
 /** Chart layout: one, two side by side, or a 2×2 grid. */
 /** A full screen layout: its columns and rows; `big` keeps the first column whole. */
 export const LayoutIcon = ({ cols, rows, big, ...p }: IconProps & { cols: number; rows: number; big?: boolean }) => {
@@ -257,5 +266,46 @@ export const RedoIcon = (p: IconProps) => (
   <Svg {...p}>
     <path d="M10.5 3l3 3-3 3" />
     <path d="M13.5 6h-7a4 4 0 000 8H9" />
+  </Svg>
+);
+
+/** Six dots: drag to move. */
+export const GripIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 3.5h.01M10 3.5h.01M6 8h.01M10 8h.01M6 12.5h.01M10 12.5h.01" strokeWidth={2.2} />
+  </Svg>
+);
+
+/** Pencil: line colour. */
+export const PencilIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10.5 2.5l3 3-8 8h-3v-3z M9 4l3 3" />
+  </Svg>
+);
+
+/** A lock opened: unlocked. */
+export const UnlockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3.5" y="7" width="9" height="6.5" rx="1" />
+    <path d="M5.5 7V5a2.5 2.5 0 014.9-.7" />
+  </Svg>
+);
+
+/** Three dots: more actions. */
+export const MoreIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="3.5" cy="8" r="1" />
+    <circle cx="8" cy="8" r="1" />
+    <circle cx="12.5" cy="8" r="1" />
+  </Svg>
+);
+
+/** Three squares and a plus: drawing templates. */
+export const TemplatesIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" />
+    <rect x="9" y="2.5" width="4.5" height="4.5" rx="1" />
+    <rect x="2.5" y="9" width="4.5" height="4.5" rx="1" />
+    <path d="M11.25 9v4.5M9 11.25h4.5" />
   </Svg>
 );

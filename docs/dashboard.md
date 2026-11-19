@@ -26,6 +26,10 @@ The timeframe tabs carry each timeframe's structure direction (↑ / ↓). Besid
 them, the detectors (**Order blocks**, **Liquidity**, **Inducement**) and the
 overlays (**Mid OBs**, **HTF**, **Swings**, **Quarters**, **News**, **ML**) switch on and off.
 
+The button at the far right of the bar under the chart hides the right pane
+(bias, levels, structure and events) so the chart takes the full width, and
+shows it again. The dashboard remembers the choice in this browser.
+
 The header price follows the [live price](data-sources.md#live-price): each tick
 flashes green or red, and the arrow keeps the last direction.
 
@@ -139,9 +143,19 @@ The column left of the chart holds drawing tools, TradingView style:
 
 Points snap to the candle under the pointer. With the cursor, click a drawing to
 select it, drag it to move it, or drag a handle to reshape it; double-click a text
-to edit it. A bar above the chart styles the selected drawing: color, line width,
-solid, dashed or dotted line, a text's words and size, plus **Lock** (it can't be
-moved or deleted) and **Delete** (or the Delete key). On a horizontal line,
+to edit it. A toolbar over the chart styles the selected drawing, each button with
+its own small menu. The squares-and-plus button holds **templates**: **Save drawing
+template as…** keeps the drawing's look (color, width, line style, text size and
+label) under a name such as "H1 OB", a click on a name gives the selected drawing
+that look, and **Apply the default template** puts back the plain style. Lines,
+rectangles and texts each have their own list; templates are kept in the database,
+so they stay across restarts and windows. The pencil sets the color; **T** sets a text's words and size,
+or puts a label on a line, trendline, path or rectangle (such as "H1 OB", drawn in
+the line's color over its right end); then the line width and solid, dashed or
+dotted. **Lock** stops it being moved or deleted, **Delete** removes it (or the
+Delete key), and **⋯** clones it, removes its label or resets its style. Drag the
+dots at the toolbar's left end to move it out of the way; it stays there, and a
+double-click on the dots puts it back at the top. On a horizontal line,
 trendline or rectangle the bell sets a price alert (right-clicking the drawing opens
 it too): see [Alerts on your drawings](alerts.md#alerts-on-your-drawings). A drawing
 with an alert carries a small bell, filled while it is on and struck through once it

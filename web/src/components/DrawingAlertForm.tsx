@@ -71,8 +71,8 @@ export function DrawingAlertButton({ d, ctl }: { d: Drawing; ctl: Drawings }) {
  * The form, placed under the button but rendered in the chart's container: the style bar
  * scrolls sideways and is transformed, which would clip it.
  */
-function Floating({ anchor, popRef, children }: { anchor: RefObject<HTMLElement | null>; popRef: RefObject<HTMLElement | null>;
-  children: React.ReactNode }) {
+export function Floating({ anchor, popRef, children, width: wanted = 320 }: { anchor: RefObject<HTMLElement | null>;
+  popRef: RefObject<HTMLElement | null>; children: React.ReactNode; width?: number }) {
   const [place, setPlace] = useState<{ host: HTMLElement; style: CSSProperties } | null>(null);
   useLayoutEffect(() => {
     const btn = anchor.current;
@@ -81,10 +81,10 @@ function Floating({ anchor, popRef, children }: { anchor: RefObject<HTMLElement 
     if (!btn || !host) return;
     const b = btn.getBoundingClientRect();
     const h = host.getBoundingClientRect();
-    const width = Math.min(320, h.width - 16);
+    const width = Math.min(wanted, h.width - 16);
     const left = Math.min(Math.max(8, b.left - h.left), h.width - width - 8);
     setPlace({ host, style: { position: "absolute", top: b.bottom - h.top + 6, left, width, zIndex: 30 } });
-  }, [anchor]);
+  }, [anchor, wanted]);
   if (!place) return null;
   return createPortal(<div ref={(el) => { popRef.current = el; }} style={place.style}>{children}</div>, place.host);
 }

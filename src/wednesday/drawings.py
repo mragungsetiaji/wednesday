@@ -53,7 +53,11 @@ def clean_drawing(drawing_id: str, body: dict) -> dict:
             raise ValueError(f"A text needs props.text, 1 to {MAX_TEXT} characters")
         props = {"text": text}
     else:
-        props = None
+        # Lines, rectangles and paths may carry a short label ("H1 OB"); an empty one is dropped.
+        label = (props or {}).get("text")
+        if label is not None and (not isinstance(label, str) or len(label) > MAX_TEXT):
+            raise ValueError(f"A label (props.text) must be text, at most {MAX_TEXT} characters")
+        props = {"text": label} if label and label.strip() else None
     style = body.get("style") or {}
     if not isinstance(style, dict):
         raise ValueError("style must be an object")

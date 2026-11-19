@@ -492,6 +492,20 @@ export const fetchDrawings = () =>
 export const fetchDrawingAlerts = () => getJson<{ alerts: DrawingAlert[] }>("/api/drawings/alerts");
 export const putDrawingAlert = (id: string, a: DrawingAlertInput) => send<DrawingAlert>("PUT", `/api/drawings/${id}/alert`, a);
 export const deleteDrawingAlert = (id: string) => send<{ deleted: string }>("DELETE", `/api/drawings/${id}/alert`);
+/** A saved drawing style: colour, width, line style, text size and label, per drawing family. */
+export type DrawingFamily = "line" | "rect" | "text";
+export interface DrawingTemplate {
+  family: DrawingFamily;
+  name: string;
+  style: Drawing["style"];
+  text: string | null;
+  saved_at: string;
+}
+export const fetchDrawingTemplates = () => getJson<{ templates: DrawingTemplate[] }>("/api/drawing-templates");
+export const putDrawingTemplate = (family: DrawingFamily, name: string, t: { style: Drawing["style"]; text: string | null }) =>
+  send<DrawingTemplate>("PUT", `/api/drawing-templates/${family}/${encodeURIComponent(name)}`, t);
+export const deleteDrawingTemplate = (family: DrawingFamily, name: string) =>
+  send<{ deleted: string }>("DELETE", `/api/drawing-templates/${family}/${encodeURIComponent(name)}`);
 export const putDrawing = (d: Drawing) => send<Drawing>("PUT", `/api/drawings/${d.id}`, d);
 export const deleteDrawing = (id: string) => send<{ deleted: string }>("DELETE", `/api/drawings/${id}`);
 
