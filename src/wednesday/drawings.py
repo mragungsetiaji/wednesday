@@ -15,6 +15,29 @@ from .storage import DRAWING_KINDS
 # Anchor points per kind, as (fewest, most): a path takes any number, the rest a fixed count.
 POINTS = {"trendline": (2, 2), "hline": (1, 1), "rect": (2, 2), "long": (2, 2), "short": (2, 2),
           "path": (2, 200), "text": (1, 1)}
+# The tools of web/src/shapes.ts: a fixed number of clicks, a polyline (2 to 200) or a brush stroke (2 to 2000).
+POINTS.update({
+    "ray": (2, 2), "extendedLine": (2, 2), "infoLine": (2, 2), "trendAngle": (2, 2),
+    "horizontalRay": (1, 1), "verticalLine": (1, 1), "crossLine": (1, 1), "parallelChannel": (3, 3),
+    "regression": (2, 2), "disjointChannel": (3, 3), "flatTopBottom": (3, 3),
+    "fibRetracement": (2, 2), "fibExtension": (3, 3), "fibChannel": (3, 3), "fibTimeZones": (2, 2),
+    "fibFan": (2, 2), "fibArcs": (2, 2), "fibCircles": (2, 2), "fibSpiral": (2, 2),
+    "fibWedge": (3, 3), "pitchfork": (3, 3), "schiffPitchfork": (3, 3), "modSchiffFork": (3, 3),
+    "gannFan": (2, 2), "gannBox": (2, 2), "gannSquare": (2, 2), "pitchfan": (3, 3),
+    "cyclicLines": (2, 2), "timeCycles": (2, 2), "sineLine": (2, 2), "xabcd": (5, 5), "abcd": (4, 4),
+    "headShoulders": (7, 7), "cypher": (5, 5), "threeDrives": (7, 7), "elliottWave": (6, 6),
+    "elliottImpulse": (6, 6), "elliottCorrect": (4, 4), "elliottTriangle": (6, 6),
+    "elliottDouble": (4, 4), "elliottTriple": (6, 6), "forecast": (2, 2), "projection": (3, 3),
+    "barsPattern": (2, 2), "priceRange": (2, 2), "dateRange": (2, 2), "datePriceRange": (2, 2),
+    "measure": (2, 2), "rotatedRect": (3, 3), "circle": (2, 2), "ellipse": (2, 2), "triangle": (3, 3),
+    "polyline": (2, 200), "curve": (3, 3), "arc": (3, 3), "brush": (2, 2000),
+    "highlighter": (2, 2000), "priceLabel": (1, 1), "arrow": (2, 2), "note": (1, 1), "callout": (2, 2), "flag": (1, 1),
+    "arrowMark": (1, 1), "icon": (1, 1), "signpost": (1, 1), "balloon": (1, 1),
+    "anchoredText": (1, 1),
+    "anchoredNote": (1, 1),
+})
+# Tools anchored to the screen: props.ax and props.ay, the place as a share of the chart's width and height.
+ANCHORED = ("anchoredText", "anchoredNote")
 DASHES = ("solid", "dashed", "dotted")
 MAX_TEXT = 500
 # A long or short position: its two points are the start and end at the entry price, and
@@ -58,6 +81,8 @@ def clean_drawing(drawing_id: str, body: dict) -> dict:
         if label is not None and (not isinstance(label, str) or len(label) > MAX_TEXT):
             raise ValueError(f"A label (props.text) must be text, at most {MAX_TEXT} characters")
         props = {"text": label} if label and label.strip() else None
+        if kind in ANCHORED:
+            props = {**(props or {}), **_anchor(body.get("props") or {})}
     style = body.get("style") or {}
     if not isinstance(style, dict):
         raise ValueError("style must be an object")
@@ -87,6 +112,17 @@ def clean_drawing(drawing_id: str, body: dict) -> dict:
         "hidden": bool(body.get("hidden", False)),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def _anchor(props: dict) -> dict:
+    """An anchored tool's place on the chart, as shares of its width and height (0 to 1)."""
+    out = {}
+    for key in ("ax", "ay"):
+        v = props.get(key, 0.1)
+        if not isinstance(v, (int, float)) or not math.isfinite(v):
+            raise ValueError(f"props.{key} must be a number from 0 to 1")
+        out[key] = min(1.0, max(0.0, float(v)))
+    return out
 
 
 def _position_props(kind: str, points: list[dict], props: dict | None) -> dict:

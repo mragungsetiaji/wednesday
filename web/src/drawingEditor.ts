@@ -39,6 +39,7 @@ import { logicalOfTime, stepOf, timeShift } from "./timeMap";
 import { fmtMoney, fmtPrice, fmtSigned } from "./format";
 import { sizeFor } from "./sizing";
 import { withAlpha, type ChartPalette } from "./theme";
+import { anchorXY, hitsGeom, labelBox, shapeOf, type Geom, type GeomCtx } from "./shapes";
 
 type XY = { x: number; y: number };
 
@@ -90,6 +91,16 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
 
     target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, horizontalPixelRatio: hr, verticalPixelRatio: vr }) => {
       const W = bitmapSize.width;
+      const g: GeomCtx = {
+        w: W / hr,
+        h: bitmapSize.height / vr,
+        yOf,
+        xOfT: (t) => xOfLogical(chart, logicalOfTime(times, t)),
+        candles,
+        step: stepOf(times),
+        bull: palette.bull,
+        bear: palette.bear,
+      };
       const fontPx = Math.round(10 * vr);
       const pillWidth = (text: string) => {
         ctx.font = `600 ${fontPx}px ${font}`;
@@ -122,8 +133,58 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
         ctx.fillText(text, x, y - 4 * vr);
         ctx.textAlign = "left";
       };
+      // A tool from shapes.ts: its lines, then its areas, then its labels, all in its colour.
+      const drawGeom = (gm: Geom, color: string, lw: number, dash: number[]) => {
+        for (const f of gm.fills) {
+          if (f.pts.length < 3) continue;
+          ctx.fillStyle = withAlpha(f.color ?? color, f.alpha);
+          ctx.beginPath();
+          f.pts.forEach((q, i) => (i ? ctx.lineTo(q.x * hr, q.y * vr) : ctx.moveTo(q.x * hr, q.y * vr)));
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.lineJoin = "round";
+        for (const l of gm.lines) {
+          if (l.pts.length < 2) continue;
+          ctx.globalAlpha = l.alpha ?? 1;
+          ctx.strokeStyle = l.color ?? color;
+          ctx.lineWidth = l.width ? Math.max(lw, Math.round(l.width * hr)) : lw;
+          ctx.lineCap = l.width ? "round" : ctx.lineCap;
+          ctx.setLineDash(l.dash ? [5 * hr, 4 * hr] : dash);
+          ctx.beginPath();
+          l.pts.forEach((q, i) => (i ? ctx.lineTo(q.x * hr, q.y * vr) : ctx.moveTo(q.x * hr, q.y * vr)));
+          if (l.closed) ctx.closePath();
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([]);
+        for (const lb of gm.labels) {
+          const size = Math.round((lb.size ?? 12) * vr);
+          ctx.font = `${lb.pill || lb.box ? 600 : 500} ${size}px ${font}`;
+          const b = labelBox(lb);
+          const c = lb.color ?? color;
+          if (lb.pill || lb.box) {
+            ctx.beginPath();
+            ctx.roundRect(b.x * hr, b.y * vr, b.w * hr, b.h * vr, 3 * hr);
+            ctx.fillStyle = lb.pill ? c : withAlpha(c, 0.14);
+            ctx.fill();
+            if (lb.box) {
+              ctx.lineWidth = Math.max(1, Math.round(hr));
+              ctx.strokeStyle = c;
+              ctx.stroke();
+            }
+          }
+          ctx.fillStyle = lb.pill ? palette.surface : lb.box ? palette.textStrong : c;
+          ctx.textBaseline = "middle";
+          ctx.textAlign = "left";
+          const pad = lb.pill || lb.box ? 6 : 0;
+          ctx.fillText(lb.text, (b.x + pad) * hr, (b.y + b.h / 2) * vr);
+        }
+      };
+
       for (const d of shown) {
-        const xy = d.points.map((pt) => toXY(chart, series, times, pt));
+        const def = shapeOf(d.kind);
+        const xy = def?.anchored ? [anchorXY(d, g)] : d.points.map((pt) => toXY(chart, series, times, pt));
         if (xy.some((p) => p === null)) continue;
         const pts = (xy as XY[]).map((p) => ({ x: p.x * hr, y: p.y * vr }));
         const color = d.style.color ?? palette.draw;
@@ -133,7 +194,9 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
         ctx.lineCap = d.style.dash === "dotted" ? "round" : "butt";
         ctx.setLineDash(d.style.dash === "dashed" ? [6 * hr, 4 * hr] : d.style.dash === "dotted" ? [0.1, 3 * lw] : []);
 
-        if (isPosition(d)) {
+        if (def) {
+          drawGeom(def.geom(xy as XY[], d, g), color, lw, ctx.getLineDash());
+        } else if (isPosition(d)) {
           ctx.setLineDash([]);
           const box = positionBox(d, xy as XY[], yOf);
           if (!box) continue;
@@ -352,9 +415,9 @@ const make = (kind: DrawingKind, points: DrawingPoint[]): Drawing => ({
   id: newId(),
   kind,
   points,
-  style: { color: null, width: kind === "trendline" || kind === "hline" || kind === "path" ? 2 : 1, dash: "solid",
+  style: { color: null, width: shapeOf(kind)?.width ?? (kind === "trendline" || kind === "hline" || kind === "path" ? 2 : 1), dash: "solid",
     ...(kind === "text" ? { size: TEXT_SIZE } : {}) },
-  props: kind === "text" ? { text: "Text" } : null,
+  props: kind === "text" ? { text: "Text" } : shapeOf(kind)?.text ? { text: shapeOf(kind)!.text } : null,
   timeframes: null,
   locked: false,
   hidden: false,
@@ -383,7 +446,8 @@ export class DrawingEditor {
   private bars: Candle[] = []; // closed candles, for the magnet
   private liveBar: Candle | null = null;
   private zoom: { start: XY; box: HTMLDivElement } | null = null; // the zoom tool's drag
-  private drag: { orig: Drawing; last: Drawing; handle: number | null; startL: number; startP: number; moved: boolean } | null = null;
+  private drag: { orig: Drawing; last: Drawing; handle: number | null; startL: number; startP: number; startXY: XY; moved: boolean } | null = null;
+  private freehand = false; // the draft is a brush stroke: every move adds a point
 
   constructor(
     private readonly chart: IChartApi,
@@ -510,12 +574,36 @@ export class DrawingEditor {
       const handle = handlesOf(sel, this.xyOf(sel), this.chart.timeScale().width(), this.yOf)
         .findIndex((h) => Math.hypot(h.x - p.x, h.y - p.y) <= HANDLE_HIT);
       if (handle >= 0) return { d: sel, handle };
-      if (hits(sel, this.xyOf(sel), p, this.yOf)) return { d: sel, handle: null };
+      if (this.on(sel, p)) return { d: sel, handle: null };
     }
     for (let i = shown.length - 1; i >= 0; i--) {
-      if (hits(shown[i], this.xyOf(shown[i]), p, this.yOf)) return { d: shown[i], handle: null };
+      if (this.on(shown[i], p)) return { d: shown[i], handle: null };
     }
     return null;
+  }
+
+  /** What the tools of shapes.ts need to work out their geometry on this chart. */
+  private geomCtx(): GeomCtx {
+    return {
+      w: this.chart.timeScale().width(),
+      h: this.chart.panes()[0]?.getHeight() ?? this.el.clientHeight,
+      yOf: this.yOf,
+      xOfT: (t) => xOfLogical(this.chart, logicalOfTime(this.times, t)),
+      candles: this.bars,
+      step: this.step,
+      bull: this.primitive.palette.bull,
+      bear: this.primitive.palette.bear,
+    };
+  }
+
+  /** Whether the pointer is on drawing d. */
+  private on(d: Drawing, p: XY): boolean {
+    const def = shapeOf(d.kind);
+    if (!def) return hits(d, this.xyOf(d), p, this.yOf);
+    const g = this.geomCtx();
+    const xy = def.anchored ? [anchorXY(d, g)] : this.xyOf(d);
+    if (xy.some((q) => q === null)) return false;
+    return hitsGeom(def.geom(xy as XY[], d, g), p);
   }
 
   private readonly onDown = (e: PointerEvent) => {
@@ -545,6 +633,38 @@ export class DrawingEditor {
       claim(e);
       const pt = this.pointAt(p);
       if (!pt) return;
+      const def = shapeOf(ctl.tool);
+      if (def && !this.draft) {
+        if (def.anchored) {
+          const g = this.geomCtx();
+          ctl.create({ ...make(ctl.tool, [pt]), props: { text: def.text, ax: p.x / g.w, ay: p.y / g.h } });
+          this.done();
+          return;
+        }
+        if (def.points === 1) {
+          ctl.create(make(ctl.tool, [pt]));
+          this.done();
+          return;
+        }
+        if (def.points === "free") {
+          this.draft = make(ctl.tool, [pt]);
+          this.placing = { start: p, moved: false };
+          this.freehand = true;
+          this.track();
+          this.render();
+          return;
+        }
+      }
+      if (def && this.draft && typeof def.points === "number") {
+        // Each click fixes the point under the pointer; the last one finishes it.
+        const fixed = [...this.draft.points.slice(0, -1), pt];
+        if (fixed.length >= def.points) this.finishWith(fixed);
+        else {
+          this.draft = { ...this.draft, points: [...fixed, pt] };
+          this.render();
+        }
+        return;
+      }
       if (ctl.tool === "hline") {
         ctl.create(make("hline", [pt]));
         this.done();
@@ -557,7 +677,7 @@ export class DrawingEditor {
         ctl.create(d);
         ctl.setTool("cursor");
         ctl.editText(d.id); // straight into typing it
-      } else if (ctl.tool === "path" && this.draft) {
+      } else if ((ctl.tool === "path" || def?.points === "multi") && this.draft) {
         // Each click fixes a point; clicking the last one again (a double click) ends the path.
         const fixed = this.draft.points.slice(0, -1);
         const last = toXY(this.chart, this.series, this.times, fixed[fixed.length - 1]);
@@ -590,7 +710,7 @@ export class DrawingEditor {
     if (l === null || price === null) return;
     // A text's handle is only a grip: it moves the whole text.
     const handle = hit.d.kind === "text" ? null : hit.handle;
-    this.drag = { orig: hit.d, last: hit.d, handle, startL: l, startP: price, moved: false };
+    this.drag = { orig: hit.d, last: hit.d, handle, startL: l, startP: price, startXY: p, moved: false };
     this.track();
   };
 
@@ -604,6 +724,13 @@ export class DrawingEditor {
       this.drag.moved = true;
       this.drag.last = next;
       dragBus.publish(next); // every chart redraws it; React hears only the drop
+    } else if (this.draft && this.freehand) {
+      const pt = this.pointAt(p);
+      const last = this.draft.points[this.draft.points.length - 1];
+      const lastXY = last ? toXY(this.chart, this.series, this.times, last) : null;
+      if (!pt || (lastXY && Math.hypot(lastXY.x - p.x, lastXY.y - p.y) < 3) || this.draft.points.length >= 2000) return;
+      this.draft = { ...this.draft, points: [...this.draft.points, pt] };
+      this.render();
     } else if (this.draft && this.placing) {
       const pt = this.pointAt(p);
       if (!pt) return;
@@ -634,9 +761,20 @@ export class DrawingEditor {
         // Keep drawing it until the saved items hold it (React may commit a frame later), or 1 s at most.
         window.setTimeout(() => dragBus.clear(last), 1000);
       }
-    } else if (this.draft && this.draft.kind !== "path" && this.placing?.moved) {
+    } else if (this.draft && this.freehand) {
+      this.freehand = false;
+      const pts = this.draft.points;
+      if (pts.length >= 2) this.finishWith(pts);
+      else this.cancelPlacing();
+    } else if (this.draft && this.draft.points.length === 2 && this.draft.kind !== "path" && shapeOf(this.draft.kind)?.points !== "multi"
+      && this.placing?.moved) {
       const pt = this.pointAt(this.local(e));
-      if (pt) this.finish(pt); // pressed and dragged: done on release
+      const n = shapeOf(this.draft.kind)?.points;
+      if (pt && typeof n === "number" && n > 2) {
+        // Pressed and dragged the first leg: the next clicks place the rest.
+        this.draft = { ...this.draft, points: [this.draft.points[0], pt, pt] };
+        this.render();
+      } else if (pt) this.finish(pt); // pressed and dragged: done on release
     }
     // A click without a drag leaves the second point to the next click.
   };
@@ -722,6 +860,13 @@ export class DrawingEditor {
   private dragged(p: XY): Drawing | null {
     const drag = this.drag!;
     const { orig } = drag;
+    if (drag.handle === null && shapeOf(orig.kind)?.anchored) {
+      // Anchored to the pane: it moves by the pointer's share of the pane's size.
+      const g = this.geomCtx();
+      const clamp = (v: number) => Math.min(0.98, Math.max(0, v));
+      return { ...orig, props: { ...orig.props, ax: clamp((orig.props?.ax ?? 0.1) + (p.x - drag.startXY.x) / g.w),
+        ay: clamp((orig.props?.ay ?? 0.1) + (p.y - drag.startXY.y) / g.h) } };
+    }
     if (drag.handle === null) {
       const l = this.chart.timeScale().coordinateToLogical(p.x);
       const price = this.series.coordinateToPrice(p.y);
@@ -780,7 +925,7 @@ export class DrawingEditor {
 
   /** Enter ends a path at its last clicked point. */
   private readonly onKey = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && this.draft?.kind === "path") {
+    if (e.key === "Enter" && this.draft && (this.draft.kind === "path" || shapeOf(this.draft.kind)?.points === "multi")) {
       e.preventDefault();
       this.finishWith(this.draft.points.slice(0, -1));
     }
@@ -813,6 +958,7 @@ export class DrawingEditor {
 
   private cancelPlacing(): void {
     this.draft = null;
+    this.freehand = false;
     this.placing = null;
     this.stopTracking();
     this.render();

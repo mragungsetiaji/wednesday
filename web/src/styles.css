@@ -5316,3 +5316,21 @@ fieldset:disabled .switch {
   color: inherit;
   opacity: 0.85;
 }
+/* A group's menu with sections (TradeCanvas's): scrolls when taller than the window. */
+.draw-flyout {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.draw-flyout-item + .draw-flyout-head {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.draw-flyout-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.draw-flyout-item:disabled:hover {
+  background: transparent;
+  color: var(--text-2);
+}

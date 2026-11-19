@@ -5,39 +5,17 @@ import type { Drawings } from "../drawingsData";
 import { usePref } from "../prefs";
 import { TcIcon, type TcIconName } from "../tcIcons";
 import { toast } from "./Toasts";
+import { TOOL_GROUPS, type MenuTool } from "../shapes";
 
 const ICON = 20; // px; 18 in the full screen row
 
-type Tool = { tool: DrawTool; label: string; icon: TcIconName; keys?: string };
+type Tool = MenuTool & { tool: DrawTool };
 
-/** The tool groups, TradeCanvas style: a group's button draws with its last tool, its menu holds the rest. */
-const GROUPS: { id: string; name: string; tools: Tool[] }[] = [
-  {
-    id: "lines",
-    name: "Lines",
-    tools: [
-      { tool: "trendline", label: "Trend line", icon: "trendLine", keys: "Alt+T" },
-      { tool: "hline", label: "Horizontal line", icon: "horizontalLine", keys: "Alt+H" },
-    ],
-  },
-  { id: "path", name: "Path", tools: [{ tool: "path", label: "Path: click each point, click the last one again (or Enter) to end", icon: "path" }] },
-  {
-    id: "position",
-    name: "Positions",
-    tools: [
-      { tool: "long", label: "Long position", icon: "trendingUp" },
-      { tool: "short", label: "Short position", icon: "trendingDown" },
-    ],
-  },
-];
-const ALL: Tool[] = [];
-const SHAPES: Tool[] = [
-  { tool: "rect", label: "Rectangle", icon: "rectangle", keys: "Alt+B" },
-  { tool: "text", label: "Text: click where it goes, then type", icon: "text" },
-];
-
-for (const g of GROUPS) ALL.push(...g.tools);
-ALL.push(...SHAPES);
+/** The tool groups, as TradeCanvas's sidebar has them (shapes.ts): a group's button draws with its last tool. */
+const GROUPS = TOOL_GROUPS as { id: string; name: string; tools: Tool[] }[];
+const ALL: Tool[] = GROUPS.flatMap((g) => g.tools);
+/** Where a group's menu may reach: the window's height, less a margin. */
+const MENU_MARGIN = 8;
 
 const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = mac ? "⌘" : "Ctrl+";
@@ -55,7 +33,7 @@ export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row
   const [favs, setFavs] = usePref<DrawTool[]>("wed.drawFavorites", []);
   const [favBar, setFavBar] = usePref<boolean>("wed.drawFavoritesBar", false);
   const [menu, setMenu] = useState<string | null>(null);
-  const [at, setAt] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+  const [at, setAt] = useState<{ left: number; top: number; maxHeight?: number }>({ left: 0, top: 0 });
   const timer = useRef<number>(0);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -85,7 +63,9 @@ export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row
   // The menu is fixed to the page, so the column's scrolling doesn't clip it: beside the group, or under it in a row.
   const show = (id: string, group: HTMLElement) => {
     const r = group.getBoundingClientRect();
-    setAt(row ? { left: r.left, top: r.bottom + 4 } : { left: r.right + 4, top: r.top });
+    // A long menu (Fibonacci has 19 tools) moves up to fit the window, then scrolls.
+    const top = row ? r.bottom + 4 : Math.max(MENU_MARGIN, Math.min(r.top, window.innerHeight - MENU_MARGIN - 560));
+    setAt({ left: row ? r.left : r.right + 4, top, maxHeight: window.innerHeight - top - MENU_MARGIN });
     setMenu(id);
   };
   const hover = (id: string | null, group?: HTMLElement) => {
@@ -131,7 +111,7 @@ export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row
       </button>
       <span className="draw-sep" aria-hidden="true" />
       {GROUPS.map((g) => {
-        const shown = g.tools.find((t) => t.tool === last[g.id]) ?? g.tools[0];
+        const shown = g.tools.find((t) => t.tool === last[g.id] && !t.disabled) ?? g.tools[0];
         const on = g.tools.find((t) => t.tool === ctl.tool);
         const current = on ?? shown;
         if (g.tools.length === 1) return button(current);
@@ -149,9 +129,10 @@ export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row
               aria-haspopup="menu" onClick={(e) => (open ? setMenu(null) : show(g.id, e.currentTarget.parentElement!))} />
             {open && (
               <div className={`draw-flyout${row ? " is-below" : ""}`} role="menu" aria-label={g.name} style={at}>
-                <div className="draw-flyout-head">{g.name}</div>
-                {g.tools.map((t) => (
-                  <button key={t.tool} type="button" role="menuitemradio" aria-checked={ctl.tool === t.tool}
+                {g.tools.map((t) => [
+                  t.heading && <div key={`h-${t.heading}`} className="draw-flyout-head">{t.heading}</div>,
+                  <button key={t.tool} type="button" role="menuitemradio" aria-checked={ctl.tool === t.tool} disabled={!!t.disabled}
+                    title={t.disabled}
                     className={`draw-flyout-item${t.tool === current.tool ? " is-active" : ""}`}
                     onClick={() => {
                       setLast({ ...last, [g.id]: t.tool });
@@ -169,15 +150,13 @@ export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row
                       }}>
                       <TcIcon name="star" size={14} />
                     </span>
-                  </button>
-                ))}
+                  </button>,
+                ])}
               </div>
             )}
           </div>
         );
       })}
-      <span className="draw-sep" aria-hidden="true" />
-      {SHAPES.map(button)}
       <span className="draw-sep" aria-hidden="true" />
       {toggle(ctl.magnet, "Magnet", "magnet", () => ctl.setMagnet(!ctl.magnet),
         ctl.magnet ? "Magnet on: points snap to the candle's open, high, low or close" : "Magnet: snap points to the candle's open, high, low or close")}

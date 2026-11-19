@@ -1,3 +1,5 @@
+import type { ShapeKind } from "./shapes";
+
 /** A level from any detector: a zone, or a line when top === bottom. */
 export interface Level {
   detector: string; // "ob" | "liquidity" | "idm" | future detectors
@@ -446,7 +448,8 @@ async function send<T>(method: string, url: string, body?: unknown): Promise<T> 
 
 // ---- Chart drawings ----
 
-export type DrawingKind = "trendline" | "hline" | "rect" | "long" | "short" | "path" | "text";
+/** The first tools, which the editor draws itself, then the rest (shapes.ts). */
+export type DrawingKind = "trendline" | "hline" | "rect" | "long" | "short" | "path" | "text" | ShapeKind;
 export type DrawingDash = "solid" | "dashed" | "dotted";
 
 /** Anchored to (time, price): t is unix seconds on the feed clock, like the candles. */
@@ -461,7 +464,7 @@ export interface Drawing {
   points: DrawingPoint[]; // trendline and rect: 2, hline and text: 1, path: 2+; long / short: start and end, at the entry
   // color null: the theme's drawing colour; size: a text's font size
   style: { color: string | null; width: number; dash?: DrawingDash; size?: number };
-  props: { stop?: number; target?: number; text?: string } | null; // long / short: stop and target; text: its text
+  props: { stop?: number; target?: number; text?: string; ax?: number; ay?: number } | null; // long / short: stop and target; text: its text
   timeframes: string[] | null; // null: every timeframe
   locked: boolean;
   hidden: boolean;

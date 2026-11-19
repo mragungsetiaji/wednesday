@@ -141,11 +141,36 @@ price line, the grid (both, horizontal, vertical or none), the crosshair (free, 
 on the candle's close) and the space after the last candle, for every chart.
 **Reset to the defaults** goes back to the theme's colours.
 
-The column left of the chart holds the drawing tools, TradeCanvas style: the
-cursor, then the line tools, path and positions, then rectangle and text. A
-button with a small triangle in its corner is a group: it draws with the tool
-last picked in it, and hovering it (or clicking the triangle) opens the rest:
-trendline and horizontal line, or long and short position. Below them:
+The column left of the chart holds the drawing tools in TradeCanvas's groups. A
+button with a small triangle in its corner is a group: it draws with the tool last
+picked in it, and hovering it (or clicking the triangle) opens the rest, in sections:
+
+- **Lines**: trend line, ray, extended line, info line (change, bars and angle),
+  trend angle; horizontal line, horizontal ray, vertical line, cross line; parallel,
+  regression (fitted to the closes between its two points), disjoint and flat
+  top/bottom channels.
+- **Fibonacci**: retracement, extension, channel, time zones, speed resistance fan
+  and arcs, circles, spiral, wedge; pitchforks (standard, Schiff, modified Schiff),
+  Gann fan, box and square, pitchfan; cyclic lines, time cycles, sine line.
+- **Patterns**: XABCD, ABCD, head and shoulders, cypher, three drives (with the
+  legs' ratios), and Elliott waves: impulse, correction, triangle, double and triple
+  combo.
+- **Forecasting**: long and short positions, forecast, projection, bars pattern (the
+  candles between two points, copied ahead); price range, date range, date and price
+  range, and measure. Anchored VWAP and the fixed range volume profile are listed but
+  greyed out: they need volume, which the feeds here don't send.
+- **Shapes**: rectangle, rotated rectangle, circle, ellipse, triangle, polyline,
+  curve, arc; brush and highlighter (press and drag); path.
+- **Annotation**: text, price label, arrow, note, callout, flag mark, arrow mark,
+  icon, signpost, balloon, and anchored text and note, which stay where they are on
+  the screen while the chart scrolls.
+
+A tool takes one click per point (a fib extension three, an XABCD five); the first
+leg can also be pressed and dragged. A polyline or path ends with Enter or a click on
+its last point. Notes, callouts and the like start with a word you change with **T**
+in the drawing's toolbar.
+
+Below them:
 
 - **Magnet**: points snap to the open, high, low or close of the candle under the
   pointer when one is within 24 px, while placing a drawing or dragging a handle.

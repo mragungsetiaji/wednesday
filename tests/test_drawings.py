@@ -34,7 +34,7 @@ def test_clean_drawing_checks_kind_points_and_style():
     assert row["style"] == {"color": None, "width": 2, "dash": "solid"} and row["locked"] is False
     assert clean_drawing(ID, {"kind": "hline", "points": [{"t": 1, "p": 2}]})["style"]["width"] == 1
     for bad in (
-        {**LINE, "kind": "circle"},
+        {**LINE, "kind": "hexagon"},
         {**LINE, "points": LINE["points"][:1]},  # a trendline takes two points
         {**LINE, "points": [{"t": 1}, {"t": 2, "p": 3}]},
         {**LINE, "points": [{"t": 1, "p": "nan"}, {"t": 2, "p": 3}]},
@@ -102,7 +102,7 @@ def test_drawings_api(store, tmp_path):
     assert saved["id"] == ID and saved["kind"] == "trendline"
     [listed] = client.get("/api/drawings").json()["drawings"]
     assert listed["points"] == saved["points"] and "source" not in listed
-    assert client.put(f"/api/drawings/{ID}", json={**LINE, "kind": "circle"}).status_code == 422
+    assert client.put(f"/api/drawings/{ID}", json={**LINE, "kind": "hexagon"}).status_code == 422
     assert app_for(store, tmp_path, symbol="GOLD").get("/api/drawings").json()["drawings"] == []
     assert client.delete(f"/api/drawings/{ID}").status_code == 200
     assert client.delete(f"/api/drawings/{ID}").status_code == 404
@@ -111,3 +111,37 @@ def test_drawings_api(store, tmp_path):
 def test_drawings_need_a_database(tmp_path):
     client = app_for(None, tmp_path)
     assert client.get("/api/drawings").status_code == 409
+
+
+def test_the_tool_kinds_match_the_dashboard():
+    """Every tool of web/src/shapes.ts is a kind the server keeps, with its number of points."""
+    import re
+    from pathlib import Path
+
+    from wednesday.drawings import POINTS
+    from wednesday.storage import DRAWING_KINDS
+
+    shapes = (Path(__file__).parents[1] / "web" / "src" / "shapes.ts").read_text(encoding="utf-8")
+    body = shapes[shapes.index("export const SHAPES = {"):shapes.index("} satisfies Record<string, ShapeDef>;")]
+    kinds = re.findall(r"\n  (\w+): \{", body)
+    assert kinds and set(kinds) <= set(DRAWING_KINDS)
+    assert set(DRAWING_KINDS) == set(POINTS)
+    assert max(map(len, DRAWING_KINDS)) <= 16  # the kind column's size
+    assert POINTS["fibExtension"] == (3, 3) and POINTS["xabcd"] == (5, 5) and POINTS["polyline"] == (2, 200)
+
+
+def test_new_tools_round_trip_and_anchored_ones_keep_their_place():
+    pts = [{"t": 1790484000 + i * 60, "p": 2470 + i} for i in range(5)]
+    d = clean_drawing(ID, {"kind": "xabcd", "points": pts, "style": {"color": None, "width": 2}})
+    assert d["kind"] == "xabcd" and len(d["points"]) == 5 and d["props"] is None
+    with pytest.raises(ValueError, match="xabcd takes 5"):
+        clean_drawing(ID, {"kind": "xabcd", "points": pts[:4], "style": {}})
+    note = clean_drawing(ID, {"kind": "note", "points": pts[:1], "style": {}, "props": {"text": "London high"}})
+    assert note["props"] == {"text": "London high"}
+    pinned = clean_drawing(ID, {"kind": "anchoredText", "points": pts[:1], "style": {},
+                                "props": {"text": "Plan", "ax": 1.4, "ay": 0.25}})
+    assert pinned["props"] == {"text": "Plan", "ax": 1.0, "ay": 0.25}
+    with pytest.raises(ValueError, match="props.ax"):
+        clean_drawing(ID, {"kind": "anchoredNote", "points": pts[:1], "style": {}, "props": {"ax": "left"}})
+    stroke = [{"t": 1790484000 + i, "p": 2470 + i / 10} for i in range(300)]
+    assert len(clean_drawing(ID, {"kind": "brush", "points": stroke, "style": {}})["points"]) == 300

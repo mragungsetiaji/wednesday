@@ -1,5 +1,6 @@
 import type { IChartApi, ISeriesApi, Logical, SeriesType } from "lightweight-charts";
 
+import { shapeOf } from "./shapes.ts";
 import type { Candle, Drawing, DrawingAlert, DrawingKind, DrawingPoint, Sizing } from "./api";
 import { logicalOfTime, timeOfLogical } from "./timeMap.ts";
 
@@ -225,6 +226,8 @@ export function handlesOf(d: Drawing, xy: (XY | null)[], width: number, yOf: YOf
     const b = positionBox(d, pts, yOf);
     return b ? [{ x: b.xStart, y: b.ye }, { x: b.xStart, y: b.ys }, { x: b.xStart, y: b.yt }, { x: b.xEnd, y: b.ye }] : [];
   }
+  const shape = shapeOf(d.kind);
+  if (shape?.anchored || shape?.points === "free") return []; // moved whole
   if (d.kind === "hline") return [{ x: Math.min(Math.max(pts[0].x, 24), width - 24), y: pts[0].y }];
   if (d.kind === "rect") return RECT_CORNERS.map(([ti, pi]) => ({ x: pts[ti].x, y: pts[pi].y }));
   if (d.kind === "text") return [{ x: pts[0].x - 10, y: pts[0].y }]; // just left of the text, not over its first letter

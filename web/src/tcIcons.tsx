@@ -4,10 +4,13 @@
  * drawing tools marking their anchors with filled dots. Only the ones the chart toolbars use.
  */
 
+import { TOOL_ICONS } from "./tcToolIcons";
+
 interface IconDef {
   d?: string; // stroked path
   dash?: string; // dashed stroke, for guides
   fills?: readonly string[]; // solid shapes
+  soft?: string; // an area filled at 22%
   dots?: readonly (readonly number[])[]; // filled dots: [cx, cy, r = 1.75]
 }
 
@@ -59,14 +62,17 @@ const ICONS = {
   riskReward: { d: "M5 12V4H19V12M3 12H21", dash: "M5 12V18H19V12", dots: [[5, 12]] },
 } satisfies Record<string, IconDef>;
 
-export type TcIconName = keyof typeof ICONS;
+const ALL: Record<string, IconDef> = { ...TOOL_ICONS, ...ICONS };
+
+export type TcIconName = keyof typeof ICONS | keyof typeof TOOL_ICONS;
 
 /** One of the icons above, drawn in `currentColor`. */
 export function TcIcon({ name, size = 16 }: { name: TcIconName; size?: number }) {
-  const icon: IconDef = ICONS[name];
+  const icon: IconDef = ALL[name];
   return (
     <svg className="icon tc-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      {icon.soft && <path d={icon.soft} fill="currentColor" fillOpacity={0.22} stroke="none" />}
       {icon.fills?.map((f) => <path key={f} d={f} fill="currentColor" stroke="none" />)}
       {icon.d && <path d={icon.d} />}
       {icon.dash && <path d={icon.dash} strokeDasharray="2 2.5" />}

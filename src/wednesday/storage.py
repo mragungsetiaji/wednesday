@@ -286,7 +286,20 @@ journal_entries_table = Table(
 # Anchored to (time, price), not pixels, so one drawing shows on every timeframe. Kept per
 # source and symbol: MT5 times are the broker's clock and Yahoo's GC=F isn't spot XAUUSD.
 
-DRAWING_KINDS = ("trendline", "hline", "rect", "long", "short", "path", "text")
+# The first tools, then the rest (web/src/shapes.ts, after TradeCanvas's menus). A kind fits in 16 characters.
+DRAWING_KINDS = (
+    "trendline", "hline", "rect", "long", "short", "path", "text",
+    "ray", "extendedLine", "infoLine", "trendAngle", "horizontalRay", "verticalLine", "crossLine",
+    "parallelChannel", "regression", "disjointChannel", "flatTopBottom", "fibRetracement",
+    "fibExtension", "fibChannel", "fibTimeZones", "fibFan", "fibArcs", "fibCircles", "fibSpiral",
+    "fibWedge", "pitchfork", "schiffPitchfork", "modSchiffFork", "gannFan", "gannBox",
+    "gannSquare", "pitchfan", "cyclicLines", "timeCycles", "sineLine", "xabcd", "abcd",
+    "headShoulders", "cypher", "threeDrives", "elliottWave", "elliottImpulse", "elliottCorrect",
+    "elliottTriangle", "elliottDouble", "elliottTriple", "forecast", "projection", "barsPattern",
+    "priceRange", "dateRange", "datePriceRange", "measure", "rotatedRect", "circle", "ellipse",
+    "triangle", "polyline", "curve", "arc", "brush", "highlighter", "priceLabel", "arrow", "note",
+    "callout", "flag", "arrowMark", "icon", "signpost", "balloon", "anchoredText", "anchoredNote",
+)
 
 drawings_table = Table(
     "drawings",
