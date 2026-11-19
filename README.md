@@ -124,7 +124,7 @@ and its stats count how often each one closed green or red, so you can check it 
 2. Start **Wednesday** from the Start menu or the desktop.
 3. It starts on free Yahoo Finance data (COMEX futures). For spot gold, open
    **Settings > Data source**, pick **TradingView** and save.
-4. Upgrading? The installer asks whether to keep your data and settings or start fresh.
+4. Upgrading? Run the new installer: your data and settings stay.
 
 More in [Windows desktop app](docs/desktop.md). Running from source, on a VPS or
 developing: [Windows and VPS](docs/deploy-windows.md) and [Development](docs/development.md).

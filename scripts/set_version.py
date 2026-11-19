@@ -69,7 +69,7 @@ def set_version(version: str, root: Path = ROOT) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("version", nargs="?", help="the new version, e.g. 0.2.0 (a leading v is dropped)")
+    p.add_argument("version", nargs="?", help="the new version, e.g. 0.2.0 (a leading v or V is dropped)")
     p.add_argument("--check", action="store_true", help="only check every file has the same version")
     p.add_argument("--if-newer", action="store_true", help="skip unless the version is newer than pyproject.toml's")
     args = p.parse_args(argv)
@@ -84,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         print("fix with: python scripts/set_version.py <version>", file=sys.stderr)
         return 1
 
-    version = args.version.removeprefix("v")
+    version = args.version.removeprefix("v").removeprefix("V")
     now = found["pyproject.toml"][0]
     if args.if_newer and _key(version) <= _key(now):
         print(f"{version} isn't newer than {now}: nothing to do")

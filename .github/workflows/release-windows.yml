@@ -1,8 +1,13 @@
-# Windows desktop app: builds the WednesdaySetup-<version>.exe installer.
-# Push a tag like v0.2.0 to publish it on a GitHub release; run it by hand
+# Windows desktop app: builds the WednesdaySetup-<version>.exe installer with the Tauri shell (#92).
+# Push a tag like v0.3.1 to publish it on a GitHub release; run it by hand
 # (Actions > Release Windows > Run workflow) for a test build kept as a workflow artifact.
-# After a tagged build, the bump-main job writes the tag's version into pyproject.toml,
-# src/wednesday/__init__.py, uv.lock and web/package(-lock).json on main (scripts/set_version.py).
+#
+# The shell (src-tauri) starts the Python server as a sidecar: PyInstaller builds it as
+# dist/wednesday-server/ (packaging/wednesday.spec with WEDNESDAY_BUILD=server), and
+# tauri.release.conf.json bundles that folder into the NSIS installer's resources.
+#
+# After a tagged build, the bump-main job writes the tag's version into every file that carries
+# it on main (scripts/set_version.py).
 name: Release Windows
 
 on:
@@ -30,7 +35,8 @@ jobs:
             $version = "$base-dev.$env:GITHUB_RUN_NUMBER"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
-          # Every file that carries the version, for this build (the app shows it in its status bar).
+          # Every file that carries the version, for this build (the app shows it in its status
+          # bar; tauri.conf.json and Cargo.toml give the installer its version).
           python scripts/set_version.py $version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -48,7 +54,7 @@ jobs:
           npm ci
           npm run build
 
-      # The TradingView data source: its helper and the node.exe that runs it ship with the app.
+      # The TradingView data source: its helper and the node.exe that runs it ship with the server.
       - name: Bundle Node and the TradingView helper
         shell: pwsh
         run: |
@@ -70,31 +76,42 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --frozen --no-dev --extra desktop --extra llm --extra ml
 
-      - name: Build app (PyInstaller)
+      - name: Build the server (PyInstaller)
+        env:
+          WEDNESDAY_BUILD: server
         run: uv run --frozen --no-dev --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 
-      - name: Build installer (Inno Setup)
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install the Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build the installer (Tauri, NSIS)
+        working-directory: src-tauri
         shell: pwsh
         run: |
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            choco install innosetup -y --no-progress
-          }
-          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" packaging\wednesday.iss
+          cargo tauri build --config tauri.release.conf.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # The name the README and earlier releases use.
+          $setup = Get-ChildItem target\release\bundle\nsis\*-setup.exe | Select-Object -First 1
+          if (-not $setup) { Write-Error "No NSIS installer in target\release\bundle\nsis"; exit 1 }
+          New-Item -ItemType Directory -Force ..\dist | Out-Null
+          Copy-Item $setup.FullName "..\dist\WednesdaySetup-${{ steps.version.outputs.version }}.exe"
 
       - uses: actions/upload-artifact@v4
         with:
           name: wednesday-windows-${{ steps.version.outputs.version }}
-          path: |
-            dist/WednesdaySetup-*.exe
+          path: dist/WednesdaySetup-*.exe
 
       - name: Publish release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/WednesdaySetup-*.exe
+          files: dist/WednesdaySetup-*.exe
           generate_release_notes: true
 
   # Keep main's files on the released version, so running from source shows it too.
@@ -110,13 +127,14 @@ jobs:
 
       - name: Write the version on main
         run: |
-          python3 scripts/set_version.py "$GITHUB_REF_NAME" --if-newer
+          version="${GITHUB_REF_NAME#[vV]}"
+          python3 scripts/set_version.py "$version" --if-newer
           if git diff --quiet; then
-            echo "main already has ${GITHUB_REF_NAME#v} or newer"
+            echo "main already has $version or newer"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "Version ${GITHUB_REF_NAME#v}"
+          git commit -am "Version $version"
           git pull --rebase origin main
           git push origin HEAD:main

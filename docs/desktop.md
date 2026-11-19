@@ -14,46 +14,44 @@ closing the window stops both.
    is not code signed: click **More info > Run anyway**.
 3. Start **Wednesday** from the Start menu or the desktop icon.
 
-### Reinstalling over an earlier install
+### Upgrading
 
-When `%LOCALAPPDATA%\Wednesday` already exists (Wednesday was installed on this
-PC before), the installer asks what to do with it:
+Run the new installer over the old one. Settings, the database, journals, Lab
+models, logs and the saved secrets stay where they are.
 
-- **Keep my data and settings** (the default): settings, the database, journals,
-  Lab models and logs stay as they are. This is the normal upgrade.
-- **Fresh install: delete all previous data and settings**: asks you to confirm,
-  then deletes that folder and removes the secrets Wednesday saved in Windows
-  Credential Manager (API keys and the Telegram bot token, and the MT5 password
-  older versions kept there). Journals, Lab models and stored price history go
-  too, and it can't be undone. Close Wednesday first: files still in use can't be
-  deleted, and the installer says so.
+From 0.3.1 the app is built with Tauri (see below). Its installer first removes
+the earlier build (0.3.0 and before) if it finds it, closing it if it is
+running, so only one Wednesday stays installed; that build's uninstaller keeps
+`%LOCALAPPDATA%\Wednesday` and the secrets. The dashboard's own layout
+preferences (panel sizes, the chart's tools) start from the defaults once;
+settings, drawings and workspaces are in the database and carry over.
 
-A silent install (`/SILENT` or `/VERYSILENT`) keeps the data; add `/FRESH=1` for
-a fresh install.
+To start from scratch, uninstall Wednesday, delete `%LOCALAPPDATA%\Wednesday`,
+and remove the `Wednesday` entries in Windows Credential Manager.
 
 The window is drawn by Microsoft Edge WebView2. Windows 11 has it; if a Windows 10
-PC lacks it, the installer offers to download it.
+PC lacks it, the installer downloads it.
 
 ## Settings and data
 
-Everything the app writes lives in `%LOCALAPPDATA%\Wednesday` (the Start menu has
-a **Wednesday settings folder** shortcut to it), not next to the program, so
-upgrading or uninstalling keeps it:
+Everything the app writes lives in `%LOCALAPPDATA%\Wednesday` (type it in the
+Explorer address bar), not next to the program, so upgrading or uninstalling
+keeps it. The Tauri shell keeps its window positions and the dashboard's layout
+preferences in `%LOCALAPPDATA%\app.wednesday.desktop`.
 
 | Path | What |
 | --- | --- |
 | `data\xau.db` | Settings saved from the dashboard and the M1 history |
 | `data\models\` | Lab model files |
 | `logs\screener.log` | The log, with every scan |
-| `webview\` | The window's storage: dashboard layout and preferences |
+| `webview\` | The 0.3.0-and-earlier window's storage, no longer used |
 
 Everything is set in the dashboard under **Settings**; the app needs no `.env`.
 The Telegram bot token and the LLM API keys are kept in Windows
 Credential Manager (entries named `Wednesday`), never in the database or a file. A `.env` in this folder is still read if you create one.
 
 On first start the app shows the [disclaimer and risk agreement](../DISCLAIMER.md);
-it can't be used until you accept it. The installer asks the same before
-installing.
+it can't be used until you accept it.
 A chart can open in its own window, for another monitor: the pop-out button
 in the chart's top bar (see [Charts in their own windows](dashboard.md#charts-in-their-own-windows)).
 Those windows use the same local server and close with the main window.
@@ -96,10 +94,11 @@ uv run wednesday-desktop
 `WEDNESDAY_HOME` points the app at another settings folder (default
 `~/.wednesday` outside Windows).
 
-## Tauri shell (in progress)
+## Tauri shell
 
-The desktop app is moving from pywebview to [Tauri v2](https://tauri.app) (#92).
-The new shell lives in `src-tauri/`. For now the Python server still does the work:
+The Windows app is built with [Tauri v2](https://tauri.app) (#92); it replaced
+the pywebview build in 0.3.1. The shell lives in `src-tauri/`. The Python server
+still does the work:
 the shell starts it as a sidecar (`wednesday-server`, same settings folder, lock and
 `.env`), waits for it to answer, and shows the dashboard in native windows. Pop-out
 charts are Tauri windows that can sit on any monitor. Where the windows were when
@@ -118,14 +117,8 @@ call the shell's commands (open a chart window, read and arrange the windows) an
 print the result; `WEDNESDAY_SELFTEST=channel` checks that `BroadcastChannel`, which
 link groups and drawings use, reaches another window.
 
-**Actions > Tauri Windows > Run workflow** builds a test installer: the server with
-PyInstaller (`WEDNESDAY_BUILD=server`, output `dist\wednesday-server\`), then the
-shell with `cargo tauri build --config tauri.release.conf.json`, which bundles
-that folder into an NSIS installer. Releases still come from the pywebview build
-below until the Tauri one has been tried on real machines. The Tauri shell keeps
-the dashboard's own layout preferences in its own WebView storage, so they start
-from the defaults once; settings, drawings and workspaces are in the database and
-carry over.
+The installer's hooks (`src-tauri/windows/hooks.nsh`) remove the earlier Inno
+Setup build before installing.
 
 ## Build and release
 
@@ -135,22 +128,26 @@ carry over.
 2. the TradingView helper (`npm ci --omit=dev` in `tradingview/`) and `node.exe`
    with its license, copied into `packaging\node\`,
 3. the Python environment (`uv sync --frozen --extra desktop --extra llm --extra ml`),
-4. the program with PyInstaller (`packaging/wednesday.spec`, output `dist\Wednesday\`),
-5. the installer with Inno Setup (`packaging/wednesday.iss`, output `dist\WednesdaySetup-<version>.exe`).
+4. the server with PyInstaller (`WEDNESDAY_BUILD=server packaging/wednesday.spec`,
+   output `dist\wednesday-server\`),
+5. the Tauri shell and its NSIS installer (`cargo tauri build --config
+   tauri.release.conf.json` in `src-tauri/`, which bundles the server folder),
+   copied to `dist\WednesdaySetup-<version>.exe`.
 
 To publish a release, tag a commit and push the tag; the version comes from the
 tag:
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.1
+git push origin v0.3.1
 ```
 
-The installer and the zip are attached to a GitHub release named after the tag.
+The installer is attached to a GitHub release named after the tag.
 Once the build passes, the workflow commits `Version 0.2.0` to `main`: the tag's
 version written into every file that carries it (`pyproject.toml`,
 `src/wednesday/__init__.py`, `uv.lock`, `web/package.json` and
-`web/package-lock.json`), so running from source shows it too. It never moves the
+`web/package-lock.json`, and the Tauri shell's `tauri.conf.json`, `Cargo.toml`
+and `Cargo.lock`), so running from source shows it too. It never moves the
 version backwards. To set it by hand, or check the files agree:
 
 ```bash
@@ -171,8 +168,10 @@ New-Item -ItemType Directory -Force packaging\node
 Copy-Item (Get-Command node).Source packaging\node\node.exe   # Node 22
 Copy-Item (Join-Path (Split-Path (Get-Command node).Source) LICENSE) packaging\node\LICENSE
 uv sync --frozen --extra desktop --extra llm --extra ml
+$env:WEDNESDAY_BUILD = "server"
 uv run --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=0.2.0 packaging\wednesday.iss
+cargo install tauri-cli --version "^2" --locked
+cd src-tauri; cargo tauri build --config tauri.release.conf.json
 ```
 
 PyInstaller can't cross-compile: the Windows build has to run on Windows. The
