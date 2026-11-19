@@ -82,8 +82,8 @@ SOFTWARE.
 
 ## TradeCanvas (toolbar icons and layout)
 
-The chart's top bar and drawing tool column copy the layout, sizes and icons
-(`web/src/tcIcons.tsx`) of TradeCanvas's chart widget
+The chart's top bar and drawing tool column copy the layout, sizes, tool menus and icons
+(`web/src/tcIcons.tsx`, `web/src/tcToolIcons.ts`) of TradeCanvas's chart widget
 (<https://github.com/bonguynvan/tradecanvas>). The library itself is not bundled. MIT License:
 
 ```

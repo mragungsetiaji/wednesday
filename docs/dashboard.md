@@ -7,7 +7,7 @@ make serve          # or: uv run wednesday --serve
 Opens on http://127.0.0.1:8000. It refreshes every few seconds; the server
 rescans once a minute. API docs live at `/api/docs`.
 
-![Dashboard: 30M chart with the top bar, EMA 20 and 50, the drawing tools, the rail and the dock](images/dashboard.png)
+![Dashboard: 30M chart with the top bar, EMA 20 and 50, a fib retracement and an XABCD pattern, the drawing tools, the rail and the dock](images/dashboard.png)
 
 ## Chart first
 
