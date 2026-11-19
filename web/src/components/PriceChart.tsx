@@ -486,6 +486,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       crosshair: { mode: settings.crosshair === "magnet" ? CrosshairMode.Magnet : CrosshairMode.Normal },
       timeScale: { rightOffset: settings.rightOffset },
     });
+    quartersRef.current?.update({ colors: settings.quarterColors === "quarter" ? settings.quarters : null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [palette, chartType, settingsKey]);
 

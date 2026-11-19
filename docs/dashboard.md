@@ -138,7 +138,8 @@ closed candles only, and every chart and window shows the same ones.
 
 **Chart settings** (the sliders) sets the up and down candle colours, the last
 price line, the grid (both, horizontal, vertical or none), the crosshair (free, or
-on the candle's close) and the space after the last candle, for every chart.
+on the candle's close), the space after the last candle and how the quarterly
+pane is coloured, for every chart.
 **Reset to the defaults** goes back to the theme's colours.
 
 The column left of the chart holds the drawing tools in TradeCanvas's groups. A
@@ -436,7 +437,11 @@ York hours with the trading day starting at 18:00 NY:
 | 90m | each session in four 90-minute quarters, Q1–Q4 (hidden on 4H, too thin) |
 
 A block is **green** when that period closed above its open and **red** when it
-closed below. The running block is outlined only. Hovering the chart adds the
+closed below. The running block is outlined only. To tell the quarters apart
+instead, set **Chart settings > Quarters pane > Colour blocks by** to **Quarter**
+and pick a colour for each of Q1 to Q4 (Mon to Thu, Tokyo to NY PM, and the 90m
+Q1 to Q4; Friday keeps the direction colours). The block's bottom edge still shows
+the direction, green or red. Hovering the chart adds the
 week, session and 90m move under the cursor to the readout at the top left.
 Switch the pane off with **Quarters** above the chart.
 

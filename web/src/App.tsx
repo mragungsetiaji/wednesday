@@ -33,6 +33,7 @@ import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtPrice } from "./format";
 import { BookIcon, ChartIcon, Direction, FlaskIcon, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
 import { TcIcon } from "./tcIcons";
+import { useChartSettings } from "./chartSettings";
 import { LayersMenu } from "./components/LayersMenu";
 import { ChartSettingsMenu, ChartTypeMenu, IndicatorsMenu, MoreMenu, SymbolInfo, ThemeButton } from "./components/ChartTopMenus";
 import { SnapshotMenu, type SnapshotSource } from "./components/SnapshotMenu";
@@ -270,6 +271,7 @@ export default function App() {
   }, [showBanner]);
 
   const mainNav = useRef<ChartNav | null>(null);
+  const [chartSettings] = useChartSettings();
   // The top bar's camera takes the main chart's picture.
   const mainShot = useMemo<SnapshotSource>(() => ({
     make: () => mainNav.current?.snapshotSource().make() ?? null,
@@ -492,7 +494,8 @@ export default function App() {
                   <li><span className="key key-bos" /> Last break</li>
                   {showSwings && <li><span className="key key-swing" /> HH / HL / LH / LL swings</li>}
                   {showNews && <li><span className="key key-news" /> High-impact news</li>}
-                  {quarterRows.length > 0 && <li><span className="key key-quarter" /> Quarters: green closed up</li>}
+                  {quarterRows.length > 0 && <li><span className="key key-quarter" /> {chartSettings.quarterColors === "quarter"
+                    ? "Quarters: a colour per Q, edge green closed up" : "Quarters: green closed up"}</li>}
                   {showMl && <li><span className="key key-ml" /> Model block (probability)</li>}
                   {levels.killzones.length > 0 && <li><span className="key key-killzone" /> Killzones</li>}
                   {levels.lines.length > 0 && <li><span className="key key-reflevel" /> Session levels, faint once swept</li>}

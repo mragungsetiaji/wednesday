@@ -228,6 +228,30 @@ export function ChartSettingsMenu({ palette }: { palette: { bull: string; bear: 
             <input type="number" min={0} max={100} value={s.rightOffset}
               onChange={(e) => set({ ...s, rightOffset: Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))) })} />
           </label>
+          <hr />
+          <div className="pop-head">Quarters pane</div>
+          <label className="set-row">
+            Colour blocks by
+            <select value={s.quarterColors} onChange={(e) => set({ ...s, quarterColors: e.target.value as ChartSettings["quarterColors"] })}>
+              <option value="direction">Direction</option>
+              <option value="quarter">Quarter</option>
+            </select>
+          </label>
+          {s.quarterColors === "quarter" && (
+            <div className="set-quarters">
+              {s.quarters.map((c, i) => (
+                <label key={i} className="set-q">
+                  Q{i + 1}
+                  <input type="color" value={c} aria-label={`Q${i + 1} colour`} onChange={(e) => {
+                    const next = [...s.quarters] as ChartSettings["quarters"];
+                    next[i] = e.target.value;
+                    set({ ...s, quarters: next });
+                  }} />
+                </label>
+              ))}
+              <p className="field-hint">Mon to Thu, Tokyo to NY PM, and each 90 minutes' Q1 to Q4. The bottom edge still shows the direction.</p>
+            </div>
+          )}
           <button type="button" className="button quiet scale-reset" onClick={() => set(DEFAULT_CHART_SETTINGS)}>Reset to the defaults</button>
         </div>
       )}

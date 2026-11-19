@@ -5334,3 +5334,29 @@ fieldset:disabled .switch {
   background: transparent;
   color: var(--text-2);
 }
+.set-quarters {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px 8px;
+  padding: 2px 8px 4px;
+}
+.set-q {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.set-q input[type="color"] {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: none;
+}
+.set-quarters .field-hint {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  max-width: 240px;
+}

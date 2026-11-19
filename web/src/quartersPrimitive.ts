@@ -17,6 +17,13 @@ import { logicalOf } from "./timeMap";
 export const ROW_TITLES: Record<QuarterRow, string> = { week: "Week", session: "Session", q90: "90m" };
 const SHORT: Record<string, string> = { Tokyo: "TKY", London: "LDN", "NY AM": "NY", "NY PM": "PM" };
 
+/** Which quarter a block is (0 to 3): Mon to Thu, Tokyo to NY PM, Q1 to Q4. Friday has none. */
+const QUARTER: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Tokyo: 0, London: 1, "NY AM": 2, "NY PM": 3, Q1: 0, Q2: 1, Q3: 2, Q4: 3 };
+export const quarterOf = (label: string): number | null => QUARTER[label] ?? null;
+
+/** How the blocks are coloured: by direction (null), or one colour per quarter, Q1 to Q4. */
+export type QuarterColors = [string, string, string, string] | null;
+
 /**
  * The quarterly theory pane under the price chart: one row per cycle (week,
  * session, 90 minutes), each block tinted by direction (close above open is
@@ -26,7 +33,7 @@ class QuartersRenderer implements IPrimitivePaneRenderer {
   constructor(private readonly source: QuartersPrimitive) {}
 
   draw(target: CanvasRenderingTarget2D): void {
-    const { chart, blocks, rows, times, palette, hoverTime, font } = this.source;
+    const { chart, blocks, rows, times, palette, hoverTime, font, colors } = this.source;
     if (!chart || times.length === 0 || rows.length === 0) return;
     const timeScale = chart.timeScale();
 
@@ -59,7 +66,10 @@ class QuartersRenderer implements IPrimitivePaneRenderer {
           x1 = Math.min(W, x1) - Math.round(hr);
           const w = x1 - x0;
           if (w < 1) continue;
-          const color = b.change > 0 ? palette.bull : b.change < 0 ? palette.bear : palette.muted;
+          const direction = b.change > 0 ? palette.bull : b.change < 0 ? palette.bear : palette.muted;
+          // Coloured by quarter, the block takes its Q's colour and its edge keeps the direction.
+          const q = colors ? quarterOf(b.label) : null;
+          const color = colors && q !== null ? colors[q] : direction;
           const hovered = hoverTime !== null && hoverTime >= b.start_unix && hoverTime < b.end_unix;
           const edge = Math.max(1, Math.round(2 * vr));
           if (b.live) {
@@ -73,7 +83,7 @@ class QuartersRenderer implements IPrimitivePaneRenderer {
           } else {
             ctx.fillStyle = withAlpha(color, hovered ? 0.5 : 0.3);
             ctx.fillRect(x0, y, w, rowH);
-            ctx.fillStyle = color;
+            ctx.fillStyle = direction;
             ctx.fillRect(x0, y + rowH - edge, w, edge);
           }
           // Label when it fits: full, then short, then nothing.
@@ -120,6 +130,7 @@ export class QuartersPrimitive implements ISeriesPrimitive<Time> {
   rows: QuarterRow[] = [];
   times: number[] = [];
   hoverTime: number | null = null;
+  colors: QuarterColors = null;
   font = "system-ui, sans-serif";
   private requestUpdate?: () => void;
   private readonly views = [new QuartersView(this)];
@@ -139,7 +150,7 @@ export class QuartersPrimitive implements ISeriesPrimitive<Time> {
     return this.views;
   }
 
-  update(patch: Partial<Pick<QuartersPrimitive, "blocks" | "rows" | "times" | "palette" | "hoverTime" | "font">>): void {
+  update(patch: Partial<Pick<QuartersPrimitive, "blocks" | "rows" | "times" | "palette" | "hoverTime" | "font" | "colors">>): void {
     Object.assign(this, patch);
     this.requestUpdate?.();
   }
