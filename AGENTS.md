@@ -17,6 +17,7 @@ make dev         # synthetic API + Vite hot reload on http://localhost:5173
 make scan ARGS="--source synthetic"   # one scan in the console
 make tauri       # the Tauri desktop shell (src-tauri) with the server as a sidecar
 make test-tauri  # its Rust tests (cargo test)
+make release v0.3.2   # tag main and push: CI builds and publishes the Windows installer
 ```
 
 Python is managed by uv (3.11 locally, `>=3.10` supported); use `uv run`, not a bare
