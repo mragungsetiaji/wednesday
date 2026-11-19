@@ -34,7 +34,7 @@ import { fmtPrice } from "./format";
 import { BookIcon, ChartIcon, Direction, FlaskIcon, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
 import { TcIcon } from "./tcIcons";
 import { LayersMenu } from "./components/LayersMenu";
-import { ChartTypeMenu, MoreMenu, SymbolInfo, ThemeButton } from "./components/ChartTopMenus";
+import { ChartSettingsMenu, ChartTypeMenu, IndicatorsMenu, MoreMenu, SymbolInfo, ThemeButton } from "./components/ChartTopMenus";
 import { SnapshotMenu, type SnapshotSource } from "./components/SnapshotMenu";
 import { predictionMark } from "./labPrimitive";
 import { useMl } from "./mlData";
@@ -405,6 +405,7 @@ export default function App() {
                 </div>
                 <span className="tb-sep" aria-hidden="true" />
                 <ChartTypeMenu />
+                <IndicatorsMenu />
                 <span className="tb-sep" aria-hidden="true" />
                 <LayersMenu detectors={allDetectors} hidden={hidden} onToggle={toggleLayer} overlays={[
                   { key: "mid", label: "Mid OBs", on: showMidOb, set: setShowMidOb },
@@ -437,9 +438,7 @@ export default function App() {
                 <LinkMenu value={mainGroup} onChange={setMainGroup} />
                 <span className="tb-spacer" />
                 <SnapshotMenu source={mainShot} className="tb-btn tb-icon" iconSize={16} />
-                <button type="button" className="tb-btn tb-icon" onClick={() => setView("settings")} title="Settings" aria-label="Settings">
-                  <TcIcon name="settings" />
-                </button>
+                <ChartSettingsMenu palette={palette} />
                 <ThemeButton mode={palette.mode} />
                 <button type="button" className="tb-btn tb-icon" onClick={() => openChartWindow(desktop, tf, mainGroup)} disabled={!scan || replaying}
                   title={`Open ${tf} in its own window, for another monitor`} aria-label="Open the chart in its own window">

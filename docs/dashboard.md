@@ -7,7 +7,7 @@ make serve          # or: uv run wednesday --serve
 Opens on http://127.0.0.1:8000. It refreshes every few seconds; the server
 rescans once a minute. API docs live at `/api/docs`.
 
-![Dashboard: 30M chart with the drawing tools, the rail and the dock](images/dashboard.png)
+![Dashboard: 30M chart with the top bar, EMA 20 and 50, the drawing tools, the rail and the dock](images/dashboard.png)
 
 ## Chart first
 
@@ -117,10 +117,10 @@ once, each where it sits in the grid with its timeframe on it, and one footer.
 
 The chart's top bar holds, left to right: the symbol and its info (source, bar
 times, candles, last scan), the timeframes (an arrow shows each one's bias), the
-chart type, **Layers** (the detectors and overlays: Mid OBs, HTF, Swings,
+chart type, **Indicators**, **Layers** (the detectors and overlays: Mid OBs, HTF, Swings,
 Quarters, News, ML), **Sessions**, undo and redo, **Workspace**, bar replay (▶) and
 the link button. At the right end: the camera (copy, save or attach a picture of
-the chart), Settings, the light / dark switch, the pop-out, full screen and
+the chart), chart settings, the light / dark switch, the pop-out, full screen and
 levels-pane buttons, and **⋯** (follow the system's theme again, the keyboard
 shortcuts).
 
@@ -129,6 +129,17 @@ outline) or Heikin Ashi, on every chart and window. Heikin Ashi changes only the
 bars on screen: the scan, the levels, the setups, the drawings and the positions
 keep using the real candles. The light / dark switch overrides the system's theme
 in every window until **⋯ > Theme: follow the system**.
+
+**Indicators** adds an EMA (20 to start), an SMA (50), Bollinger Bands (20, two
+standard deviations) or an RSI (14, in a pane under the chart with lines at 70 and
+30). Each one gets a colour and its length can be changed in the same menu; the
+legend over the chart shows their values under the pointer. They are worked out on
+closed candles only, and every chart and window shows the same ones.
+
+**Chart settings** (the sliders) sets the up and down candle colours, the last
+price line, the grid (both, horizontal, vertical or none), the crosshair (free, or
+on the candle's close) and the space after the last candle, for every chart.
+**Reset to the defaults** goes back to the theme's colours.
 
 The column left of the chart holds the drawing tools, TradeCanvas style: the
 cursor, then the line tools, path and positions, then rectangle and text. A

@@ -22,6 +22,9 @@ import { linkBus, type LinkGroup } from "../windowLink";
 import { counters, planUpdate } from "../perf";
 import { DrawingEditor } from "../drawingEditor";
 import { heikin, heikinBar, useChartType } from "../chartType";
+import { useChartSettings } from "../chartSettings";
+import { indicatorLabel, linesOf } from "../indicators";
+import { useIndicators } from "../indicatorPrefs";
 import type { DrawingCtl } from "../drawings";
 import { useLiveTick, type LiveFeed } from "../liveData";
 import { fmtPrice } from "../format";
@@ -107,6 +110,23 @@ const NO_SWINGS: SwingPoint[] = []; // stable defaults, so the effects don't rer
 const NO_NEWS: NewsMark[] = [];
 const NO_ML: LabMark[] = [];
 const QUARTER_PANE = 1;
+const RSI_PANE_PX = 110;
+
+/**
+ * Give the quarterly pane (quarterPx, 0 without it) and the RSI pane (at rsiPane, 0 without it) their
+ * fixed heights and the candles the rest. Stretch factors, not setHeight: setting one pane's height
+ * squeezes the others.
+ */
+function fitPanes(chart: IChartApi, quarterPx: number, rsiPane: number): void {
+  const panes = chart.panes();
+  const total = panes.reduce((h, p) => h + p.getHeight(), 0);
+  if (!total) return;
+  const fixed = new Map<number, number>();
+  if (quarterPx && panes[QUARTER_PANE]) fixed.set(QUARTER_PANE, quarterPx);
+  if (rsiPane && panes[rsiPane]) fixed.set(rsiPane, RSI_PANE_PX);
+  const rest = Math.max(80, total - [...fixed.values()].reduce((a, b) => a + b, 0));
+  panes.forEach((p, i) => p.setStretchFactor(fixed.get(i) ?? (i === 0 ? rest : 1)));
+}
 
 /** The chart's candle opens with the forming one, as the chart shows them. */
 const timesOf = (candles: Candle[], live: Candle | null) => {
@@ -156,8 +176,24 @@ function hoverStore() {
 type HoverStore = ReturnType<typeof hoverStore>;
 
 /** O H L C of the hovered candle (else the live or last one), and the quarter blocks it sits in. */
-function ChartLegend({ hover, fallback, quarters, quarterRows }: {
-  hover: HoverStore; fallback: Candle | undefined; quarters: QuartersResponse | null; quarterRows: QuarterRow[];
+/** An indicator in the legend: its name, colour and its lines' values by candle time. */
+interface LegendRow {
+  label: string;
+  color: string;
+  values: Map<number, number>[];
+}
+
+/** A line's value at t, or its last one when t has none (the forming candle). */
+function valueAt(m: Map<number, number>, t: number): number | null {
+  const v = m.get(t);
+  if (v !== undefined) return v;
+  let last: number | null = null;
+  for (const x of m.values()) last = x;
+  return last;
+}
+
+function ChartLegend({ hover, fallback, quarters, quarterRows, indicators }: {
+  hover: HoverStore; fallback: Candle | undefined; quarters: QuartersResponse | null; quarterRows: QuarterRow[]; indicators: LegendRow[];
 }) {
   const shown = useSyncExternalStore(hover.subscribe, hover.get) ?? fallback;
   if (!shown) return null;
@@ -171,6 +207,11 @@ function ChartLegend({ hover, fallback, quarters, quarterRows }: {
       {quarterNow.map((b) => (
         <span key={b.row} className={`q ${b.change > 0 ? "up" : b.change < 0 ? "down" : ""}`}>
           <i>{b.label}</i>{fmtChange(b.change)}
+        </span>
+      ))}
+      {indicators.map((r) => (
+        <span key={r.label} className="ind" style={{ color: r.color }}>
+          <i>{r.label}</i>{r.values.map((m) => valueAt(m, shown.time)).map((v) => (v === null ? "—" : fmtPrice(v))).join(" ")}
         </span>
       ))}
     </div>
@@ -259,6 +300,12 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   marketRef.current = market;
   const [scale, setScale] = useState<ScaleState>(AUTO_SCALE);
   const [chartType] = useChartType();
+  const [settings] = useChartSettings();
+  const settingsKey = JSON.stringify(settings);
+  const [indicators] = useIndicators();
+  const indicatorSeries = useRef<ISeriesApi<"Line">[]>([]);
+  const rsiPaneRef = useRef(0); // the RSI pane's index, 0 when there is none
+  const [indicatorRows, setIndicatorRows] = useState<LegendRow[]>([]);
   const heikinRef = useRef<Candle[] | null>(null); // the Heikin Ashi bars shown, when that's the chart type
   const [offLive, setOffLive] = useState(false); // the live candle is scrolled out of view
   const [ruler, setRuler] = useState<Ruler | null>(null);
@@ -366,7 +413,10 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     // Resizing the chart rescales every pane; keep the quarterly pane at its fixed height.
     const resize = new ResizeObserver(() => {
       const h = quarterPaneHeight.current;
-      if (h) requestAnimationFrame(() => chartRef.current?.panes()[QUARTER_PANE]?.setHeight(h));
+      const rsi = rsiPaneRef.current;
+      if (h || rsi) requestAnimationFrame(() => {
+        if (chartRef.current) fitPanes(chartRef.current, h, rsi);
+      });
     });
     resize.observe(containerRef.current!);
     // Drawings last: they sit above everything else on the price pane.
@@ -416,16 +466,29 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   // The candles' look: filled, or hollow up candles (their border drawn instead).
   useEffect(() => {
     const hollow = chartType === "hollow";
+    const bull = settings.bull ?? palette.bull;
+    const bear = settings.bear ?? palette.bear;
     seriesRef.current?.applyOptions({
-      upColor: hollow ? "rgba(0, 0, 0, 0)" : palette.bull,
-      downColor: palette.bear,
-      wickUpColor: palette.bull,
-      wickDownColor: palette.bear,
+      upColor: hollow ? "rgba(0, 0, 0, 0)" : bull,
+      downColor: bear,
+      wickUpColor: bull,
+      wickDownColor: bear,
       borderVisible: hollow,
-      borderUpColor: palette.bull,
-      borderDownColor: palette.bear,
+      borderUpColor: bull,
+      borderDownColor: bear,
+      priceLineVisible: settings.priceLine,
     });
-  }, [palette, chartType]);
+    chartRef.current?.applyOptions({
+      grid: {
+        vertLines: { visible: settings.grid === "both" || settings.grid === "vert" },
+        horzLines: { visible: settings.grid === "both" || settings.grid === "horz" },
+      },
+      crosshair: { mode: settings.crosshair === "magnet" ? CrosshairMode.Magnet : CrosshairMode.Normal },
+      timeScale: { rightOffset: settings.rightOffset },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [palette, chartType, settingsKey]);
+
 
   // New candles: update only the bars that changed when that's all it is (a scan adds one or two at
   // the end); a full setData only when history changed (#34).
@@ -742,8 +805,72 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     qs.setData(candles.map((c) => ({ time: c.time as UTCTimestamp, value: 0 })));
     primitive.update({ blocks: quarters?.rows ?? {}, rows: quarterRows, times: candles.map((c) => c.time) });
     quarterPaneHeight.current = quarterRows.length * ROW_PX + 10;
-    chart.panes()[QUARTER_PANE]?.setHeight(quarterPaneHeight.current);
+    fitPanes(chart, quarterPaneHeight.current, rsiPaneRef.current);
   }, [candles, quarters, quarterRows]);
+
+  // Indicators: a line series each (three for Bollinger Bands) on the closed candles; RSI in a pane of
+  // its own under the chart, after the quarterly pane when that shows.
+  const hasQuarters = quarterRows.length > 0;
+  const indicatorKey = JSON.stringify(indicators);
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    indicatorSeries.current = [];
+    const closes = candles.map((c) => c.close);
+    const rows: LegendRow[] = [];
+    let rsiPane = 0;
+    for (const ind of indicators) {
+      const oscillator = ind.kind === "rsi";
+      if (oscillator && !rsiPane) rsiPane = hasQuarters ? QUARTER_PANE + 1 : 1;
+      const lines = linesOf(ind, closes);
+      const values: Map<number, number>[] = [];
+      for (const line of lines) {
+        const sr = chart.addSeries(LineSeries, {
+          color: ind.color,
+          lineWidth: line.name === "basis" ? 1 : oscillator ? 1 : 2,
+          lineStyle: line.name === "basis" ? 2 : 0,
+          priceLineVisible: false,
+          lastValueVisible: line.name !== "basis",
+          crosshairMarkerVisible: false,
+          title: line.name && line.name !== "basis" ? "" : indicatorLabel(ind),
+          autoscaleInfoProvider: oscillator ? () => ({ priceRange: { minValue: 0, maxValue: 100 } }) : undefined,
+        }, oscillator ? rsiPane : 0);
+        const data: { time: UTCTimestamp; value: number }[] = [];
+        const at = new Map<number, number>();
+        line.values.forEach((v, i) => {
+          if (v === null) return;
+          data.push({ time: candles[i].time as UTCTimestamp, value: v });
+          at.set(candles[i].time, v);
+        });
+        sr.setData(data);
+        if (oscillator) {
+          sr.createPriceLine({ price: 70, color: palette.muted, lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
+          sr.createPriceLine({ price: 30, color: palette.muted, lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: "" });
+        }
+        indicatorSeries.current.push(sr);
+        values.push(at);
+      }
+      rows.push({ label: indicatorLabel(ind), color: ind.color, values });
+    }
+    // A new pane takes its room from the others: give each fixed pane its height, again once laid out.
+    const sizePanes = () => fitPanes(chart, hasQuarters ? quarterPaneHeight.current : 0, rsiPane);
+    sizePanes();
+    requestAnimationFrame(sizePanes);
+    rsiPaneRef.current = rsiPane;
+    setIndicatorRows(rows);
+    const mine = indicatorSeries.current;
+    return () => {
+      for (const sr of mine) {
+        try {
+          chart.removeSeries(sr);
+        } catch {
+          // the chart itself is gone (unmounted, or rebuilt): its series went with it
+        }
+      }
+      rsiPaneRef.current = 0;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indicatorKey, candles, hasQuarters, palette]);
 
   let rulerView = null;
   if (ruler && containerRef.current) {
@@ -771,7 +898,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   }
   return (
     <div className="chart-wrap has-nav" aria-busy={loading} onMouseLeave={onLeave}>
-      <ChartLegend hover={hover} fallback={liveCandle ?? candles[candles.length - 1]} quarters={quarters} quarterRows={quarterRows} />
+      <ChartLegend hover={hover} fallback={liveCandle ?? candles[candles.length - 1]} quarters={quarters} quarterRows={quarterRows} indicators={indicatorRows} />
       {loading && <div className="chart-skeleton" aria-hidden="true" />}
       <div ref={containerRef} className="chart" role="img" aria-label="Price chart with order blocks, liquidity and inducement levels" />
       {rulerView}

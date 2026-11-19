@@ -32,7 +32,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
   <a href="docs/README.md">All docs</a>
 </p>
 
-<img src="docs/images/dashboard.png" alt="Wednesday dashboard: the 30M gold chart with order blocks, liquidity and a long position that hit its target, drawing tools on the left, the bias and level ladder on the right" width="100%">
+<img src="docs/images/dashboard.png" alt="Wednesday dashboard: the 30M gold chart with order blocks, liquidity, EMA 20 and 50, the chart toolbar on top, drawing tools on the left, the bias and level ladder on the right" width="100%">
 
 </div>
 

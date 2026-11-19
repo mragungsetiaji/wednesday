@@ -5252,3 +5252,67 @@ fieldset:disabled .switch {
   font-size: 11px;
   color: var(--text-3);
 }
+/* Indicators and chart settings menus. */
+.indicators-pop {
+  min-width: 280px;
+}
+.ind-short {
+  min-width: 34px;
+  font-weight: 600;
+  color: var(--text);
+}
+.indicators-pop .draw-flyout-item .icon:last-child {
+  margin-inline-start: auto;
+  color: var(--text-3);
+}
+.ind-row {
+  display: grid;
+  grid-template-columns: 26px 1fr 64px 28px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+}
+.ind-row input[type="number"],
+.set-row input[type="number"],
+.set-row select {
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+.ind-row input[type="color"],
+.set-row input[type="color"] {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: none;
+}
+.ind-name {
+  font-weight: 600;
+}
+.settings-pop {
+  min-width: 260px;
+}
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.set-row input[type="number"] {
+  width: 64px;
+}
+.chart-legend .ind i {
+  color: inherit;
+  opacity: 0.85;
+}

@@ -13,6 +13,7 @@ interface IconDef {
 
 const ICONS = {
   crosshairCursor: { d: "M12 3.5v6M12 14.5v6M3.5 12h6M14.5 12h6" },
+  plus: { d: "M12 5V19M5 12H19" },
   trendingUp: { d: "M3 17L9 11L13 14.5L21 6.5M15 6.5H21V12.5" },
   trendingDown: { d: "M3 7L9 13L13 9.5L21 17.5M15 17.5H21V11.5" },
   undo: { d: "M9 14L4 9L9 4M4 9H14.5a5.5 5.5 0 0 1 0 11H11" },
