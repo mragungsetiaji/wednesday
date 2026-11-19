@@ -4,6 +4,7 @@ import type { DrawTool } from "../drawings";
 import type { Drawings } from "../drawingsData";
 import { usePref } from "../prefs";
 import { TcIcon, type TcIconName } from "../tcIcons";
+import { toast } from "./Toasts";
 
 const ICON = 20; // px; 18 in the full screen row
 
@@ -29,10 +30,14 @@ const GROUPS: { id: string; name: string; tools: Tool[] }[] = [
     ],
   },
 ];
+const ALL: Tool[] = [];
 const SHAPES: Tool[] = [
   { tool: "rect", label: "Rectangle", icon: "rectangle", keys: "Alt+B" },
   { tool: "text", label: "Text: click where it goes, then type", icon: "text" },
 ];
+
+for (const g of GROUPS) ALL.push(...g.tools);
+ALL.push(...SHAPES);
 
 const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = mac ? "⌘" : "Ctrl+";
@@ -47,6 +52,8 @@ const CLOSE_MS = 150;
  */
 export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row?: boolean; history?: boolean }) {
   const [last, setLast] = usePref<Record<string, DrawTool>>("wed.drawGroups", {});
+  const [favs, setFavs] = usePref<DrawTool[]>("wed.drawFavorites", []);
+  const [favBar, setFavBar] = usePref<boolean>("wed.drawFavoritesBar", false);
   const [menu, setMenu] = useState<string | null>(null);
   const [at, setAt] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
   const timer = useRef<number>(0);
@@ -87,10 +94,30 @@ export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row
     else timer.current = window.setTimeout(() => setMenu(null), CLOSE_MS);
   };
 
+  const favorite = (t: Tool) => {
+    const on = favs.includes(t.tool);
+    setFavs(on ? favs.filter((x) => x !== t.tool) : [...favs, t.tool]);
+    if (!on && !favBar) setFavBar(true);
+    toast(on ? `${t.label} left the favorites` : `${t.label} added to the favorites`);
+  };
+  const allLocked = ctl.items.length > 0 && ctl.items.every((d) => d.locked);
+  const removeAll = () => {
+    const n = ctl.removeAll();
+    const kept = ctl.items.length - n;
+    toast(n ? `Removed ${n} drawing${n > 1 ? "s" : ""}${kept ? `, kept ${kept} locked` : ""}. ${MOD}Z brings them back.` : "Every drawing is locked: unlock them first.");
+  };
+  const toggle = (on: boolean, label: string, icon: TcIconName, set: () => void, hint: string) => (
+    <button type="button" className="draw-tool" aria-pressed={on} title={hint} aria-label={label} onClick={set}>
+      <TcIcon name={icon} size={size} />
+    </button>
+  );
   const title = (t: Tool) => (t.keys ? `${t.label} (${t.keys})` : t.label);
   const button = (t: Tool) => (
     <button key={t.tool} type="button" className="draw-tool" aria-pressed={ctl.tool === t.tool} title={title(t)} aria-label={t.label}
-      onClick={() => pick(t.tool)}>
+      onClick={() => pick(t.tool)} onContextMenu={(e) => {
+        e.preventDefault();
+        favorite(t);
+      }}>
       <TcIcon name={t.icon} size={size} />
     </button>
   );
@@ -112,7 +139,10 @@ export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row
         return (
           <div key={g.id} className="draw-group" onMouseEnter={row ? undefined : (e) => hover(g.id, e.currentTarget)} onMouseLeave={row ? undefined : () => hover(null)}>
             <button type="button" className="draw-tool" aria-pressed={!!on} title={title(current)} aria-label={current.label}
-              onClick={() => pick(current.tool)}>
+              onClick={() => pick(current.tool)} onContextMenu={(e) => {
+                e.preventDefault();
+                favorite(current);
+              }}>
               <TcIcon name={current.icon} size={size} />
             </button>
             <button type="button" className="draw-group-more" aria-label={`${g.name}: more tools`} aria-expanded={open}
@@ -131,6 +161,14 @@ export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row
                     <TcIcon name={t.icon} size={16} />
                     {t.label}
                     {t.keys && <kbd>{t.keys}</kbd>}
+                    <span role="button" tabIndex={-1} className={`draw-fav${favs.includes(t.tool) ? " is-on" : ""}`}
+                      title={favs.includes(t.tool) ? "Remove from favorites" : "Add to favorites"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        favorite(t);
+                      }}>
+                      <TcIcon name="star" size={14} />
+                    </span>
                   </button>
                 ))}
               </div>
@@ -140,6 +178,21 @@ export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row
       })}
       <span className="draw-sep" aria-hidden="true" />
       {SHAPES.map(button)}
+      <span className="draw-sep" aria-hidden="true" />
+      {toggle(ctl.magnet, "Magnet", "magnet", () => ctl.setMagnet(!ctl.magnet),
+        ctl.magnet ? "Magnet on: points snap to the candle's open, high, low or close" : "Magnet: snap points to the candle's open, high, low or close")}
+      <button type="button" className="draw-tool" aria-pressed={ctl.tool === "eraser"} title="Eraser: click a drawing to remove it"
+        aria-label="Eraser" onClick={() => pick("eraser")}>
+        <TcIcon name="eraser" size={size} />
+      </button>
+      <button type="button" className="draw-tool" aria-pressed={ctl.tool === "zoom"} title="Zoom: drag over the candles to show"
+        aria-label="Zoom in on an area" onClick={() => pick("zoom")}>
+        <TcIcon name="zoomIn" size={size} />
+      </button>
+      {toggle(ctl.stay, "Stay in drawing mode", "repeat", () => ctl.setStay(!ctl.stay),
+        ctl.stay ? "Stay in drawing mode: on, the tool stays after each drawing" : "Stay in drawing mode: keep the tool after drawing")}
+      {toggle(favBar, "Favorites bar", "star", () => setFavBar(!favBar),
+        favBar ? "Hide the favorites bar" : "Show the favorites bar (right-click a tool, or its star, to add it)")}
       <span className="draw-sep" aria-hidden="true" />
       {history && (
         <>
@@ -151,11 +204,35 @@ export function DrawingToolbar({ ctl, row, history = row }: { ctl: Drawings; row
           </button>
         </>
       )}
+      <button type="button" className="draw-tool" aria-pressed={allLocked} disabled={!ctl.items.length}
+        title={allLocked ? "Unlock all drawings" : "Lock all drawings"} aria-label={allLocked ? "Unlock all drawings" : "Lock all drawings"}
+        onClick={() => ctl.lockAll(!allLocked)}>
+        <TcIcon name={allLocked ? "lock" : "unlock"} size={size} />
+      </button>
       <button type="button" className="draw-tool" aria-pressed={ctl.hidden} disabled={!ctl.items.length && !ctl.hidden}
         title={ctl.hidden ? "Show drawings" : "Hide drawings"} aria-label={ctl.hidden ? "Show drawings" : "Hide drawings"}
         onClick={() => ctl.setHidden(!ctl.hidden)}>
         <TcIcon name={ctl.hidden ? "eyeOff" : "eye"} size={size} />
       </button>
+      <button type="button" className="draw-tool is-danger" disabled={!ctl.items.length}
+        title={`Remove all drawings (locked ones stay; ${MOD}Z undoes)`} aria-label="Remove all drawings" onClick={removeAll}>
+        <TcIcon name="trash" size={size} />
+      </button>
+      {favBar && (
+        <div className="draw-favs" role="toolbar" aria-label="Favorite drawing tools">
+          {favs.length === 0 ? (
+            <span className="draw-favs-hint">Right-click a tool, or its star, to add it here</span>
+          ) : ALL.filter((t) => favs.includes(t.tool)).map((t) => (
+            <button key={t.tool} type="button" className="draw-tool" aria-pressed={ctl.tool === t.tool} title={title(t)} aria-label={t.label}
+              onClick={() => pick(t.tool)} onContextMenu={(e) => {
+                e.preventDefault();
+                favorite(t);
+              }}>
+              <TcIcon name={t.icon} size={18} />
+            </button>
+          ))}
+        </div>
+      )}
       {ctl.error && <span className="draw-error" role="alert" title={ctl.error}>!</span>}
     </div>
   );

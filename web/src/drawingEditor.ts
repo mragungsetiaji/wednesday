@@ -42,6 +42,9 @@ import { withAlpha, type ChartPalette } from "./theme";
 
 type XY = { x: number; y: number };
 
+/** How near (px) a candle's open, high, low or close pulls a point to it, with the magnet on. */
+const MAGNET_PX = 24;
+
 const TRACK_LABEL: Record<PositionTrack["state"], string> = {
   waiting: "Waiting", missed: "Missed", open: "Open", target: "Target hit", stop: "Stop hit", ended: "Closed",
 };
@@ -377,6 +380,9 @@ export class DrawingEditor {
   private dragging: Drawing | null = null; // one being dragged on any chart in this window (dragBus)
   private readonly unsubscribeDrag: () => void;
   private placing: { start: XY; moved: boolean } | null = null;
+  private bars: Candle[] = []; // closed candles, for the magnet
+  private liveBar: Candle | null = null;
+  private zoom: { start: XY; box: HTMLDivElement } | null = null; // the zoom tool's drag
   private drag: { orig: Drawing; last: Drawing; handle: number | null; startL: number; startP: number; moved: boolean } | null = null;
 
   constructor(
@@ -420,10 +426,14 @@ export class DrawingEditor {
     }
     if (patch.candles) {
       this.closed = patch.candles.map((c) => c.time);
+      this.bars = patch.candles;
       this.step = stepOf(this.closed);
       this.primitive.update({ candles: patch.candles });
     }
-    if (patch.live !== undefined) this.primitive.update({ live: patch.live });
+    if (patch.live !== undefined) {
+      this.liveBar = patch.live;
+      this.primitive.update({ live: patch.live });
+    }
     const liveTime = patch.live === undefined ? this.liveTime : patch.live?.time ?? null;
     if (patch.candles || liveTime !== this.liveTime) {
       // The forming candle is on the chart too: a point on it maps to it, not to a guess past the last close.
@@ -464,7 +474,24 @@ export class DrawingEditor {
   }
 
   private pointAt(p: XY): DrawingPoint | null {
-    return toPoint(this.chart, this.series, this.times, p.x, p.y);
+    const pt = toPoint(this.chart, this.series, this.times, p.x, p.y);
+    if (!pt || !this.ctl?.magnet) return pt;
+    // The magnet: the open, high, low or close of the candle under the pointer, when one is near.
+    const l = this.chart.timeScale().coordinateToLogical(p.x);
+    if (l === null) return pt;
+    const i = Math.round(l);
+    const bar = i >= 0 && i < this.bars.length ? this.bars[i] : i === this.bars.length ? this.liveBar : null;
+    if (!bar) return pt;
+    let best: number | null = null;
+    let gap = MAGNET_PX;
+    for (const v of [bar.open, bar.high, bar.low, bar.close]) {
+      const y = this.series.priceToCoordinate(v);
+      if (y !== null && Math.abs(y - p.y) <= gap) {
+        gap = Math.abs(y - p.y);
+        best = v;
+      }
+    }
+    return best === null ? pt : { ...pt, p: best };
   }
 
   private xyOf(d: Drawing) {
@@ -497,17 +524,34 @@ export class DrawingEditor {
     const p = this.local(e);
     if (!this.inPane(p)) return;
 
+    if (ctl.tool === "eraser") {
+      claim(e);
+      const hit = this.hitTest(p);
+      if (hit && !hit.d.locked) ctl.remove(hit.d.id);
+      return;
+    }
+    if (ctl.tool === "zoom") {
+      claim(e);
+      const box = document.createElement("div");
+      box.className = "draw-zoom-box";
+      if (getComputedStyle(this.el).position === "static") this.el.style.position = "relative";
+      this.el.appendChild(box);
+      this.zoom = { start: p, box };
+      this.zoomBox(p);
+      this.track();
+      return;
+    }
     if (ctl.tool !== "cursor") {
       claim(e);
       const pt = this.pointAt(p);
       if (!pt) return;
       if (ctl.tool === "hline") {
         ctl.create(make("hline", [pt]));
-        ctl.setTool("cursor");
+        this.done();
       } else if (ctl.tool === "long" || ctl.tool === "short") {
         const d = this.newPosition(ctl.tool, pt, p.y);
         if (d) ctl.create(d);
-        ctl.setTool("cursor");
+        this.done();
       } else if (ctl.tool === "text") {
         const d = make("text", [pt]);
         ctl.create(d);
@@ -552,7 +596,9 @@ export class DrawingEditor {
 
   private readonly onMove = (e: PointerEvent) => {
     const p = this.local(e);
-    if (this.drag) {
+    if (this.zoom) {
+      this.zoomBox(p);
+    } else if (this.drag) {
       const next = this.dragged(p);
       if (!next) return;
       this.drag.moved = true;
@@ -568,7 +614,18 @@ export class DrawingEditor {
   };
 
   private readonly onUp = (e: PointerEvent) => {
-    if (this.drag) {
+    if (this.zoom) {
+      const { start, box } = this.zoom;
+      this.zoom = null;
+      box.remove();
+      this.stopTracking();
+      const end = this.local(e);
+      const ts = this.chart.timeScale();
+      const a = ts.coordinateToLogical(Math.min(start.x, end.x));
+      const b = ts.coordinateToLogical(Math.max(start.x, end.x));
+      if (a !== null && b !== null && Math.abs(end.x - start.x) > 6) ts.setVisibleLogicalRange({ from: a, to: b });
+      this.done();
+    } else if (this.drag) {
       const { moved, last } = this.drag;
       this.drag = null;
       this.stopTracking();
@@ -590,7 +647,12 @@ export class DrawingEditor {
     const p = this.local(e);
     let cursor = "";
     let hovered: string | null = null;
-    if (ctl.tool !== "cursor" && this.inPane(p)) cursor = "crosshair";
+    if (ctl.tool === "eraser" && this.inPane(p)) {
+      const hit = this.hitTest(p);
+      cursor = hit && !hit.d.locked ? "pointer" : "crosshair";
+      hovered = hit?.d.id ?? null;
+    } else if (ctl.tool === "zoom" && this.inPane(p)) cursor = "zoom-in";
+    else if (ctl.tool !== "cursor" && this.inPane(p)) cursor = "crosshair";
     else if (this.inPane(p)) {
       const hit = this.hitTest(p);
       if (hit) cursor = hit.d.locked ? "pointer" : hit.handle !== null ? "grab" : "move";
@@ -698,7 +760,22 @@ export class DrawingEditor {
     const d = { ...this.draft!, points };
     this.cancelPlacing();
     if (points.length >= 2) this.ctl?.create(d);
-    this.ctl?.setTool("cursor");
+    this.done();
+  }
+
+  /** A drawing (or zoom) is done: back to the cursor, unless "stay in drawing mode" is on. */
+  private done(): void {
+    if (!this.ctl?.stay) this.ctl?.setTool("cursor");
+  }
+
+  /** The zoom tool's box, from where the drag began to p, the pane's full height. */
+  private zoomBox(p: XY): void {
+    const z = this.zoom;
+    if (!z) return;
+    const h = this.chart.panes()[0]?.getHeight() ?? this.el.clientHeight;
+    const x = Math.max(0, Math.min(z.start.x, p.x));
+    const w = Math.min(this.chart.timeScale().width(), Math.max(z.start.x, p.x)) - x;
+    Object.assign(z.box.style, { left: `${x}px`, top: "0px", width: `${Math.max(0, w)}px`, height: `${h}px` });
   }
 
   /** Enter ends a path at its last clicked point. */

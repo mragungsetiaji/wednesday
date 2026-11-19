@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { useSharedPref } from "./prefs";
+
 /** Colors the canvas chart needs (CSS variables can't reach into the canvas). Mirrors styles.css. */
 export interface ChartPalette {
   surface: string;
@@ -48,15 +50,28 @@ const LIGHT: ChartPalette = {
 
 const query = () => window.matchMedia("(prefers-color-scheme: light)");
 
+export type ThemeChoice = "auto" | "light" | "dark";
+
+/** The theme picked in the chart's top bar: the system's (auto), light or dark. Every window follows it. */
+export function useThemeChoice(): [ThemeChoice, (t: ThemeChoice) => void] {
+  return useSharedPref<ThemeChoice>("wed.theme", "auto");
+}
+
 export function useChartPalette(): ChartPalette {
-  const [light, setLight] = useState(() => query().matches);
+  const [choice] = useThemeChoice();
+  const [systemLight, setSystemLight] = useState(() => query().matches);
   useEffect(() => {
     const mq = query();
-    const onChange = () => setLight(mq.matches);
+    const onChange = () => setSystemLight(mq.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
-  return light ? LIGHT : DARK;
+  useEffect(() => {
+    // styles.css reads it: light or dark over the system's, none for auto.
+    if (choice === "auto") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = choice;
+  }, [choice]);
+  return (choice === "auto" ? systemLight : choice === "light") ? LIGHT : DARK;
 }
 
 /** hex "#rrggbb" + alpha -> rgba() */

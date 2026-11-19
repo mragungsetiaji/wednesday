@@ -22,7 +22,7 @@ import { NewsAlert } from "./components/NewsAlert";
 import { ChartKeys } from "./components/ChartKeys";
 import { LevelsMenu } from "./components/LevelsMenu";
 import { Toasts } from "./components/Toasts";
-import { ChartMarket, PriceChart, type ChartNav } from "./components/PriceChart";
+import { ChartMarket, PriceChart, SHOW_SHORTCUTS, type ChartNav } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
 import { SettingsPage } from "./components/SettingsPage";
@@ -34,6 +34,8 @@ import { fmtPrice } from "./format";
 import { BookIcon, ChartIcon, Direction, FlaskIcon, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
 import { TcIcon } from "./tcIcons";
 import { LayersMenu } from "./components/LayersMenu";
+import { ChartTypeMenu, MoreMenu, SymbolInfo, ThemeButton } from "./components/ChartTopMenus";
+import { SnapshotMenu, type SnapshotSource } from "./components/SnapshotMenu";
 import { predictionMark } from "./labPrimitive";
 import { useMl } from "./mlData";
 import { usePref } from "./prefs";
@@ -268,6 +270,11 @@ export default function App() {
   }, [showBanner]);
 
   const mainNav = useRef<ChartNav | null>(null);
+  // The top bar's camera takes the main chart's picture.
+  const mainShot = useMemo<SnapshotSource>(() => ({
+    make: () => mainNav.current?.snapshotSource().make() ?? null,
+    name: () => mainNav.current?.snapshotSource().name() ?? "chart.png",
+  }), []);
   const desktop = useDesktopApi();
   // The main chart's link group: crosshair, scroll and zoom, and timeframe with charts in other windows.
   const [mainGroup, setMainGroup] = usePref<LinkGroup | null>("wed.linkMain", null);
@@ -372,6 +379,14 @@ export default function App() {
           <main className={`workspace${showRail ? "" : " is-rail-hidden"}`}>
             <section className="chart-area" aria-label="Chart">
               <div className="chart-toolbar" role="toolbar" aria-label="Chart">
+                <SymbolInfo symbol={data?.symbol ?? "XAUUSD"} rows={[
+                  ["Source", data?.source ? SOURCES[data.source] ?? data.source : "—"],
+                  ["Bar times", CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"],
+                  ["Timeframe", tf],
+                  ["Candles", String(chart?.candles.length ?? 0)],
+                  ["Last scan", data?.scanned_at ? new Date(data.scanned_at).toLocaleString() : "—"],
+                ]} />
+                <span className="tb-sep" aria-hidden="true" />
                 <div className="tb-tfs" role="tablist" aria-label="Chart timeframe">
                   {(timeframes.length ? timeframes : ["4H", "1H", "30M", "15M", "5M"]).map((name) => {
                     const b = scan?.timeframes.find((t) => t.timeframe === name)?.bias;
@@ -388,6 +403,8 @@ export default function App() {
                     );
                   })}
                 </div>
+                <span className="tb-sep" aria-hidden="true" />
+                <ChartTypeMenu />
                 <span className="tb-sep" aria-hidden="true" />
                 <LayersMenu detectors={allDetectors} hidden={hidden} onToggle={toggleLayer} overlays={[
                   { key: "mid", label: "Mid OBs", on: showMidOb, set: setShowMidOb },
@@ -419,6 +436,11 @@ export default function App() {
                 </button>
                 <LinkMenu value={mainGroup} onChange={setMainGroup} />
                 <span className="tb-spacer" />
+                <SnapshotMenu source={mainShot} className="tb-btn tb-icon" iconSize={16} />
+                <button type="button" className="tb-btn tb-icon" onClick={() => setView("settings")} title="Settings" aria-label="Settings">
+                  <TcIcon name="settings" />
+                </button>
+                <ThemeButton mode={palette.mode} />
                 <button type="button" className="tb-btn tb-icon" onClick={() => openChartWindow(desktop, tf, mainGroup)} disabled={!scan || replaying}
                   title={`Open ${tf} in its own window, for another monitor`} aria-label="Open the chart in its own window">
                   <PopOutIcon size={16} />
@@ -431,6 +453,7 @@ export default function App() {
                   title={showRail ? "Hide the levels pane" : "Show the levels pane"} aria-label={showRail ? "Hide the levels pane" : "Show the levels pane"}>
                   <SidePanelIcon size={16} open={showRail} />
                 </button>
+                <MoreMenu onShortcuts={() => window.dispatchEvent(new Event(SHOW_SHORTCUTS))} />
               </div>
               {replaying && <ReplayBar replay={replay} tf={tf} clockName={CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed"} />}
               <div className="chart-body">
@@ -457,6 +480,7 @@ export default function App() {
                 nav={mainNav}
                 sync={mainLink.sync}
                 rangeLink={mainLink.rangeLink}
+                snapshotButton={false}
               />
               </div>
               <div className="chart-foot">

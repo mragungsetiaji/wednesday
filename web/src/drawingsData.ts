@@ -21,16 +21,23 @@ const typing = (el: EventTarget | null) =>
 
 const HISTORY = 100; // undo steps kept
 
-/** One undoable step: a drawing before and after it (null: it didn't exist). */
-interface Step {
+/** One drawing before and after a change (null: it didn't exist). */
+interface Change {
   before: Drawing | null;
   after: Drawing | null;
 }
+/** One undoable step: a change, or several made at once (lock all, remove all). */
+type Step = Change | Change[];
+const changesOf = (s: Step): Change[] => (Array.isArray(s) ? s : [s]);
 
 export type Drawings = DrawingCtl & {
   available: boolean; // false without a database
   error: string | null;
   setHidden: (v: boolean) => void;
+  setMagnet: (v: boolean) => void;
+  setStay: (v: boolean) => void;
+  lockAll: (locked: boolean) => void; // one undo step
+  removeAll: () => number; // removes every unlocked drawing as one undo step; how many went
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
@@ -59,6 +66,8 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
   const [tool, setTool] = useState<DrawTool>("cursor");
   const [selected, select] = useState<string | null>(null);
   const [hidden, setHidden] = usePref<boolean>("wed.drawingsHidden", false);
+  const [magnet, setMagnet] = usePref<boolean>("wed.drawMagnet", false);
+  const [stay, setStay] = usePref<boolean>("wed.drawStay", false);
   const [textFocus, setTextFocus] = useState(0);
 
   const itemsRef = useRef(items);
@@ -165,12 +174,29 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
     if (!step) return;
     h[from] = h[from].slice(0, -1);
     h[from === "undo" ? "redo" : "undo"] = [...h[from === "undo" ? "redo" : "undo"], step];
-    const target = from === "undo" ? step.before : step.after;
-    const id = (step.before ?? step.after)!.id;
-    apply(id, target);
-    select(target ? id : null);
+    const changes = changesOf(step);
+    for (const c of changes) {
+      const target = from === "undo" ? c.before : c.after;
+      apply((c.before ?? c.after)!.id, target);
+    }
+    const one = changes.length === 1 ? changes[0] : null;
+    const target = one && (from === "undo" ? one.before : one.after);
+    select(target ? target.id : null);
     setHistoryVersion((v) => v + 1);
   }, [apply]);
+  const lockAll = useCallback((locked: boolean) => {
+    const changes = itemsRef.current.filter((d) => d.locked !== locked).map((d) => ({ before: d, after: { ...d, locked } }));
+    for (const c of changes) apply(c.after.id, c.after);
+    if (changes.length) record(changes);
+  }, [apply, record]);
+
+  const removeAll = useCallback(() => {
+    const changes = itemsRef.current.filter((d) => !d.locked).map((d) => ({ before: d, after: null }));
+    for (const c of changes) apply(c.before.id, null);
+    if (changes.length) record(changes);
+    return changes.length;
+  }, [apply, record]);
+
   const undo = useCallback(() => move("undo"), [move]);
   const redo = useCallback(() => move("redo"), [move]);
 
@@ -211,6 +237,7 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
   return useMemo(() => ({
     items, hidden, tool, setTool, selected, select, create, change, remove, available, error,
     setHidden, sizing, editText, undo, redo, canUndo, canRedo, textFocus, alerts, setAlert, removeAlert,
+    magnet, setMagnet, stay, setStay, lockAll, removeAll,
   }), [items, hidden, tool, selected, create, change, remove, available, error, setHidden, sizing, editText, undo, redo,
-    canUndo, canRedo, textFocus, alerts, setAlert, removeAlert]);
+    canUndo, canRedo, textFocus, alerts, setAlert, removeAlert, magnet, setMagnet, stay, setStay, lockAll, removeAll]);
 }

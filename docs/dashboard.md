@@ -115,17 +115,38 @@ once, each where it sits in the grid with its timeframe on it, and one footer.
 
 ## Drawings
 
-The chart's top bar holds, left to right: the timeframes (an arrow shows each
-one's bias), **Layers** (the detectors and overlays: Mid OBs, HTF, Swings,
+The chart's top bar holds, left to right: the symbol and its info (source, bar
+times, candles, last scan), the timeframes (an arrow shows each one's bias), the
+chart type, **Layers** (the detectors and overlays: Mid OBs, HTF, Swings,
 Quarters, News, ML), **Sessions**, undo and redo, **Workspace**, bar replay (▶) and
-the link button; at the right end the pop-out, full screen and levels-pane
-buttons.
+the link button. At the right end: the camera (copy, save or attach a picture of
+the chart), Settings, the light / dark switch, the pop-out, full screen and
+levels-pane buttons, and **⋯** (follow the system's theme again, the keyboard
+shortcuts).
+
+The chart type draws filled candles, hollow candles (up candles drawn as an
+outline) or Heikin Ashi, on every chart and window. Heikin Ashi changes only the
+bars on screen: the scan, the levels, the setups, the drawings and the positions
+keep using the real candles. The light / dark switch overrides the system's theme
+in every window until **⋯ > Theme: follow the system**.
 
 The column left of the chart holds the drawing tools, TradeCanvas style: the
-cursor, then the line tools, path and positions, then rectangle and text, then the
-eye. A button with a small triangle in its corner is a group: it draws with the
-tool last picked in it, and hovering it (or clicking the triangle) opens the rest:
-trendline and horizontal line, or long and short position.
+cursor, then the line tools, path and positions, then rectangle and text. A
+button with a small triangle in its corner is a group: it draws with the tool
+last picked in it, and hovering it (or clicking the triangle) opens the rest:
+trendline and horizontal line, or long and short position. Below them:
+
+- **Magnet**: points snap to the open, high, low or close of the candle under the
+  pointer when one is within 24 px, while placing a drawing or dragging a handle.
+- **Eraser**: click a drawing to remove it (locked ones stay). It stays picked
+  until you pick another tool or press Esc.
+- **Zoom**: drag across the candles to show just those.
+- **Stay in drawing mode**: the tool stays picked after each drawing, to draw
+  several in a row.
+- **Favorites**: shows a bar of your favorite tools over the chart. Right-click
+  a tool, or click the star beside it in a group's menu, to add or remove it.
+- **Lock all** (or unlock all), **hide all**, and **remove all** (locked drawings
+  stay). Lock all and remove all are one undo step each.
 
 - **Trendline**: click two points, or press and drag.
 - **Horizontal line**: click a price; its price shows at the right edge.

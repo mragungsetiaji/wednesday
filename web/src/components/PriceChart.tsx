@@ -21,6 +21,7 @@ import type { CrosshairLink } from "../crosshairSync";
 import { linkBus, type LinkGroup } from "../windowLink";
 import { counters, planUpdate } from "../perf";
 import { DrawingEditor } from "../drawingEditor";
+import { heikin, heikinBar, useChartType } from "../chartType";
 import type { DrawingCtl } from "../drawings";
 import { useLiveTick, type LiveFeed } from "../liveData";
 import { fmtPrice } from "../format";
@@ -51,6 +52,7 @@ export interface ChartNav {
   goTo: (t: number) => void; // centre a feed-clock time, loading older candles as needed
   snapshot: () => void; // copy a picture of the chart (saved where the clipboard is refused)
   capture: () => HTMLCanvasElement | null; // the chart's own screenshot, for a layout snapshot
+  snapshotSource: () => SnapshotSource; // for a camera button outside the chart (the top bar's)
 }
 
 /** Opens the keyboard shortcut list (the chart's "?" button). */
@@ -95,6 +97,7 @@ interface Props {
   drawings?: DrawingCtl | null; // the trader's drawings, shown and edited here
   nav?: Ref<ChartNav | null>; // for the keyboard shortcuts
   timeframe?: string; // named in a snapshot's footer; resetKey when not given
+  snapshotButton?: boolean; // the camera under the chart; false where a toolbar holds one
   rangeLink?: { group: LinkGroup; id: string } | null; // scroll and zoom shared with a link group (windowLink.ts)
   precision?: number; // price decimals: 2 for gold, more for a pane's own symbol (e.g. 3 for silver)
 }
@@ -222,7 +225,7 @@ function candleAt(times: number[], t: number): number {
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
-  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe, rangeLink = null, precision = 2 }: Props) {
+  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe, rangeLink = null, precision = 2, snapshotButton = true }: Props) {
   counters.renders++; // the perf overlay's renders/s: panning and dragging a drawing should add none
   const liveBar = useLiveTick(live)?.bar ?? null; // only the chart re-renders on a tick, not its parent
   const containerRef = useRef<HTMLDivElement>(null);
@@ -255,6 +258,8 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const marketRef = useRef(market);
   marketRef.current = market;
   const [scale, setScale] = useState<ScaleState>(AUTO_SCALE);
+  const [chartType] = useChartType();
+  const heikinRef = useRef<Candle[] | null>(null); // the Heikin Ashi bars shown, when that's the chart type
   const [offLive, setOffLive] = useState(false); // the live candle is scrolled out of view
   const [ruler, setRuler] = useState<Ruler | null>(null);
   const [newsTip, setNewsTip] = useState<{ mark: NewsMark; x: number } | null>(null); // the news line under the pointer
@@ -406,20 +411,44 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     mlRef.current?.update({ palette });
     sessionsRef.current?.update({ palette });
     editorRef.current?.update({ palette });
+  }, [palette]);
+
+  // The candles' look: filled, or hollow up candles (their border drawn instead).
+  useEffect(() => {
+    const hollow = chartType === "hollow";
     seriesRef.current?.applyOptions({
-      upColor: palette.bull,
+      upColor: hollow ? "rgba(0, 0, 0, 0)" : palette.bull,
       downColor: palette.bear,
       wickUpColor: palette.bull,
       wickDownColor: palette.bear,
+      borderVisible: hollow,
+      borderUpColor: palette.bull,
+      borderDownColor: palette.bear,
     });
-  }, [palette]);
+  }, [palette, chartType]);
 
   // New candles: update only the bars that changed when that's all it is (a scan adds one or two at
   // the end); a full setData only when history changed (#34).
   const shownCandles = useRef<Candle[]>([]);
+  const shownType = useRef(chartType);
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
+    if (shownType.current !== chartType) {
+      shownType.current = chartType;
+      shownCandles.current = []; // another chart type: draw them all again
+    }
+    if (chartType === "heikin") {
+      // Each Heikin Ashi bar depends on the one before it: the whole run again (a scan, not a tick).
+      const bars = heikin(candles);
+      heikinRef.current = bars;
+      series.setData(bars.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
+      counters.setData++;
+      shownCandles.current = candles;
+      candlesRef.current = candles;
+      return;
+    }
+    heikinRef.current = null;
     const plan = planUpdate(shownCandles.current, candles);
     if (plan.kind === "set") {
       series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
@@ -436,7 +465,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     }
     shownCandles.current = candles;
     candlesRef.current = candles;
-  }, [candles]);
+  }, [candles, chartType]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -496,7 +525,11 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       return;
     }
     if (liveCandle) {
-      seriesRef.current?.update({ ...liveCandle, time: liveCandle.time as UTCTimestamp });
+      const ha = heikinRef.current;
+      let prev: Candle | null = null;
+      for (let i = (ha?.length ?? 0) - 1; ha && i >= 0 && !prev; i--) if (ha[i].time < liveCandle.time) prev = ha[i];
+      const bar = ha ? heikinBar(liveCandle, prev) : liveCandle;
+      seriesRef.current?.update({ ...bar, time: bar.time as UTCTimestamp });
       counters.ticks++;
     }
     editorRef.current?.update({ live: liveCandle }); // positions track the forming candle too
@@ -617,6 +650,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       copySnapshot(snapshotRef.current).catch(() => {});
     },
     capture,
+    snapshotSource: () => snapshotRef.current,
     reset: () => {
       const ts = chartRef.current?.timeScale();
       ts?.resetTimeScale();
@@ -767,7 +801,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
         <span className="chart-nav-hint muted">Shift-drag to measure</span>
         <button type="button" className="chart-nav-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"
           onClick={() => window.dispatchEvent(new Event(SHOW_SHORTCUTS))}>?</button>
-        <SnapshotMenu source={snapshot} />
+        {snapshotButton && <SnapshotMenu source={snapshot} />}
         <ScaleMenu value={scale} onChange={setScale} percentOk={sessionOpen !== null} />
       </div>
     </div>

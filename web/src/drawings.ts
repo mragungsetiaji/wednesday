@@ -3,7 +3,8 @@ import type { IChartApi, ISeriesApi, Logical, SeriesType } from "lightweight-cha
 import type { Candle, Drawing, DrawingAlert, DrawingKind, DrawingPoint, Sizing } from "./api";
 import { logicalOfTime, timeOfLogical } from "./timeMap.ts";
 
-export type DrawTool = "cursor" | DrawingKind;
+/** The cursor, a drawing kind, the eraser (a click removes a drawing) or zoom (drag over the bars to show). */
+export type DrawTool = "cursor" | "eraser" | "zoom" | DrawingKind;
 
 /** What a chart needs to show and edit the drawings; one shared by every chart on screen. */
 export interface DrawingCtl {
@@ -19,6 +20,8 @@ export interface DrawingCtl {
   sizing: Sizing | null; // lot size and money at risk on positions; null without Settings > Risk
   editText: (id: string) => void; // select a text drawing and put the cursor in its text field
   alerts: Record<string, DrawingAlert>; // by drawing id
+  magnet: boolean; // points snap to the nearest open, high, low or close
+  stay: boolean; // keep the tool after drawing, for several in a row
 }
 
 /**

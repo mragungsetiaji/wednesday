@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { attachSnapshot, fetchJournal, fetchJournals, uploadSnapshot, type Journal, type JournalTrade } from "../api";
 import { fmtPrice } from "../format";
-import { CameraIcon } from "../icons";
+import { TcIcon } from "../tcIcons";
 import { copyImage, saveImage, toBlob } from "../snapshot";
 import { toast } from "./Toasts";
 import { usePopover } from "./usePopover";
@@ -34,10 +34,11 @@ export async function saveSnapshot(src: SnapshotSource) {
 }
 
 /** The camera button: copy, save, or attach to a journal trade. */
-export function SnapshotMenu({ source, label = "Snapshot", className = "chart-nav-btn" }: {
+export function SnapshotMenu({ source, label = "Snapshot", className = "chart-nav-btn", iconSize = 14 }: {
   source: SnapshotSource;
   label?: string;
   className?: string;
+  iconSize?: number;
 }) {
   const { open, setOpen, ref } = usePopover<HTMLDivElement>();
   const [attach, setAttach] = useState<Blob | null>(null);
@@ -50,7 +51,7 @@ export function SnapshotMenu({ source, label = "Snapshot", className = "chart-na
     <div className="snapshot-menu" ref={ref}>
       <button type="button" className={className} aria-expanded={open} aria-controls={id} title={`${label}: copy, save or attach to the journal (Alt+S copies)`}
         aria-label={label} onClick={() => setOpen(!open)}>
-        <CameraIcon size={14} />
+        <TcIcon name="camera" size={iconSize} />
       </button>
       {open && (
         <div className="chart-pop snapshot-pop" id={id} role="menu" aria-label={label}>

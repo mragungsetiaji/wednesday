@@ -46,6 +46,7 @@
   --warn: #d99a1e;
   --error: #ef7a7a;
 
+  --tc-accent: #7d9bff; /* TradeCanvas's ink blue: what is picked in the chart toolbars */
   --radius-sm: 4px;
   --radius: 6px;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -54,7 +55,7 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :root {
+  :root:not([data-theme="dark"]) {
     color-scheme: light;
     --bg: #f1f0ec;
     --surface: #fcfcfb;
@@ -77,7 +78,37 @@
     --ok: #0f8a5f;
     --warn: #8f5b00;
     --error: #c93a39;
+    --tc-accent: #2348c4;
   }
+}
+/* The theme picked in the chart's top bar, over the system's. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f1f0ec;
+  --surface: #fcfcfb;
+  --surface-2: #f6f5f1;
+  --hover: #ecebe6;
+  --line: #e3e2dc;
+  --line-strong: #cfcec6;
+  --text: #141413;
+  --text-2: #45443f;
+  --text-3: #6b6a63;
+  --bull: #1baf7a;
+  --bear: #e34948;
+  --bull-text: #007040; /* >= 4.7:1 on bg, surface and the 16% tint */
+  --bear-text: #b81824;
+  --liquidity: #2a78d6;
+  --idm: #52514e;
+  --accent: #8f5b00;
+  --on-accent: #ffffff;
+  --draw: #7c3aed;
+  --ok: #0f8a5f;
+  --warn: #8f5b00;
+  --error: #c93a39;
+  --tc-accent: #2348c4;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 /* ---------- Base & browser surfaces ---------- */
@@ -531,8 +562,8 @@ p {
   color: var(--text);
 }
 .draw-tool[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--tc-accent) 14%, transparent);
+  color: var(--tc-accent);
 }
 .draw-tool:disabled {
   opacity: 0.35;
@@ -664,8 +695,8 @@ p {
   color: var(--text);
 }
 .draw-flyout-item.is-active {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
+  background: color-mix(in srgb, var(--tc-accent) 14%, transparent);
+  color: var(--tc-accent);
   font-weight: 600;
 }
 
@@ -5024,14 +5055,14 @@ fieldset:disabled .switch {
 }
 .tb-btn.is-on,
 .tb-btn[aria-pressed="true"]:not(.tb-icon) {
-  color: var(--accent);
+  color: var(--tc-accent);
 }
 .tb-tf {
   padding: 0 8px;
   font-weight: 500;
 }
 .tb-tf[aria-selected="true"] {
-  color: var(--accent);
+  color: var(--tc-accent);
   font-weight: 600;
 }
 .tb-caret {
@@ -5089,5 +5120,135 @@ fieldset:disabled .switch {
   padding: 4px 8px 2px;
   font-size: 11px;
   font-weight: 600;
+  color: var(--text-3);
+}
+.draw-tool.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bear) 12%, transparent);
+  color: var(--bear);
+}
+/* A tool's star in its group's menu: add it to the favorites bar. */
+.draw-fav {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-inline: 4px -6px;
+  border-radius: 3px;
+  color: var(--text-3);
+  opacity: 0;
+}
+.draw-flyout-item:not(:has(kbd)) .draw-fav {
+  margin-inline-start: auto;
+}
+.draw-flyout-item:hover .draw-fav,
+.draw-fav.is-on {
+  opacity: 1;
+}
+.draw-fav:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.draw-fav.is-on {
+  color: var(--warn);
+}
+.draw-fav.is-on .icon path {
+  fill: currentColor;
+}
+/* The favorites bar, floating over the bottom of the chart. */
+.draw-favs {
+  position: absolute;
+  inset-inline-start: 50%;
+  inset-block-end: 44px;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 4px 12px rgb(0 0 0 / 0.2);
+}
+.draw-favs .draw-tool {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+}
+.draw-favs .draw-tool .icon {
+  width: 18px;
+  height: 18px;
+}
+.draw-favs-hint {
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* The zoom tool's box while dragging. */
+.draw-zoom-box {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--tc-accent) 12%, transparent);
+  border-inline: 1px dashed var(--tc-accent);
+}
+.chart-toolbar .levels-btn.is-on .levels-count {
+  background: var(--tc-accent);
+}
+/* Menus of the buttons past the spacer open leftward from their button's right edge. */
+.chart-toolbar .tb-spacer ~ * .chart-pop {
+  translate: calc(-100% + 28px) 0;
+}
+.chart-toolbar .tb-spacer ~ .snapshot-menu,
+.chart-toolbar .snapshot-menu {
+  position: relative;
+  flex: none;
+}
+.tb-symbol {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.tb-symbol-name {
+  padding: 0 4px 0 2px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  white-space: nowrap;
+}
+.symbol-pop {
+  min-width: 240px;
+}
+.symbol-info {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 2px 8px 6px;
+}
+.symbol-info > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.symbol-info dt {
+  color: var(--text-3);
+}
+.symbol-info dd {
+  margin: 0;
+  color: var(--text);
+  text-align: end;
+}
+.menu-pop {
+  min-width: 220px;
+}
+.menu-pop .field-hint {
+  max-width: 220px;
+  margin: 4px 8px 2px;
+}
+.menu-pop kbd {
+  margin-inline-start: auto;
+  font: inherit;
+  font-size: 11px;
   color: var(--text-3);
 }
