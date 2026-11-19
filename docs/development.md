@@ -91,5 +91,13 @@ dot repainted every frame and was over half of the idle CPU. **Alt+Shift+P** (or
 per second. With 4 panes on the demo feed, Chrome's task time over 75 s went from
 21.7 s to 9.9 s with these changes.
 
+Things that follow the mouse stay out of React state (#91): the crosshair's
+candle goes to a small store that only the OHLC legend reads, and a drawing being
+dragged goes through `dragBus` (`drawings.ts`), so every chart redraws it on its
+canvas and React only hears the drop. The overlay's **renders/s** counts chart
+re-renders: about one per live tick, none from hovering, panning or dragging. With
+4 charts, hovering went from about 400 renders/s to under 10, and dragging a
+drawing from about 300 to under 10.
+
 Adding a detector: [detectors.md](detectors.md#adding-a-detector). Adding a data
 source: [data-sources.md](data-sources.md#adding-a-source).

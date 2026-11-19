@@ -4,12 +4,13 @@ import { counters } from "../perf";
 
 /**
  * A small debug readout (off by default): frames per second and, per second, full candle loads
- * (setData), incremental updates, live ticks applied and ticks skipped by charts out of view.
+ * (setData), incremental updates, live ticks applied, ticks skipped by charts out of view, and chart
+ * re-renders by React (one per live tick; none from panning or dragging a drawing).
  * Alt+Shift+P toggles it; `?perf` in the address starts with it on.
  */
 export function PerfOverlay() {
   const [on, setOn] = useState(() => new URLSearchParams(window.location.search).has("perf"));
-  const [stats, setStats] = useState({ fps: 0, setData: 0, update: 0, ticks: 0, skipped: 0, charts: 0 });
+  const [stats, setStats] = useState({ fps: 0, setData: 0, update: 0, ticks: 0, skipped: 0, renders: 0, charts: 0 });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -36,7 +37,7 @@ export function PerfOverlay() {
       const now = { ...counters };
       setStats({
         fps: frames, setData: now.setData - last.setData, update: now.update - last.update,
-        ticks: now.ticks - last.ticks, skipped: now.skipped - last.skipped,
+        ticks: now.ticks - last.ticks, skipped: now.skipped - last.skipped, renders: now.renders - last.renders,
         charts: document.querySelectorAll(".tv-lightweight-charts").length,
       });
       last = now;
@@ -57,6 +58,7 @@ export function PerfOverlay() {
       <span>{stats.update} updates/s</span>
       <span>{stats.ticks} ticks/s</span>
       <span>{stats.skipped} skipped/s</span>
+      <span>{stats.renders} renders/s</span>
     </div>
   );
 }

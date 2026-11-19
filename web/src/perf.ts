@@ -25,4 +25,4 @@ export function planUpdate(prev: Candle[], next: Candle[]): CandlePlan {
 }
 
 /** Counters the overlay reads; cheap enough to keep on all the time. */
-export const counters = { setData: 0, update: 0, ticks: 0, skipped: 0 };
+export const counters = { setData: 0, update: 0, ticks: 0, skipped: 0, renders: 0 }; // renders: chart component renders
