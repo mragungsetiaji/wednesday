@@ -16,8 +16,8 @@ closing the window stops both.
 
 ### Upgrading
 
-Run the new installer over the old one. Settings, the database, journals, Lab
-models, logs and the saved secrets stay where they are.
+Run the new installer over the old one. Settings, the database, journals, logs
+and the saved secrets stay where they are.
 
 From 0.3.1 the app is built with Tauri (see below). Its installer first removes
 the earlier build (0.3.0 and before) if it finds it, closing it if it is
@@ -42,7 +42,6 @@ preferences in `%LOCALAPPDATA%\app.wednesday.desktop`.
 | Path | What |
 | --- | --- |
 | `data\xau.db` | Settings saved from the dashboard and the M1 history |
-| `data\models\` | Lab model files |
 | `logs\screener.log` | The log, with every scan |
 | `webview\` | The 0.3.0-and-earlier window's storage, no longer used |
 
@@ -62,7 +61,7 @@ whose monitor is gone (a laptop undocked) opens on the main screen, fully
 visible. Named workspaces (see [Workspaces](dashboard.md#workspaces)) switch
 between saved window sets.
 
-The installer includes the news brief and Lab extras, and Node.js with the
+The installer includes the news brief extra, and Node.js with the
 TradingView helper, so every source and feature works without installing Python
 or Node.
 
@@ -77,7 +76,7 @@ MetaTrader 5 is no longer a data source: connecting to it opened the terminal
 when the app started and froze it. If an older version was set to MT5, the app
 starts on Yahoo Finance instead; pick the source you want in Settings. The
 [journal](journal.md) still imports MT5's history report, and
-[Lab > Data](lab.md#data) imports M1 bars exported from MT5.
+[Settings > History](data-sources.md#importing-m1-history) imports M1 bars exported from MT5.
 
 Only one copy runs at a time; starting a second one says it is already running.
 
@@ -115,7 +114,7 @@ Setup build before installing.
 1. the dashboard (`npm ci && npm run build` in `web/`),
 2. the TradingView helper (`npm ci --omit=dev` in `tradingview/`) and `node.exe`
    with its license, copied into `packaging\node\`,
-3. the Python environment (`uv sync --frozen --extra desktop --extra llm --extra ml`),
+3. the Python environment (`uv sync --frozen --extra desktop --extra llm`),
 4. the server with PyInstaller (`packaging/wednesday.spec`,
    output `dist\wednesday-server\`),
 5. the Tauri shell and its NSIS installer (`cargo tauri build --config
@@ -157,12 +156,12 @@ npm ci --omit=dev --prefix tradingview
 New-Item -ItemType Directory -Force packaging\node
 Copy-Item (Get-Command node).Source packaging\node\node.exe   # Node 22
 Copy-Item (Join-Path (Split-Path (Get-Command node).Source) LICENSE) packaging\node\LICENSE
-uv sync --frozen --extra desktop --extra llm --extra ml
+uv sync --frozen --extra desktop --extra llm
 uv run --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 cargo install tauri-cli --version "^2" --locked
 cd src-tauri; cargo tauri build --config tauri.release.conf.json
 ```
 
 PyInstaller can't cross-compile: the Windows build has to run on Windows. The
-installed program is roughly 400 MB, mostly pandas, scikit-learn and pyarrow; the
+installed program is a few hundred MB, mostly pandas and numpy; the
 installer is compressed to a fraction of that.

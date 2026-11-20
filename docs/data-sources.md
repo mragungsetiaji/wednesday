@@ -16,7 +16,7 @@ MetaTrader 5 is no longer a data source: connecting to the terminal froze it whe
 the Windows app started. A source saved as `mt5` by an older version, or
 `XAU_SOURCE=mt5`, falls back to Yahoo Finance with a warning in the log; pick
 another one in Settings. To use your broker's own prices, export M1 bars from
-MT5 and import them in [Lab > Data](lab.md#data), or keep a CSV up to date for
+MT5 and [import them](#importing-m1-history), or keep a CSV up to date for
 the `csv` source.
 
 When the database holds real bars (the most recent stream of any real source; never the
@@ -31,7 +31,6 @@ demo is a random walk from 2650.
 uv sync                      # default setup (Yahoo Finance + SQLite)
 uv sync --extra postgres     # PostgreSQL storage
 uv sync --extra llm          # Claude / OpenAI SDKs for the news brief
-uv sync --extra ml           # scikit-learn + pyarrow for the Lab (training, model files, Parquet)
 ```
 
 ## Picking a source
@@ -160,6 +159,31 @@ default lookback wants ~48k M1 bars, about 5 weeks.
 
 The database also keeps the saved settings and the Telegram alert log.
 
+## Importing M1 history
+
+**Settings > History** shows how much M1 history is stored for the running source
+and symbol, and adds more. Early on there is little: Yahoo Finance and TradingView
+only give days of M1, so importing files is how to get months or years. More
+history lets the chart [scroll further back](#scrolling-back) and gives the
+[journal](journal.md) M1 prices to rebuild drawdown from.
+
+- **Stored history**: one row per month, one square per day. Paler squares
+  have fewer bars, outlined ones none, grey ones are weekends.
+- **Import a file**: M1 bars from an MT5 export (`<DATE> <TIME> <OPEN> ...`,
+  UTF-16 is fine), Dukascopy (`Gmt time,...`), HistData ASCII (`20240102
+  180000;...` or `2024.01.02,18:00,...`) or any CSV with a time column and
+  open, high, low, close, up to 500 MB. The preview shows the format, range and
+  first rows; nothing is stored until you confirm. Confirm the file's clock
+  (Dukascopy UTC, HistData UTC-5, an MT5 export the broker's server time) and
+  the times are moved to the feed's clock. Importing is an upsert on time, so a
+  file imported twice adds nothing.
+
+Use prices of the same market as the feed: spot gold for TradingView
+(`FX:XAUUSD`) or a spot CSV, COMEX futures for Yahoo Finance. Demo data is never
+stored, so there is nothing to add to: switch to another source first. The API
+is `GET /api/history` (coverage), `POST /api/history/import` (upload, returns the
+preview) and `POST /api/history/import/{token}` (confirm, with `clock`).
+
 ## Scrolling back
 
 The chart opens on the last `--lookback` candles of a timeframe, the ones the
@@ -169,7 +193,7 @@ memory first, then:
 
 - **Yahoo Finance, TradingView and CSV**: the M1 bars stored in the database, so as far back
   as the screener has been running (Yahoo itself only gives ~7 days of M1), or
-  as far as the files imported in [Lab > Data](lab.md#data).
+  as far as the [imported files](#importing-m1-history).
 - **Demo data**: only what is in memory.
 
 Older candles show prices only; levels are drawn from the latest scan.

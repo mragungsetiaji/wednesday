@@ -36,10 +36,10 @@ from .drawings import clean_drawing, drawing_payload
 from .drawing_alerts import clean_alert
 from .drawing_templates import DrawingTemplates, TemplateError
 from .engine import RECONNECT_ATTEMPTS, Engine, Runtime
-from .lab.api import lab_router
 from .journal.api import journal_router
 from .features import catalog as feature_catalog
 from .history import older_candles
+from .history_import import history_router
 from . import plugin_install
 from .plugins import PLUGIN_API, features, load_new_plugins, load_plugins
 from .quarters import NEW_YORK, quarter_blocks, quarters_payload, utc_to_feed
@@ -812,7 +812,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
             raise HTTPException(502, str(exc)) from exc
         return {"ok": True}
 
-    app.include_router(lab_router(lambda: runtime.lab if runtime else None, current, current_source, current_clock))
+    app.include_router(history_router(current, current_source, current_clock))
     # ---- chart snapshots (PNG), for the journal ----
     shots = snapshots or Snapshots()
 

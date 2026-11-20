@@ -74,7 +74,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
 
       - name: Install Python dependencies
-        run: uv sync --frozen --no-dev --extra desktop --extra llm --extra ml
+        run: uv sync --frozen --no-dev --extra desktop --extra llm
 
       - name: Build the server (PyInstaller)
         run: uv run --frozen --no-dev --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm

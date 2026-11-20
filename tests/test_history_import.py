@@ -1,4 +1,4 @@
-"""More M1 history (issue #12): file import in several formats, clock conversion, coverage."""
+"""More M1 history (issue #12): file import in several formats, clock conversion, coverage (/api/history)."""
 
 
 import numpy as np
@@ -8,8 +8,7 @@ from fastapi.testclient import TestClient
 
 from wednesday.detectors import DetectorParams
 from wednesday.engine import Runtime
-from wednesday.lab.bars import BarsFileError, import_bars, parse_bars
-from wednesday.lab.service import Lab
+from wednesday.history_import import BarsFileError, import_bars, parse_bars
 from wednesday.scanner import ScanConfig
 from wednesday.server import create_app
 from wednesday.settings import DataSettings
@@ -94,48 +93,48 @@ def test_utc_file_into_an_ny_plus_7_feed(tmp_path):
         import_bars(s, KEY, parse_bars(minute_file("2024-01-15 12:00", 2)), "Mars/Base", "UTC")
 
 
-def test_lab_history_spans_the_import_and_respects_its_size(tmp_path):
+def test_coverage_per_day(tmp_path):
     s = store(tmp_path)
     import_bars(s, KEY, parse_bars(minute_file("2023-01-02 00:00", 30_000)), "UTC", "UTC")
-    lab = Lab(s, tmp_path / "models", DetectorParams())
-    m1 = lab.history(*KEY, None)
-    assert len(m1) == 30_000 and m1.index[0] == pd.Timestamp("2023-01-02 00:00")
-    lab.set_history_bars(10_000)
-    assert len(lab.history(*KEY, None)) == 10_000  # the latest 10k
-    with pytest.raises(ValueError):
-        lab.set_history_bars(10)
-    assert Lab(s, tmp_path / "models", DetectorParams()).history_bars == 10_000  # saved
+    assert s.bar_bounds(*KEY)[0] == 30_000
     days = s.bar_days(*KEY)
     assert days[0] == (int(pd.Timestamp("2023-01-02").timestamp()), 1440) and sum(n for _, n in days) == 30_000
 
 
-def test_data_endpoints(tmp_path):
+def test_history_endpoints(tmp_path):
     s = store(tmp_path)
     csv = tmp_path / "feed.csv"
     csv.write_bytes(minute_file("2026-03-02 00:00", 300))
     cfg = ScanConfig(lookback=20, params=DetectorParams(swing_length=2))
-    runtime = Runtime(cfg, DataSettings(source="csv", csv_path=str(csv)), s,
-                      lab=Lab(s, tmp_path / "models", cfg.params))
+    runtime = Runtime(cfg, DataSettings(source="csv", csv_path=str(csv)), s)
     api = TestClient(create_app(runtime, ui_dir=tmp_path))
-    body = api.get("/api/lab/data").json()
-    assert body["can_import"] is True and "can_backfill" not in body and body["stored"]["bars"] == 0
+    body = api.get("/api/history").json()
+    assert body["can_import"] is True and body["stored"]["bars"] == 0 and "history_bars" not in body
 
-    staged = api.post("/api/lab/data/import", content=minute_file("2026-01-05 00:00", 2000)).json()
+    staged = api.post("/api/history/import", content=minute_file("2026-01-05 00:00", 2000)).json()
     assert staged["format"] == "csv" and staged["bars"] == 2000 and len(staged["sample"]) == 5
-    body = api.post(f"/api/lab/data/import/{staged['token']}", json={"clock": "UTC"}).json()
+    body = api.post(f"/api/history/import/{staged['token']}", json={"clock": "UTC"}).json()
     assert body["imported"]["added"] == 2000 and body["stored"]["bars"] == 2000
     assert [n for _, n in body["days"]] == [1440, 560]
-    assert api.post(f"/api/lab/data/import/{staged['token']}", json={}).status_code == 422  # used up
-    assert api.post("/api/lab/data/import", content=b"nonsense").status_code == 422
-
-    assert api.put("/api/lab/data", json={"history_bars": 50_000}).json()["history_bars"] == 50_000
-    assert api.put("/api/lab/data", json={"history_bars": 5}).status_code == 422
+    assert api.post(f"/api/history/import/{staged['token']}", json={}).status_code == 422  # used up
+    assert api.post("/api/history/import", content=b"nonsense").status_code == 422
 
 
 def test_demo_data_cannot_import(tmp_path):
     s = store(tmp_path)
     cfg = ScanConfig(lookback=20, params=DetectorParams(swing_length=2))
-    runtime = Runtime(cfg, DataSettings(source="synthetic"), s, lab=Lab(s, tmp_path / "models", cfg.params))
+    runtime = Runtime(cfg, DataSettings(source="synthetic"), s)
     api = TestClient(create_app(runtime, ui_dir=tmp_path))
-    assert api.get("/api/lab/data").json()["can_import"] is False
-    assert api.post("/api/lab/data/import", content=minute_file("2026-01-05 00:00", 5)).status_code == 409
+    assert api.get("/api/history").json()["can_import"] is False
+    assert api.post("/api/history/import", content=minute_file("2026-01-05 00:00", 5)).status_code == 409
+
+
+def test_import_needs_a_database(tmp_path):
+    csv = tmp_path / "feed.csv"
+    csv.write_bytes(minute_file("2026-03-02 00:00", 300))
+    cfg = ScanConfig(lookback=20, params=DetectorParams(swing_length=2))
+    runtime = Runtime(cfg, DataSettings(source="csv", csv_path=str(csv)), None)
+    api = TestClient(create_app(runtime, ui_dir=tmp_path))
+    assert api.get("/api/history").json()["can_import"] is False
+    res = api.post("/api/history/import", content=minute_file("2026-01-05 00:00", 5))
+    assert res.status_code == 409 and "database" in res.json()["detail"]

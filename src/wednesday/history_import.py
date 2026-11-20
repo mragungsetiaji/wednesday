@@ -1,6 +1,7 @@
-"""More M1 history for the Lab (and the chart): import CSV files.
+"""More M1 history: import M1 files into the stored bars (``/api/history``).
 
-Imports write into the stored bars of the running source and symbol, as an upsert
+Older bars give the chart more history to scroll back through and the journal's
+drawdown more M1 prices. Imports write into the stored bars of the running source and symbol, as an upsert
 on time, so importing a file twice or overlapping files adds nothing twice.
 
 File formats recognised:
@@ -18,23 +19,26 @@ from __future__ import annotations
 import io
 import logging
 import re
+import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import pandas as pd
+from fastapi import APIRouter, Body, HTTPException, Request
 
-from ..quarters import clock_error, convert_clock
-from ..timeframes import OHLCV_COLUMNS, normalize_ohlcv
+from .quarters import clock_error, convert_clock
+from .timeframes import OHLCV_COLUMNS, normalize_ohlcv
 
 if TYPE_CHECKING:
-    from ..storage import Store
+    from .engine import Engine
+    from .storage import Store
 
 log = logging.getLogger(__name__)
 
 MAX_IMPORT_BYTES = 500 * 1024 * 1024
-HISTORY_BARS_DEFAULT = 400_000  # about a year of M1 bars
-HISTORY_BARS_MAX = 2_000_000  # about five years; ~100 MB in memory
-LAB_DATA_KEY = "lab_data"
+DEMO_DATA = "Demo data isn't stored: switch to TradingView, Yahoo Finance or CSV first"
+NO_DATABASE = "Importing history needs a database: start the server without --db none"
 
 
 class BarsFileError(ValueError):
@@ -164,3 +168,86 @@ def import_bars(store: Store, key: tuple[str, str], parsed: ParsedBars, file_clo
     after, _, _ = store.bar_bounds(*key)
     return {"read": len(bars), "added": after - before, "first": bars.index[0].isoformat(),
             "last": bars.index[-1].isoformat(), "stored": after}
+
+
+class StagedImports:
+    """Uploaded files waiting for the trader to confirm them, by token (the last two only)."""
+
+    KEEP = 2
+
+    def __init__(self) -> None:
+        self._files: dict[str, ParsedBars] = {}
+
+    def stage(self, data: bytes) -> dict:
+        """Read an M1 file and keep it until :meth:`take`; returns the preview."""
+        parsed = parse_bars(data)
+        token = secrets.token_hex(8)
+        while len(self._files) >= self.KEEP:
+            self._files.pop(next(iter(self._files)))
+        self._files[token] = parsed
+        return {"token": token, **parsed.preview()}
+
+    def take(self, token: str) -> ParsedBars:
+        parsed = self._files.pop(token, None)
+        if parsed is None:
+            raise BarsFileError("That upload expired; choose the file again")
+        return parsed
+
+
+def history_router(get_engine: Callable[[], Engine], get_source: Callable[[], str],
+                   get_clock: Callable[[], str] = lambda: "UTC") -> APIRouter:
+    """``/api/history``: stored M1 coverage per day, and importing M1 files into it."""
+    r = APIRouter(prefix="/api/history")
+    staged = StagedImports()
+
+    def stream() -> tuple[Store, tuple[str, str]] | None:
+        """The store and key the running source's bars go under; None for demo data or no database."""
+        buffer = get_engine().buffer
+        return (buffer.store, buffer.key) if buffer.store is not None and buffer.key is not None else None
+
+    def need_stream() -> tuple[Store, tuple[str, str]]:
+        found = stream()
+        if found is None:
+            raise HTTPException(409, DEMO_DATA if get_engine().buffer.key is None else NO_DATABASE)
+        return found
+
+    def status() -> dict:
+        found = stream()
+        store, key = found if found else (None, None)
+        n, first, last = store.bar_bounds(*key) if found else (0, None, None)
+        return {
+            "source": get_source(), "symbol": get_engine().symbol, "clock": get_clock(),
+            "can_import": found is not None,
+            "stored": {"bars": n, "first_unix": first, "last_unix": last},
+            "days": store.bar_days(*key) if found else [],
+        }
+
+    @r.get("")
+    def get_history() -> dict:
+        """Stored M1 coverage of the running source and symbol, per day."""
+        return status()
+
+    @r.post("/import")
+    async def stage_import(request: Request) -> dict:
+        """Upload an M1 file (raw body); returns a preview. Nothing is stored until the confirm call."""
+        need_stream()
+        data = await request.body()
+        if len(data) > MAX_IMPORT_BYTES:
+            raise HTTPException(413, "The file is larger than 500 MB")
+        try:
+            return staged.stage(data)
+        except BarsFileError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @r.post("/import/{token}")
+    def confirm_import(token: str, body: dict = Body(...)) -> dict:
+        """Store a staged file's bars, moved from the file's clock (``clock``) to the feed's."""
+        store, key = need_stream()
+        try:
+            parsed = staged.take(token)
+            result = import_bars(store, key, parsed, str(body.get("clock") or get_clock()), get_clock())
+        except BarsFileError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        return {"imported": result, **status()}
+
+    return r

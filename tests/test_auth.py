@@ -76,7 +76,7 @@ def test_every_api_route_needs_a_login(client):
             guarded = res.status_code == 401 and res.json().get("detail") == "Log in first"
             assert guarded == (route.path not in PUBLIC), (method, route.path, res.status_code)
             seen += guarded
-    assert seen > 50  # lab, journal and the core routes are all in the walk
+    assert seen > 50  # journal, history import and the core routes are all in the walk
     for path in ("/api/docs", "/api/openapi.json", "/api/no-such-route"):
         assert client.get(path).status_code == 401
     assert client.get("/api/health").json()["ok"] is True

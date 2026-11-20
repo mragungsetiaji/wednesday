@@ -3,7 +3,7 @@
 Deterministic (a fixed seed), so tests and the docs screenshot come out the same
 every time. It makes the M1 bars along with the trades, since the drawdown is
 rebuilt from M1 and nobody's stored history covers these dates. The bars live
-under their own source key (``sample``), so the scanner, the Lab and real
+under their own source key (``sample``), so the scanner, the chart and real
 journals never read them. Every deal price sits inside its minute's bar.
 
 The numbers are synthetic: no account, strategy or broker produced them.

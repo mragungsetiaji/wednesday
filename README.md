@@ -28,10 +28,9 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **Sessions and reference levels**: killzones, the Asia range, previous day / week / month high and low, and the day, week, midnight and quarter opens, in New York time.
 - **Quarterly theory pane**: every weekday, session and 90-minute quarter as a block, coloured by direction or by quarter, with how often each one closed green.
 - **1, 2 or 4 charts** full screen with linked crosshairs, and charts in their own windows for other monitors, saved as workspaces.
-- **Lab**: tag candles by hand, train a model on your tags, and review the blocks it finds on the chart.
 - **Journal**: import an MT5 history report for gain, drawdown and the growth curve, with the drawdown rebuilt from M1 prices.
 - **Telegram alerts** when price trades into an order block.
-- **Free data**: Yahoo Finance by default, or spot gold from TradingView, no account needed; history in SQLite or PostgreSQL.
+- **Free data**: Yahoo Finance by default, or spot gold from TradingView, no account needed; history in SQLite or PostgreSQL, and M1 files (MT5, Dukascopy, HistData, CSV) imported for more.
 
 ## Why "Wednesday"
 

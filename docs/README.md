@@ -4,10 +4,9 @@
 | --- | --- |
 | [Detectors and the limit strategy](detectors.md) | Order blocks, liquidity, inducement, how limit setups are ranked |
 | [Dashboard](dashboard.md) | Chart, level ladder, panels, UI development |
-| [Data sources and storage](data-sources.md) | Yahoo Finance, TradingView, CSV, SQLite / PostgreSQL |
+| [Data sources and storage](data-sources.md) | Yahoo Finance, TradingView, CSV, importing M1 history, SQLite / PostgreSQL |
 | [Bias and news brief](bias.md) | Setting a bias, risk on / off labels, the LLM news brief |
 | [Position size](risk.md) | Lot size per setup from your risk, balance and lot rules |
-| [Lab: labels and models](lab.md) | Tag candles, train models, model files, reviewing model blocks, the dataset |
 | [Journal](journal.md) | MT5 report import, gain and drawdown rebuilt from prices, what is checked |
 | [Telegram alerts](alerts.md) | Setup and how entries into an order block are detected |
 | [Configuration](configuration.md) | Make targets, CLI options, `.env` |

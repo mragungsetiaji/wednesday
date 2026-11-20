@@ -11,8 +11,8 @@ import { RiskSettingsForm } from "./RiskSettingsForm";
 import { AlertsSettings } from "./AlertsSettings";
 import { BriefSettingsForm } from "./BriefSettingsForm";
 import { CalendarSettingsForm } from "./CalendarSettingsForm";
+import { HistoryImport } from "./HistoryImport";
 import { JournalSettings } from "./JournalSettings";
-import { LabSettings } from "./LabSettings";
 import { LlmUsageSettings } from "./LlmUsageSettings";
 
 const EMPTY: DataSettings = { source: "yfinance", symbol: null, csv_path: null, clock: null, tick_seconds: null };
@@ -32,15 +32,15 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const fmtTick = (s: number) => (s === 0 || s >= 60 ? "once a minute, with each scan" : `${s}s`);
 
-type Section = "data" | "risk" | "alerts" | "calendar" | "brief" | "llm" | "lab" | "journal" | "access" | "plan" | "plugins";
+type Section = "data" | "history" | "risk" | "alerts" | "calendar" | "brief" | "llm" | "journal" | "access" | "plan" | "plugins";
 const SECTIONS: { id: Section; title: string }[] = [
   { id: "data", title: "Data source" },
+  { id: "history", title: "History" },
   { id: "risk", title: "Risk" },
   { id: "alerts", title: "Telegram alerts" },
   { id: "calendar", title: "News calendar" },
   { id: "brief", title: "News brief" },
   { id: "llm", title: "LLM usage" },
-  { id: "lab", title: "Lab" },
   { id: "journal", title: "Journal" },
   { id: "access", title: "Access" },
   { id: "plan", title: "Plan" },
@@ -83,12 +83,12 @@ export function SettingsPage() {
       </nav>
       <div className="settings-content">
         <div hidden={section !== "data"}><DataSourceSettings /></div>
+        <div hidden={section !== "history"}><HistoryImport /></div>
         <div hidden={section !== "risk"}><RiskSettingsForm /></div>
         <div hidden={section !== "alerts"}><AlertsSettings /></div>
         <div hidden={section !== "calendar"}><CalendarSettingsForm /></div>
         <div hidden={section !== "brief"}><BriefSettingsForm /></div>
         <div hidden={section !== "llm"}><LlmUsageSettings /></div>
-        <div hidden={section !== "lab"}><LabSettings /></div>
         <div hidden={section !== "journal"}><JournalSettings /></div>
         <div hidden={section !== "access"}><AccessSettings /></div>
         <div hidden={section !== "plan"}><AccountSettings /></div>

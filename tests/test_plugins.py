@@ -35,13 +35,13 @@ def test_plugins_load_and_bad_ones_are_skipped(tmp_path, monkeypatch):
     by = {p["name"]: p for p in body["plugins"]}
     assert body["api"] == PLUGIN_API
     assert by["ee"]["loaded"] and by["ee"]["version"] == "0.1.0"
-    assert set(by["ee"]["features"]) == {"lab.signed_models", "llm.recap"}
+    assert set(by["ee"]["features"]) == {"llm.second_brain", "llm.recap"}
     assert not by["future"]["loaded"] and "API 99" in by["future"]["error"]
     assert not by["broken"]["loaded"] and "licence server down" in by["broken"]["error"]
     assert not by["broken"]["features"]
     assert "register" in by["junk"]["error"]
     assert "ModuleNotFoundError" in by["missing"]["error"] or "AttributeError" in by["missing"]["error"]
-    assert body["features"] == ["lab.signed_models", "llm.recap"]
+    assert body["features"] == ["llm.recap", "llm.second_brain"]
     # Routes live under /api/ee/<name>, and the rest of the app still works.
     assert api.get("/api/ee/ee/hello").json()["hello"] == "ee"
     assert api.get("/api/status").status_code == 200

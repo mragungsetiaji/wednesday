@@ -28,7 +28,6 @@ import { useIndicators } from "../indicatorPrefs";
 import type { DrawingCtl } from "../drawings";
 import { useLiveTick, type LiveFeed } from "../liveData";
 import { fmtPrice } from "../format";
-import { LabPrimitive, type LabMark } from "../labPrimitive";
 import { NewsPrimitive, type NewsMark } from "../newsPrimitive";
 import { QuartersPrimitive } from "../quartersPrimitive";
 import { NO_LEVELS, type LevelView } from "../refLevels";
@@ -92,9 +91,7 @@ interface Props {
   sync?: { bus: CrosshairLink; id: number }; // crosshair linked with other charts
   swings?: SwingPoint[]; // HH / LH / HL / LL labels at swing points, [] hides them
   news?: NewsMark[]; // high-impact releases as vertical lines, [] hides them
-  ml?: LabMark[]; // the active model's blocks, [] hides them
   levels?: LevelView; // killzones and reference levels (sessions.py)
-  mlHighlight?: string | null;
   onNeedOlder?: () => void; // the view reached the first candle: load older ones
   live?: LiveFeed | null; // live ticks: their forming M1 candle is folded into the last candle
   drawings?: DrawingCtl | null; // the trader's drawings, shown and edited here
@@ -109,7 +106,6 @@ interface Props {
 const ROW_PX = 22;
 const NO_SWINGS: SwingPoint[] = []; // stable defaults, so the effects don't rerun every render
 const NO_NEWS: NewsMark[] = [];
-const NO_ML: LabMark[] = [];
 /**
  * A chart's zoom and scroll, kept for the session (sessionStorage) so a chart built again (back from
  * Settings, out of full screen) opens where it was. Counted in bars back from the last closed candle,
@@ -295,7 +291,7 @@ function candleAt(times: number[], t: number): number {
 const FONT = getComputedStyle(document.documentElement).getPropertyValue("--font-ui").trim() || "system-ui, sans-serif";
 
 export function PriceChart({ candles, zones, events, highlight, palette, resetKey, loading, quarters, quarterRows, sync, swings = NO_SWINGS, news = NO_NEWS,
-  ml = NO_ML, mlHighlight = null, onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe, rangeLink = null, precision = 2, snapshotButton = true, viewKey }: Props) {
+  onNeedOlder, live = null, drawings = null, nav, levels = NO_LEVELS, timeframe, rangeLink = null, precision = 2, snapshotButton = true, viewKey }: Props) {
   counters.renders++; // the perf overlay's renders/s: panning and dragging a drawing should add none
   const liveBar = useLiveTick(live)?.bar ?? null; // only the chart re-renders on a tick, not its parent
   const containerRef = useRef<HTMLDivElement>(null);
@@ -306,7 +302,6 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const quarterSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const quartersRef = useRef<QuartersPrimitive | null>(null);
   const newsRef = useRef<NewsPrimitive | null>(null);
-  const mlRef = useRef<LabPrimitive | null>(null);
   const sessionsRef = useRef<SessionsPrimitive | null>(null);
   const editorRef = useRef<DrawingEditor | null>(null);
   const quarterPaneHeight = useRef(0);
@@ -365,10 +360,6 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     newsPrimitive.update({ font: FONT });
     series.attachPrimitive(newsPrimitive);
     newsRef.current = newsPrimitive;
-    const mlPrimitive = new LabPrimitive(palette);
-    mlPrimitive.update({ font: FONT });
-    series.attachPrimitive(mlPrimitive);
-    mlRef.current = mlPrimitive;
     markersRef.current = createSeriesMarkers(series, []);
     const quartersPrimitive = new QuartersPrimitive(palette);
     quartersPrimitive.update({ font: FONT });
@@ -498,7 +489,6 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     });
     quartersRef.current?.update({ palette });
     newsRef.current?.update({ palette });
-    mlRef.current?.update({ palette });
     sessionsRef.current?.update({ palette });
     editorRef.current?.update({ palette });
   }, [palette]);
@@ -793,10 +783,6 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   useEffect(() => {
     sessionsRef.current?.update({ view: levels, times: candles.map((c) => c.time), zoneNames: !quarterRows.includes("session") });
   }, [levels, candles, quarterRows]);
-
-  useEffect(() => {
-    mlRef.current?.update({ marks: ml, highlight: mlHighlight, times: candles.map((c) => c.time) });
-  }, [ml, mlHighlight, candles]);
 
   // Follow the linked charts: same time (the candle containing it on this timeframe), same price.
   useEffect(() => {

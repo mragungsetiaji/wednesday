@@ -30,7 +30,7 @@ filled before you hand over an account. The screenshots on this page are of it.
 The trades come from a generator with a fixed seed (`journal/sample.py`), so it
 is the same on every install. It makes the M1 bars too, since the drawdown is
 rebuilt from them: they are stored under the source `sample` (it shows under
-Settings, Storage), and only the sample reads them. The scanner, the Lab and your
+Settings, Storage), and only the sample reads them. The scanner, the chart and your
 own journals never do. Every entry and exit price sits inside its minute's bar,
 so the checks below pass the way they would for a real account.
 
@@ -163,8 +163,8 @@ The broker's deal clock and the price feed's clock can be hours apart. Unless
 you set the offset (Broker time offset in Settings, Journal), the journal tries every
 whole hour from −14 to +14 and uses the one where most deal prices fit their bars.
 Spot gold bars (TradingView's `FX:XAUUSD`, or your broker's M1 bars imported in
-[Lab > Data](lab.md#data)) line up best; Yahoo's `GC=F` is futures, priced
-differently from spot, so it won't match.
+[Settings > History](data-sources.md#importing-m1-history)) line up best; Yahoo's
+`GC=F` is futures, priced differently from spot, so it won't match.
 
 ## Trades
 

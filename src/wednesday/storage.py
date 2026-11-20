@@ -77,69 +77,6 @@ alerts_table = Table(
 )
 
 
-# ---- Lab (machine learning): hand-made labels, reviewed ranges, reviews of model output ----
-# Times are unix seconds of the feed's clock, like the bars.
-
-lab_labels_table = Table(
-    "lab_labels",
-    metadata,
-    Column("id", String(36), primary_key=True),
-    Column("symbol", String(64), nullable=False),
-    Column("timeframe", String(8), nullable=False),
-    Column("tag", String(32), nullable=False),
-    Column("value", Integer, nullable=False),  # 1 = it is one, 0 = explicitly not one
-    Column("start", BigInteger, nullable=False),  # open time of the first candle
-    Column("end", BigInteger, nullable=False),  # open time of the last candle
-    Column("top", Float, nullable=True),
-    Column("bottom", Float, nullable=True),
-    Column("origin", String(16), nullable=False),  # "manual", "detector" (accepted suggestion) or "review"
-    Column("created_at", String(40), nullable=False),
-    Column("updated_at", String(40), nullable=True),  # last write; null in rows from before 0.1.7
-    Column("changed_by", String(16), nullable=True),  # what made the last write: "manual", "review" or "import"
-)
-
-lab_reviewed_table = Table(
-    "lab_reviewed",
-    metadata,
-    Column("id", String(36), primary_key=True),
-    Column("symbol", String(64), nullable=False),
-    Column("timeframe", String(8), nullable=False),
-    Column("start", BigInteger, nullable=False),
-    Column("end", BigInteger, nullable=False),
-    Column("tags", Text, nullable=False),  # JSON list: tags fully labelled in this range
-    Column("created_at", String(40), nullable=False),
-)
-
-lab_reviews_table = Table(
-    "lab_reviews",
-    metadata,
-    Column("id", String(36), primary_key=True),
-    Column("symbol", String(64), nullable=False),
-    Column("model_id", String(64), nullable=False),
-    Column("timeframe", String(8), nullable=False),
-    Column("tag", String(32), nullable=False),
-    Column("time", BigInteger, nullable=False),  # open time of the candle the model flagged
-    Column("prob", Float, nullable=False),
-    Column("verdict", String(8), nullable=False),  # "valid" or "invalid"
-    Column("outcome", String(16), nullable=True),  # "win", "loss", "open", "untouched" (order blocks)
-    Column("r", Float, nullable=True),  # result in R when the trade finished
-    Column("created_at", String(40), nullable=False),
-)
-
-lab_runs_table = Table(
-    "lab_runs",
-    metadata,
-    Column("id", String(36), primary_key=True),
-    Column("symbol", String(64), nullable=False),
-    Column("started_at", String(40), nullable=False),
-    Column("finished_at", String(40), nullable=True),
-    Column("status", String(16), nullable=False),  # "running", "done", "error", "cancelled" or "interrupted"
-    Column("error", Text, nullable=True),
-    Column("model_id", String(64), nullable=True),
-    Column("params", Text, nullable=False),  # JSON: the TrainParams of the run
-)
-
-
 # ---- LLM usage: one row per call, for cost and the monthly budget ---------------------------
 
 llm_usage_table = Table(
@@ -196,15 +133,6 @@ journals_table = Table(
     Column("synced_at", String(40), nullable=True),
     Column("sample", Boolean, nullable=True),  # the made-up sample portfolio (journal/sample.py)
     Column("settings", Text, nullable=True),  # JSON: auto_sync, show_weekends (journal/service.py)
-)
-
-# Every time the trader sets or clears the bias, for the Lab's bias feature family.
-bias_history_table = Table(
-    "bias_history",
-    metadata,
-    Column("set_at", String(40), primary_key=True),  # ISO UTC
-    Column("direction", String(16), nullable=True),  # bullish / bearish / neutral; null = cleared
-    Column("expires_at", String(40), nullable=True),  # ISO UTC; null = until changed
 )
 
 calendar_events_table = Table(
@@ -555,79 +483,6 @@ class Store:
         with self.engine.connect() as conn:
             return [dict(r._mapping) for r in conn.execute(q)]
 
-    # ---- lab ------------------------------------------------------------
-    def lab_rows(self, table: Table, symbol: str, timeframe: str | None = None,
-                 start: int | None = None, end: int | None = None) -> list[dict]:
-        """Rows of a lab table for a symbol, optionally one timeframe and overlapping [start, end]."""
-        t = table
-        cond = [t.c.symbol == symbol]
-        if timeframe:
-            cond.append(t.c.timeframe == timeframe)
-        time_start, time_end = (t.c.time, t.c.time) if "time" in t.c else (t.c.start, t.c.end)
-        if end is not None:
-            cond.append(time_start <= end)
-        if start is not None:
-            cond.append(time_end >= start)
-        with self.engine.connect() as conn:
-            rows = [dict(r._mapping) for r in conn.execute(select(t).where(*cond).order_by(time_start))]
-        if table is lab_reviewed_table:
-            for r in rows:
-                r["tags"] = json.loads(r["tags"])
-        return rows
-
-    def lab_put(self, table: Table, row: dict) -> None:
-        if table is lab_reviewed_table:
-            row = {**row, "tags": json.dumps(row["tags"])}
-        self._upsert(table, [row], ["id"])
-
-    def lab_delete(self, table: Table, row_id: str) -> bool:
-        with self.engine.begin() as conn:
-            return conn.execute(table.delete().where(table.c.id == row_id)).rowcount > 0
-
-    def lab_get(self, table: Table, ids: list[str]) -> list[dict]:
-        """Rows of a lab table by id (any symbol)."""
-        rows: list[dict] = []
-        with self.engine.connect() as conn:
-            for i in range(0, len(ids), 500):
-                rows += [dict(r._mapping) for r in conn.execute(select(table).where(table.c.id.in_(ids[i : i + 500])))]
-        if table is lab_reviewed_table:
-            for r in rows:
-                r["tags"] = json.loads(r["tags"])
-        return rows
-
-    def lab_ids(self, table: Table, ids: list[str]) -> set[str]:
-        """Which of ``ids`` already exist in a lab table, whatever their symbol."""
-        found: set[str] = set()
-        with self.engine.connect() as conn:
-            for i in range(0, len(ids), 500):
-                found.update(r[0] for r in conn.execute(select(table.c.id).where(table.c.id.in_(ids[i : i + 500]))))
-        return found
-
-    def lab_run_put(self, row: dict, keep: int = 20) -> None:
-        """Save a training run and drop all but the ``keep`` newest."""
-        self._upsert(lab_runs_table, [{**row, "params": json.dumps(row["params"])}], ["id"])
-        t = lab_runs_table
-        with self.engine.begin() as conn:
-            old = [r[0] for r in conn.execute(select(t.c.id).order_by(t.c.started_at.desc()).offset(keep))]
-            if old:
-                conn.execute(t.delete().where(t.c.id.in_(old)))
-
-    def lab_runs(self, limit: int = 20) -> list[dict]:
-        """Training runs, newest first."""
-        t = lab_runs_table
-        with self.engine.connect() as conn:
-            rows = [dict(r._mapping) for r in conn.execute(select(t).order_by(t.c.started_at.desc()).limit(limit))]
-        for r in rows:
-            r["params"] = json.loads(r["params"])
-        return rows
-
-    def lab_runs_interrupted(self, finished_at: str) -> None:
-        """Runs still "running" from before a restart never finished; say so."""
-        t = lab_runs_table
-        with self.engine.begin() as conn:
-            conn.execute(t.update().where(t.c.status == "running").values(
-                status="interrupted", finished_at=finished_at, error="The server stopped during training"))
-
     # ---- drawings -------------------------------------------------------
     def drawings(self, source: str, symbol: str) -> list[dict]:
         t = drawings_table
@@ -688,15 +543,6 @@ class Store:
             q = q.where(t.c.time < before)
         with self.engine.connect() as conn:
             return [dict(r._mapping) for r in conn.execute(q.order_by(t.c.time.desc()))]
-
-    def bias_history_add(self, set_at: str, direction: str | None, expires_at: str | None) -> None:
-        self._upsert(bias_history_table, [{"set_at": set_at, "direction": direction, "expires_at": expires_at}], ["set_at"])
-
-    def bias_history(self) -> list[dict]:
-        """Every bias the trader set or cleared, oldest first."""
-        t = bias_history_table
-        with self.engine.connect() as conn:
-            return [dict(r._mapping) for r in conn.execute(select(t).order_by(t.c.set_at))]
 
     def calendar_bounds(self) -> tuple[int, int | None, int | None]:
         """Stored releases: count, first and last time (unix seconds)."""

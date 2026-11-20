@@ -23,7 +23,7 @@ def _register(ctx):
     ctx.provide("llm.recap")
 
 
-good = Plugin(name="ee", version="0.1.0", register=_register, features=["lab.signed_models"])
+good = Plugin(name="ee", version="0.1.0", register=_register, features=["llm.second_brain"])
 future = Plugin(name="future", api=99, register=_register)
 
 

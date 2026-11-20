@@ -12,7 +12,7 @@ Python or Node to set up.
    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
    git clone <repo-url> wednesday
    cd wednesday
-   uv sync --extra llm --extra ml
+   uv sync --extra llm
    copy .env.example .env
    ```
 
@@ -38,7 +38,7 @@ Python or Node to set up.
 
 ## 2. Production (Windows VPS)
 
-Do the same setup as above on the VPS (uv, `uv sync --extra llm --extra ml`, `.env`,
+Do the same setup as above on the VPS (uv, `uv sync --extra llm`, `.env`,
 `--check`). Then make it survive reboots and crashes:
 
 1. **Auto-login the VPS user.** The task below starts at logon of that user, so
@@ -138,7 +138,7 @@ Stop-ScheduledTask -TaskName "Wednesday"
 # if a python.exe from the bot is still alive, stop it (check the path before killing)
 Get-Process python -ErrorAction SilentlyContinue | Where-Object Path -like "*wednesday*" | Stop-Process
 git pull
-uv sync --extra llm --extra ml
+uv sync --extra llm
 cd web; npm install; npm run build; cd ..
 uv run wednesday --check
 Start-ScheduledTask -TaskName "Wednesday"

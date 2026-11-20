@@ -16,8 +16,6 @@ import { DrawingStyleBar } from "./components/DrawingStyleBar";
 import { DrawingToolbar } from "./components/DrawingToolbar";
 import { EventsPanel } from "./components/EventsPanel";
 import { JournalPage } from "./components/JournalPage";
-import { LabPage } from "./components/LabPage";
-import { MlPanel } from "./components/MlPanel";
 import { NewsAlert } from "./components/NewsAlert";
 import { ChartKeys } from "./components/ChartKeys";
 import { LevelsMenu } from "./components/LevelsMenu";
@@ -31,14 +29,12 @@ import { LiveTickerPrice } from "./components/TickerPrice";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtPrice } from "./format";
-import { BookIcon, ChartIcon, Direction, FlaskIcon, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
+import { BookIcon, ChartIcon, Direction, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
 import { TcIcon } from "./tcIcons";
 import { useChartSettings } from "./chartSettings";
 import { LayersMenu } from "./components/LayersMenu";
 import { ChartSettingsMenu, ChartTypeMenu, IndicatorsMenu, MoreMenu, SymbolInfo, ThemeButton } from "./components/ChartTopMenus";
 import { SnapshotMenu, type SnapshotSource } from "./components/SnapshotMenu";
-import { predictionMark } from "./labPrimitive";
-import { useMl } from "./mlData";
 import { usePref } from "./prefs";
 import { newsMarks } from "./newsPrimitive";
 import { buildRail } from "./rail";
@@ -68,13 +64,13 @@ function useOlderThan(since: number | null, ms: number): boolean {
   return old;
 }
 
-type View = "chart" | "journal" | "lab" | "settings" | "popout";
+type View = "chart" | "journal" | "settings" | "popout";
 const viewFromHash = (): View => {
   const h = window.location.hash;
   if (h === "#settings" || h.startsWith("#settings/")) return "settings";
   if (h === "#journal") return "journal";
   if (h.startsWith("#popout")) return "popout";
-  return h.startsWith("#lab") ? "lab" : "chart";
+  return "chart";
 };
 
 function useView(): [View, (v: View) => void] {
@@ -111,9 +107,6 @@ export default function App() {
   const upcomingNews = useMemo(() => calendar?.events ?? [], [calendar]);
   const allNews = useMemo(() => newsMarks(calendar?.week ?? []), [calendar]);
   const news = useMemo(() => (showNews ? allNews : []), [allNews, showNews]);
-  const [showMl, setShowMl] = usePref("wed.ml", false);
-  const [mlThreshold, setMlThreshold] = usePref("wed.mlCut", 0);
-  const [mlHot, setMlHot] = useState<string | null>(null);
   const [showRail, setShowRail] = usePref("wed.rail", true);
   const [focus, setFocus] = useState(false);
   const [quarters, setQuarters] = useState<QuartersResponse | null>(null);
@@ -153,9 +146,6 @@ export default function App() {
   const openSettings = useCallback(() => {
     window.location.hash = "settings/brief";
   }, []);
-  const openLab = useCallback(() => {
-    window.location.hash = "lab/models";
-  }, []);
 
   const version = data?.version ?? 0;
   const tradeBias = data?.trade_bias ?? null;
@@ -180,8 +170,6 @@ export default function App() {
 
   const [liveChart, loadOlder] = useCandles(tf, version, lookback, setFetchError);
   const chart = replaying ? replay.data : liveChart;
-  const [ml, refreshMl] = useMl(tf, version, showMl && view === "chart", mlThreshold, lookback);
-  const mlMarks = useMemo(() => (ml?.blocks ?? []).map(predictionMark), [ml]);
 
   useEffect(() => {
     if (!version) {
@@ -345,10 +333,6 @@ export default function App() {
             onClick={(e) => { e.preventDefault(); setView("journal"); }}>
             <BookIcon /> Journal
           </a>
-          <a href="#lab" className="nav-item" aria-current={view === "lab" ? "page" : undefined}
-            onClick={(e) => { e.preventDefault(); setView("lab"); }}>
-            <FlaskIcon /> Lab
-          </a>
           <a href="#settings" className="nav-item" aria-current={view === "settings" ? "page" : undefined}
             onClick={(e) => { e.preventDefault(); setView("settings"); }}>
             <SlidersIcon /> Settings
@@ -372,8 +356,6 @@ export default function App() {
 
       {view === "settings" ? (
         <SettingsPage />
-      ) : view === "lab" ? (
-        <LabPage palette={palette} />
       ) : view === "journal" ? (
         <JournalPage palette={palette} />
       ) : (
@@ -415,10 +397,6 @@ export default function App() {
                   { key: "swings", label: "Swings", on: showSwings, set: setShowSwings },
                   { key: "quarters", label: "Quarters", on: showQuarters, set: setShowQuarters },
                   { key: "news", label: "News", on: showNews, set: setShowNews },
-                  { key: "ml", label: "ML", title: "The active model's blocks, from the Lab", on: showMl, set: (v) => {
-                    setShowMl(v);
-                    if (v) setDockTab("ml"); // show the model's blocks to review right away
-                  } },
                 ]} />
                 <LevelsMenu value={levelGroupsOn} onChange={setLevelGroups} />
                 <span className="tb-sep" aria-hidden="true" />
@@ -473,8 +451,6 @@ export default function App() {
                 quarterRows={quarterRows}
                 swings={showSwings ? chart?.swings : undefined}
                 news={replaying ? undefined : news}
-                ml={showMl && !replaying ? mlMarks : undefined}
-                mlHighlight={mlHot}
                 levels={levels}
                 live={live}
                 drawings={drawings}
@@ -497,7 +473,6 @@ export default function App() {
                   {showNews && <li><span className="key key-news" /> High-impact news</li>}
                   {quarterRows.length > 0 && <li><span className="key key-quarter" /> {chartSettings.quarterColors === "quarter"
                     ? "Quarters: a colour per Q, edge green closed up" : "Quarters: green closed up"}</li>}
-                  {showMl && <li><span className="key key-ml" /> Model block (probability)</li>}
                   {levels.killzones.length > 0 && <li><span className="key key-killzone" /> Killzones</li>}
                   {levels.lines.length > 0 && <li><span className="key key-reflevel" /> Session levels, faint once swept</li>}
                   <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
@@ -521,14 +496,6 @@ export default function App() {
                   },
                   ...(quarters ? [{ id: "quarters", label: "Quarters", content: <QuartersPanel quarters={quarters} /> }] : []),
                   { id: "distribution", label: "Distribution", content: <DistributionPanel version={version} /> },
-                  ...(showMl && ml ? [{
-                    id: "ml",
-                    label: "Model",
-                    content: (
-                      <MlPanel tf={tf} ml={ml} threshold={mlThreshold} onThreshold={setMlThreshold} onReviewed={refreshMl}
-                        onHighlight={setMlHot} onOpenLab={openLab} />
-                    ),
-                  }] : []),
                 ]} />
               )}
             </section>

@@ -393,7 +393,7 @@ class Runtime:
 
     def __init__(self, cfg: ScanConfig, settings: DataSettings, store: Store | None = None,
                  delay: float = 2.0, on_result=None, alerts=None, brief=None,
-                 calendar=None, lab=None, journals=None, poll: bool = True):
+                 calendar=None, journals=None, poll: bool = True):
         self.cfg = cfg
         self.poll = poll  # False: every engine scans once and stops (--no-poll)
         self.store = store
@@ -405,7 +405,6 @@ class Runtime:
         # LLM usage log and budget, shared by the brief and plugins' LLM features.
         self.usage = brief.usage if brief is not None else UsageLog(store)
         self.calendar = calendar  # news.Calendar or None
-        self.lab = lab  # lab.service.Lab or None (needs a database)
         self.journals = journals  # journal.service.Journals or None (needs a database)
         self.hooks = Hooks()  # filled by plugins (see plugins.py)
         self.bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
@@ -433,9 +432,6 @@ class Runtime:
                 self.store.set_setting(BIAS_KEY, bias.to_dict())
             else:
                 self.store.delete_setting(BIAS_KEY)
-            # Kept for the Lab's bias feature family; the bias itself stays the trader's call.
-            self.store.bias_history_add(bias.set_at if bias and bias.set_at else datetime.now(timezone.utc).isoformat(),
-                                        bias.direction if bias else None, bias.expires_at if bias else None)
 
     def sizer(self) -> Sizer | None:
         """Position sizing from Settings > Risk; None when off."""

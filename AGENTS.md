@@ -8,7 +8,7 @@ its levels by hand. It suggests; it never places trades.
 ## Commands
 
 ```bash
-make install     # uv sync --extra llm --extra ml, plus npm install in web/
+make install     # uv sync --extra llm, plus npm install in web/
 make test        # uv run pytest -q
 make typecheck   # tsc -b in web/
 make test-ui     # node --test on web/src/*.test.ts (Node 22.18+)
@@ -46,9 +46,9 @@ page comes from `http://127.0.0.1:<port>`. Run `make test-tauri` after changes t
 
 ## Rules that matter here
 
-- **Only closed candles.** Resampling drops the candle still forming and features in
-  `lab/` are causal. A detector or feature that reads the forming bar, or any future
-  bar, gives signals that look good in history and fail live.
+- **Only closed candles.** Resampling drops the candle still forming. A detector that
+  reads the forming bar, or any future bar, gives signals that look good in history
+  and fail live.
 - **The bias is the trader's call.** `bias.py` is set by hand; the LLM brief
   (`brief.py`) only offers a suggestion the trader applies with a click. Don't make
   anything set the bias, or trade, on its own.
@@ -80,9 +80,8 @@ page comes from `http://127.0.0.1:<port>`. Run `make test-tauri` after changes t
   than assuming UTC.
 - **Storage runs on SQLite and PostgreSQL.** Go through `storage.py` (SQLAlchemy); no
   SQLite-only SQL.
-- **Optional extras stay optional.** `anthropic`/`openai` and
-  `scikit-learn`/`pyarrow` are extras; import them inside the function that needs
-  them so the core runs without them, and report a missing one as an install hint
+- **Optional extras stay optional.** `anthropic`/`openai` are extras; import them
+  inside the function that needs them so the core runs without them, and report a missing one as an install hint
   (see `brief.py`).
 - **Paid features live in the sibling `../wednesday-ee` plugin** (private repo),
   loaded through the `wednesday.plugins` entry point (`docs/plugins.md`). The core

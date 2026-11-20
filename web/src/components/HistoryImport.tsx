@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  confirmBars, fetchLabData, saveLabHistory, stageBars,
-  type BarsImported, type BarsPreview, type LabData,
+  confirmHistoryImport, fetchHistory, stageHistoryImport,
+  type HistoryImported, type HistoryPreview, type HistoryStatus,
 } from "../api";
 import { fmtPrice } from "../format";
 
 const FULL_DAY = 1380; // M1 bars in a full gold trading day (23 hours)
-const FORMATS: Record<BarsPreview["format"], string> = {
+const FORMATS: Record<HistoryPreview["format"], string> = {
   mt5: "MT5 export", dukascopy: "Dukascopy", histdata: "HistData", csv: "CSV",
 };
 
 const day = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
-const monthsOf = (bars: number) => Math.round(bars / (FULL_DAY * 5 * 4.33));
 
 interface Month {
   key: string; // YYYY-MM
@@ -48,7 +47,7 @@ function months(days: [number, number][]): Month[] {
   return out.reverse();
 }
 
-function Coverage({ data }: { data: LabData }) {
+function Coverage({ data }: { data: HistoryStatus }) {
   const rows = useMemo(() => months(data.days), [data.days]);
   if (!rows.length) return <p className="empty">No stored bars for {data.source} {data.symbol} yet.</p>;
   return (
@@ -71,13 +70,13 @@ function Coverage({ data }: { data: LabData }) {
   );
 }
 
-/** Lab > Data: how much M1 history is stored, and ways to add more. */
-export function LabData({ onChanged }: { onChanged: () => void }) {
-  const [data, setData] = useState<LabData | null>(null);
+/** Settings > History: how much M1 history is stored, and importing files to add more. */
+export function HistoryImport() {
+  const [data, setData] = useState<HistoryStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    fetchLabData()
+    fetchHistory()
       .then((d) => {
         setData(d);
         setError(null);
@@ -95,7 +94,7 @@ export function LabData({ onChanged }: { onChanged: () => void }) {
   const s = data.stored;
 
   return (
-    <div className="lab-data">
+    <div className="history-import">
       <section className="settings-form" aria-labelledby="coverage-h">
         <div className="settings-intro">
           <h2 id="coverage-h">Stored history</h2>
@@ -106,25 +105,26 @@ export function LabData({ onChanged }: { onChanged: () => void }) {
                 ({data.clock}). Each square is a day; paler means fewer bars, grey is a weekend.</>
               : data.can_import
                 ? "Nothing stored yet. Bars are stored as the screener runs; import a file to go further back."
-                : "Demo data isn't stored. Switch to TradingView, Yahoo Finance or CSV in Settings to keep and add history."}
+                : data.source === "synthetic"
+                  ? "Demo data isn't stored. Switch to TradingView, Yahoo Finance or CSV in Data source to keep and add history."
+                  : "History isn't stored without a database. Start the server without --db none to keep and add history."}
           </p>
         </div>
         <Coverage data={data} />
       </section>
 
-      {data.can_import && <Import data={data} onData={setData} onChanged={onChanged} />}
-      <HistorySize data={data} onData={setData} onChanged={onChanged} />
+      {data.can_import && <Import data={data} onData={setData} />}
     </div>
   );
 }
 
-function Import({ data, onData, onChanged }: { data: LabData; onData: (d: LabData) => void; onChanged: () => void }) {
+function Import({ data, onData }: { data: HistoryStatus; onData: (d: HistoryStatus) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [staged, setStaged] = useState<BarsPreview | null>(null);
+  const [staged, setStaged] = useState<HistoryPreview | null>(null);
   const [clock, setClock] = useState("UTC");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<BarsImported | null>(null);
+  const [done, setDone] = useState<HistoryImported | null>(null);
 
   const choose = async (file: File | undefined) => {
     if (!file) return;
@@ -132,7 +132,7 @@ function Import({ data, onData, onChanged }: { data: LabData; onData: (d: LabDat
     setError(null);
     setDone(null);
     try {
-      const p = await stageBars(file);
+      const p = await stageHistoryImport(file);
       setStaged(p);
       setClock(p.suggested_clock ?? data.clock);
     } catch (e) {
@@ -146,11 +146,10 @@ function Import({ data, onData, onChanged }: { data: LabData; onData: (d: LabDat
     if (!staged) return;
     setBusy(true);
     try {
-      const res = await confirmBars(staged.token, clock.trim());
+      const res = await confirmHistoryImport(staged.token, clock.trim());
       setDone(res.imported);
       setStaged(null);
       onData(res);
-      onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -230,43 +229,5 @@ function Import({ data, onData, onChanged }: { data: LabData; onData: (d: LabDat
         </div>
       )}
     </section>
-  );
-}
-
-function HistorySize({ data, onData, onChanged }: { data: LabData; onData: (d: LabData) => void; onChanged: () => void }) {
-  const [bars, setBars] = useState(data.history_bars);
-  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      onData(await saveLabHistory(bars));
-      setMessage({ kind: "ok", text: "Saved." });
-      onChanged();
-    } catch (err) {
-      setMessage({ kind: "error", text: err instanceof Error ? err.message : String(err) });
-    }
-  };
-  return (
-    <form className="settings-form" onSubmit={save} aria-labelledby="history-size-h">
-      <div className="settings-intro">
-        <h2 id="history-size-h">History the Lab uses</h2>
-        <p>The latest stored M1 bars loaded for labelling, training and the dataset. More history means more examples, more memory.</p>
-      </div>
-      <label className="field field-narrow">
-        <span className="field-label">M1 bars</span>
-        <input type="number" min={10000} max={data.history_bars_max} step={10000} value={bars}
-          onChange={(e) => setBars(Number(e.target.value))} />
-        <span className="field-hint">
-          About {monthsOf(bars)} months of trading, ~{Math.round((bars * 48) / 1e6)} MB in memory. Up to{" "}
-          {data.history_bars_max.toLocaleString()}.
-        </span>
-      </label>
-      <div className="form-actions">
-        <button type="submit" className="button secondary" disabled={bars === data.history_bars}>Save</button>
-        <span className="form-status" role="status">
-          {message && <span className={message.kind === "error" ? "text-error" : undefined}>{message.text}</span>}
-        </span>
-      </div>
-    </form>
   );
 }

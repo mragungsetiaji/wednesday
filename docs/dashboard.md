@@ -25,7 +25,7 @@ found on it:
 The timeframe tabs carry each timeframe's structure direction (↑ / ↓). Beside
 them, the **Layers** menu switches the detectors (**Order blocks**, **Liquidity**,
 **Inducement**) and the overlays (**Mid OBs**, **HTF**, **Swings**, **Quarters**,
-**News**, **ML**) on and off.
+**News**) on and off.
 
 The button at the far right of the chart's top bar hides the right pane
 (bias, levels, structure and events) so the chart takes the full width, and
@@ -122,7 +122,7 @@ once, each where it sits in the grid with its timeframe on it, and one footer.
 The chart's top bar holds, left to right: the symbol and its info (source, bar
 times, candles, last scan), the timeframes (an arrow shows each one's bias), the
 chart type, **Indicators**, **Layers** (the detectors and overlays: Mid OBs, HTF, Swings,
-Quarters, News, ML), **Sessions**, undo and redo, **Workspace**, bar replay (▶) and
+Quarters, News), **Sessions**, undo and redo, **Workspace**, bar replay (▶) and
 the link button. At the right end: the camera (copy, save or attach a picture of
 the chart), chart settings, the light / dark switch, the pop-out, full screen and
 levels-pane buttons, and **⋯** (follow the system's theme again, the keyboard
@@ -378,12 +378,12 @@ decide candle by candle as you would have live.
   as it ran live, so the ladder, setups and structure are what you'd have seen
   then; the candle still forming at the clock is built from its minutes so far.
   Today's bias isn't applied to the past.
-- The quarters pane, killzones, session levels, news lines and the model layer
+- The quarters pane, killzones, session levels and news lines
   come from the live data, so they're off during replay. Full screen and
   pop-out wait until you exit.
 - The status reads **Replay** instead of Live. **Exit replay** returns to the live chart.
 
-How far back it can go depends on the stored M1 history (Settings, Lab, Data
+How far back it can go depends on the stored M1 history ([Settings > History](data-sources.md#importing-m1-history)
 imports more from files).
 
 ## Charts in their own windows
@@ -491,13 +491,6 @@ at the top (see [Full screen and multiple charts](#full-screen-and-multiple-char
 
 ![A 15M chart with the killzones shaded and the previous day, week and month levels, the Asia range and the opens drawn](images/sessions.png)
 
-## Model layer (ML)
-
-**ML** above the chart shows the active model from the [Lab](lab.md): each block
-the model finds on the chart's timeframe, as a dashed outline with its
-probability, and a **Model** tab under the chart listing them with ✓ / ✕
-to mark them valid or invalid. Without an active model the panel links to the Lab.
-
 ## Level ladder
 
 Beside the chart, the **Levels** ladder lists what matters around price in the
@@ -529,7 +522,6 @@ the open tab again to close it):
 - **All timeframes**: the nearest level above and below per detector and timeframe.
 - **Quarters**: how often each weekday, session and 90-minute quarter closed green.
 - **Distribution**: how unusual the current move is (below).
-- **Model**: the active model's blocks, when **ML** is on.
 
 ### Move distribution
 

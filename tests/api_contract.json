@@ -22,47 +22,6 @@
     "weekday?"
    ]
   },
-  "GET /api/lab/backtest": {
-   "query": [
-    "filter?",
-    "format?",
-    "from?",
-    "horizon?",
-    "min_win?",
-    "rr?",
-    "tf?",
-    "to?"
-   ]
-  },
-  "GET /api/lab/candles": {
-   "query": [
-    "end?",
-    "limit?",
-    "model?",
-    "tf?"
-   ]
-  },
-  "GET /api/lab/dataset": {
-   "query": [
-    "days?",
-    "format?"
-   ]
-  },
-  "GET /api/lab/predictions": {
-   "query": [
-    "limit?",
-    "tf?",
-    "threshold?"
-   ]
-  },
-  "GET /api/lab/queue": {
-   "query": [
-    "limit?",
-    "scope?",
-    "tag?",
-    "tf?"
-   ]
-  },
   "GET /api/markets/candles": {
    "query": [
     "before?",
@@ -145,6 +104,15 @@
     "zone?"
    ]
   },
+  "POST /api/history/import/{token}": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
   "POST /api/journals": {
    "body": {
     "application/json": {
@@ -164,89 +132,6 @@
    }
   },
   "POST /api/journals/{journal_id}/trades/{trade_id}/images": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "POST /api/lab/batch": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "POST /api/lab/compare": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "POST /api/lab/data/import/{token}": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "POST /api/lab/labels": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "POST /api/lab/labels/import/{token}": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "default": {},
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "POST /api/lab/models/import/{token}": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "default": {},
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "POST /api/lab/reviewed": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "POST /api/lab/reviews": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "POST /api/lab/train": {
    "body": {
     "application/json": {
      "additionalProperties": true,
@@ -319,33 +204,6 @@
    }
   },
   "PUT /api/journals/{journal_id}/trades/{trade_id}/note": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "PUT /api/lab/active": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "PUT /api/lab/data": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "PUT /api/lab/trust": {
    "body": {
     "application/json": {
      "additionalProperties": true,
@@ -635,6 +493,18 @@
    "ok": "bool",
    "version": "string"
   },
+  "GET /api/history": {
+   "can_import": "bool",
+   "clock": "string",
+   "days": [],
+   "source": "string",
+   "stored": {
+    "bars": "number",
+    "first_unix": "null",
+    "last_unix": "null"
+   },
+   "symbol": "string"
+  },
   "GET /api/journals": {
    "available": "bool",
    "journals": [
@@ -809,257 +679,6 @@
   "GET /api/journals/{journal_id}/trades.csv": {
    "content-type": "text/csv",
    "status": 200
-  },
-  "GET /api/lab": {
-   "active": "null",
-   "available": "bool",
-   "counts": {},
-   "editable": "bool",
-   "families": [
-    {
-     "id": "string",
-     "title": "string"
-    }
-   ],
-   "history": {
-    "bars": "number",
-    "first_unix": "number",
-    "last_unix": "number"
-   },
-   "models": [],
-   "reason": "null",
-   "runs": [],
-   "symbol": "string",
-   "tags": [
-    {
-     "id": "string",
-     "shape": "string",
-     "title": "string"
-    }
-   ],
-   "training": {
-    "cancelled": "bool",
-    "error": "null",
-    "last": "null",
-    "running": "bool",
-    "stage": "null",
-    "started_at": "null"
-   }
-  },
-  "GET /api/lab/backtest": {
-   "equity": [
-    [
-     "number"
-    ]
-   ],
-   "params": {
-    "clock": "string",
-    "filter": "string",
-    "from_unix": "null",
-    "history": {
-     "first_unix": "number",
-     "last_unix": "number"
-    },
-    "horizon_hours": "number",
-    "max_sl": "number",
-    "min_win": "null",
-    "model_id": "null",
-    "rr": "number",
-    "timeframe": "string",
-    "to_unix": "null"
-   },
-   "splits": {
-    "direction": [
-     {
-      "avg_r": "number",
-      "fill_rate": "number",
-      "filled": "number",
-      "finished": "number",
-      "key": "string",
-      "max_dd_r": "number",
-      "total_r": "number",
-      "trades": "number",
-      "win_rate": "number",
-      "wins": "number"
-     }
-    ],
-    "priority": [
-     {
-      "avg_r": "number",
-      "fill_rate": "number",
-      "filled": "number",
-      "finished": "number",
-      "key": "string",
-      "max_dd_r": "number",
-      "total_r": "number",
-      "trades": "number",
-      "win_rate": "number",
-      "wins": "number"
-     }
-    ],
-    "session": [
-     {
-      "avg_r": "number",
-      "fill_rate": "number",
-      "filled": "number",
-      "finished": "number",
-      "key": "string",
-      "max_dd_r": "number",
-      "total_r": "number",
-      "trades": "number",
-      "win_rate": "number",
-      "wins": "number"
-     }
-    ],
-    "swing": [
-     {
-      "avg_r": "number",
-      "fill_rate": "number",
-      "filled": "number",
-      "finished": "number",
-      "key": "string",
-      "max_dd_r": "number",
-      "total_r": "number",
-      "trades": "number",
-      "win_rate": "number",
-      "wins": "number"
-     }
-    ],
-    "weekday": [
-     {
-      "avg_r": "number",
-      "fill_rate": "number",
-      "filled": "number",
-      "finished": "number",
-      "key": "string",
-      "max_dd_r": "number",
-      "total_r": "number",
-      "trades": "number",
-      "win_rate": "number",
-      "wins": "number"
-     }
-    ]
-   },
-   "summary": {
-    "avg_r": "number",
-    "fill_rate": "number",
-    "filled": "number",
-    "finished": "number",
-    "max_dd_r": "number",
-    "total_r": "number",
-    "trades": "number",
-    "win_rate": "number",
-    "wins": "number"
-   },
-   "trades": [
-    {
-     "bottom": "number",
-     "direction": "string",
-     "entry": "number",
-     "equity_r?": "number",
-     "exit_unix": "number",
-     "id": "string",
-     "outcome": "string",
-     "priority": "string",
-     "r": "number",
-     "session": "string",
-     "start_unix": "number",
-     "stop": "number",
-     "swing": "string",
-     "target": "number",
-     "time_unix": "number",
-     "top": "number",
-     "weekday": "string",
-     "win_prob": "null"
-    }
-   ]
-  },
-  "GET /api/lab/candles": {
-   "candles": [
-    {
-     "close": "number",
-     "high": "number",
-     "low": "number",
-     "open": "number",
-     "time": "number"
-    }
-   ],
-   "has_more": "bool",
-   "history": {
-    "bars": "number",
-    "first_unix": "number",
-    "last_unix": "number"
-   },
-   "is_latest": "bool",
-   "labels": [],
-   "predictions": [],
-   "reviewed": [],
-   "suggestions": [
-    {
-     "bottom": "number",
-     "id": "string",
-     "label": "string",
-     "priority": "string",
-     "tag": "string",
-     "time_unix": "number",
-     "top": "number"
-    }
-   ],
-   "timeframe": "string"
-  },
-  "GET /api/lab/data": {
-   "can_import": "bool",
-   "clock": "string",
-   "days": [],
-   "history_bars": "number",
-   "history_bars_max": "number",
-   "source": "string",
-   "stored": {
-    "bars": "number",
-    "first_unix": "null",
-    "last_unix": "null"
-   },
-   "symbol": "string"
-  },
-  "GET /api/lab/dataset": {
-   "content-type": "application/vnd.apache.parquet",
-   "status": 200
-  },
-  "GET /api/lab/feedback": {
-   "content-type": "text/csv",
-   "status": 200
-  },
-  "GET /api/lab/labels/export": {
-   "exported_at": "string",
-   "format": "string",
-   "labels": [],
-   "reviewed": [],
-   "symbol": "string",
-   "version": "number"
-  },
-  "GET /api/lab/predictions": {
-   "blocks": [],
-   "model": "null"
-  },
-  "GET /api/lab/queue": {
-   "body": {
-    "detail": "string"
-   },
-   "status": 409
-  },
-  "GET /api/lab/scorecard": {
-   "scorecard": "null"
-  },
-  "GET /api/lab/trust": {
-   "keys": [
-    {
-     "builtin": "bool",
-     "key_id": "string",
-     "name": "string",
-     "public_key": "string"
-    }
-   ],
-   "only_signed": "bool"
   },
   "GET /api/licence": {
    "available": "bool"
@@ -1461,25 +1080,7 @@
         "active_count": "number",
         "below": "null",
         "inside": [],
-        "recent": [
-         {
-          "bottom": "number",
-          "confirmed_time": "string",
-          "detector": "string",
-          "ended_time": "string",
-          "ended_time_unix": "number",
-          "kind": "string",
-          "label": "string",
-          "meta": {
-           "bos_time": "string",
-           "grab": "bool"
-          },
-          "time": "string",
-          "time_unix": "number",
-          "top": "number",
-          "touches": "number"
-         }
-        ]
+        "recent": []
        },
        "liquidity": {
         "above": {
@@ -1910,25 +1511,7 @@
         "active_count": "number",
         "below": "null",
         "inside": [],
-        "recent": [
-         {
-          "bottom": "number",
-          "confirmed_time": "string",
-          "detector": "string",
-          "ended_time": "string",
-          "ended_time_unix": "number",
-          "kind": "string",
-          "label": "string",
-          "meta": {
-           "bos_time": "string",
-           "grab": "bool"
-          },
-          "time": "string",
-          "time_unix": "number",
-          "top": "number",
-          "touches": "number"
-         }
-        ]
+        "recent": []
        },
        "liquidity": {
         "above": {
@@ -2267,6 +1850,9 @@
   "DELETE /api/drawings/{drawing_id}/alert",
   "PUT /api/drawings/{drawing_id}/alert",
   "GET /api/health",
+  "GET /api/history",
+  "POST /api/history/import",
+  "POST /api/history/import/{token}",
   "GET /api/journals",
   "POST /api/journals",
   "POST /api/journals/sample",
@@ -2282,37 +1868,6 @@
   "POST /api/journals/{journal_id}/trades/{trade_id}/images",
   "DELETE /api/journals/{journal_id}/trades/{trade_id}/images/{snapshot_id}",
   "PUT /api/journals/{journal_id}/trades/{trade_id}/note",
-  "GET /api/lab",
-  "PUT /api/lab/active",
-  "GET /api/lab/backtest",
-  "POST /api/lab/batch",
-  "GET /api/lab/candles",
-  "POST /api/lab/compare",
-  "GET /api/lab/data",
-  "PUT /api/lab/data",
-  "POST /api/lab/data/import",
-  "POST /api/lab/data/import/{token}",
-  "GET /api/lab/dataset",
-  "GET /api/lab/feedback",
-  "POST /api/lab/labels",
-  "GET /api/lab/labels/export",
-  "POST /api/lab/labels/import",
-  "POST /api/lab/labels/import/{token}",
-  "DELETE /api/lab/labels/{label_id}",
-  "POST /api/lab/models/import",
-  "POST /api/lab/models/import/{token}",
-  "DELETE /api/lab/models/{model_id}",
-  "GET /api/lab/models/{model_id}/file",
-  "GET /api/lab/predictions",
-  "GET /api/lab/queue",
-  "POST /api/lab/reviewed",
-  "DELETE /api/lab/reviewed/{row_id}",
-  "POST /api/lab/reviews",
-  "GET /api/lab/scorecard",
-  "DELETE /api/lab/train",
-  "POST /api/lab/train",
-  "GET /api/lab/trust",
-  "PUT /api/lab/trust",
   "DELETE /api/licence",
   "GET /api/licence",
   "PUT /api/licence",

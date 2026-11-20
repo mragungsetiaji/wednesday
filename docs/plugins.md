@@ -36,7 +36,7 @@ def register(ctx):
     ctx.add_job("recap", 3600, lambda: ...)
     ctx.provide("llm.recap")                     # e.g. only when a licence allows it
 
-plugin = Plugin(name="ee", version="0.1.0", api=1, register=register, features=["lab.signed_models"])
+plugin = Plugin(name="ee", version="0.1.0", api=1, register=register, features=["journal.multi"])
 ```
 
 The entry point can name any object with `register(ctx)` and `api`; `name`,
@@ -53,7 +53,7 @@ The entry point can name any object with `register(ctx)` and `api`; `name`,
 | `ctx.provide(*features)` | Add feature ids at runtime |
 | `ctx.snapshot()` | `(version, scan result, M1 bars)` of the running engine |
 | `ctx.store` | The database (`storage.Store`) |
-| `ctx.runtime` | The `engine.Runtime`: settings, bias, calendar, brief, lab |
+| `ctx.runtime` | The `engine.Runtime`: settings, bias, calendar, brief, journals |
 | `ctx.llm_usage` | The shared LLM usage log and budget: call `guard(feature, scheduled=True)` before an LLM request (raises `llm_usage.BudgetExceeded` over the monthly budget) and `record(feature, provider, model, usage, scheduled=True)` after it with the response's token counts ([bias.md](bias.md#cost-and-the-monthly-budget)) |
 
 Hooks and jobs are isolated: an exception is logged and never stops the scan
@@ -96,8 +96,7 @@ stays with whoever signs. A free user never gets Wednesday EE's code: the licenc
 server hands it out only for a usable key.
 
 Free, with or without a licence: the screener, alerts, the bias, the news card,
-the news brief with your own API key, labelling and training your own models, and one
-journal.
+the news brief with your own API key, importing M1 history, and one journal.
 
 ## Versioning
 
@@ -121,4 +120,4 @@ Users don't install it by hand: entering a licence key downloads it (above).
 Code in a plugin is installed on the user's machine, where it can be read.
 Keeping it in a private repository, and handing it out only for a licence key,
 keeps it away from free users, not from whoever has a licence. Anything that must be enforced (licences for
-hosted services, model downloads) belongs on a server the plugin talks to.
+hosted services, downloads) belongs on a server the plugin talks to.

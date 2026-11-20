@@ -122,7 +122,7 @@ class PluginContext:
 
     def __init__(self, app: FastAPI, runtime, info: PluginInfo):
         self.app = app
-        self.runtime = runtime  # engine snapshots, store, bias, calendar, brief, lab (see engine.Runtime)
+        self.runtime = runtime  # engine snapshots, store, bias, calendar, brief, journals (see engine.Runtime)
         self._info = info
 
     @property

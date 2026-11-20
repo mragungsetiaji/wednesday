@@ -745,306 +745,18 @@ export interface RiskResponse {
 export const fetchRisk = () => getJson<RiskResponse>("/api/risk");
 export const saveRisk = (s: RiskSettings) => send<RiskResponse>("PUT", "/api/risk", s);
 
-// ---- Lab: labels, training, models, reviews ----
+// ---- History: M1 files imported into the stored bars ----
 
-export type LabShape = "body" | "high" | "low";
-export interface LabTag {
-  id: string; // ob_bull, ob_bear, bsl, ssl, idm_bull, idm_bear
-  title: string;
-  shape: LabShape;
-}
-
-export interface LabLabel {
-  id: string;
-  timeframe: string;
-  tag: string;
-  value: 0 | 1; // 1 = it is one, 0 = marked "not"
-  start: number; // open time of the first candle (unix, feed clock)
-  end: number;
-  top: number | null;
-  bottom: number | null;
-  origin: "manual" | "detector" | "review";
-  created_at: string;
-  updated_at?: string | null; // null on labels from before 0.1.7
-  changed_by?: "manual" | "review" | "import" | null;
-}
-
-export interface LabReviewed {
-  id: string;
-  timeframe: string;
-  start: number;
-  end: number;
-  tags: string[];
-  created_at?: string;
-}
-
-export interface LabSuggestion {
-  id: string;
-  tag: string;
-  time_unix: number;
-  top: number;
-  bottom: number;
-  label: string;
-  priority: "extreme" | "middle" | null;
-}
-
-export interface MlBlock {
-  id: string;
-  tag: string;
-  title: string;
-  timeframe: string;
-  time_unix: number;
-  available_unix: number; // when the model could call it (close of the confirming candles)
-  prob: number;
-  top: number;
-  bottom: number;
-  outcome_prob: number | null; // order blocks: chance the limit reaches the target before the stop
-  model_id?: string;
-  verdict?: "valid" | "invalid" | null;
-  outcome?: string | null;
-  why?: WhyPart[]; // the feature families that moved its probability most; empty for older model files
-}
-
-/** A feature family and how much it moved a block's probability (set to its training median). */
-export interface WhyPart { id: string; title: string; delta: number }
-
-export interface LabWindow {
-  timeframe: string;
-  candles: Candle[];
-  labels: LabLabel[];
-  reviewed: LabReviewed[];
-  suggestions: LabSuggestion[];
-  predictions: MlBlock[];
-  has_more: boolean;
-  is_latest: boolean;
-  history: { first_unix: number; last_unix: number; bars: number } | null;
-}
-
-export interface TagMetrics {
-  title?: string;
-  samples: number;
-  positives: number;
-  skipped?: string;
-  trained?: boolean;
-  threshold?: number; // probability cut tuned before the held-out part
-  test_samples?: number;
-  test_positives?: number;
-  test_from?: string | null;
-  precision?: number;
-  recall?: number;
-  auc?: number;
-  avg_precision?: number;
-  base_rate?: number;
-  avg_r_all?: number;
-  avg_r_picked?: number | null;
-  picked?: number;
-  from_labels?: number;
-  from_detector?: number;
-  importance?: Importance | null;
-  test_to?: string;
-  train_samples?: number;
-  // Walk-forward: the scores above are means over these folds (files from before 0.1.7 have none).
-  folds?: TagMetrics[];
-  folds_asked?: number;
-  spread?: Partial<Record<"precision" | "recall" | "auc" | "avg_r_all" | "avg_r_picked", number>>;
-}
-
-/** Held-out AUC lost when a feature family, or one feature, is shuffled. */
-export interface Importance {
-  metric: "auc";
-  base: number;
-  families: { id: string; title: string; drop: number }[];
-  features: { name: string; label: string; drop: number }[];
-}
-
-export interface TrainingRun {
-  id: string;
-  symbol: string;
-  started_at: string;
-  finished_at: string | null;
-  status: "running" | "done" | "error" | "cancelled" | "interrupted";
-  error: string | null;
-  model_id: string | null;
-  params: Partial<TrainParams>;
-}
-
-export interface ModelManifest {
-  id: string;
-  name: string;
-  author: string;
-  note: string;
-  created_at: string;
-  symbol: string;
-  timeframes: string[];
-  tags: Record<string, TagMetrics>;
-  outcome: TagMetrics | null;
-  params: {
-    lookback: number; confirm: number; rr: number; horizon_hours: number; max_sl: number;
-    folds?: number; gap_minutes?: number;
-  };
-  data: { first: string; last: string; m1_bars: number; labels: number };
-  feed?: { source: string; clock: string }; // missing in files from before 0.1.7
-  signature?: Signature; // in the Models list only
-  sklearn: string;
-  sha256: string;
-}
-
-export interface TrainParams {
-  timeframes: string[];
-  tags: string[];
-  lookback: number;
-  confirm: number;
-  rr: number;
-  horizon_hours: number;
-  outcome_from_detector: boolean;
-  test_fraction: number;
-  folds: number;
-  families: string[]; // optional feature families, e.g. "quarters"
-  name: string;
-  author: string;
-  note: string;
-}
-
-export interface LabStatus {
-  editable: boolean;
-  available: boolean;
-  reason: string | null;
-  symbol?: string;
-  history?: { first_unix: number; last_unix: number; bars: number } | null;
-  tags?: LabTag[];
-  families?: { id: string; title: string }[]; // optional feature families the Train form offers
-  counts?: Record<string, { tags: Record<string, { yes: number; no: number }>; reviewed: number }>;
-  training?: {
-    running: boolean; stage: string | null; error: string | null; last: ModelManifest | null; started_at: string | null;
-    cancelled: boolean;
-  };
-  runs?: TrainingRun[];
-  models?: ModelManifest[];
-  active?: string | null;
-}
-
-export const fetchLab = () => getJson<LabStatus>("/api/lab");
-/** Review queue: candles where the active model is least sure, closest to a tag's cut first. */
-export interface LabQueueItem { id: string; tag: string; title: string; time_unix: number; prob: number; cut: number; distance: number }
-export interface LabQueue { model_id: string; timeframe: string; total: number; items: LabQueueItem[]; note: string | null }
-export type QueueScope = "all" | "inside" | "outside";
-export const fetchLabQueue = (tf: string, tag: string, scope: QueueScope, limit = 200) =>
-  getJson<LabQueue>(`/api/lab/queue?tf=${encodeURIComponent(tf)}&scope=${scope}&limit=${limit}${tag ? `&tag=${encodeURIComponent(tag)}` : ""}`);
-
-export const fetchLabWindow = (tf: string, end: number | null, limit: number, model: boolean) =>
-  getJson<LabWindow>(`/api/lab/candles?tf=${encodeURIComponent(tf)}&limit=${limit}&model=${model}${end ? `&end=${end}` : ""}`);
-export const addLabel = (l: { timeframe: string; tag: string; start: number; end: number; value: 0 | 1; top?: number | null; bottom?: number | null; origin?: string }) =>
-  send<LabLabel>("POST", "/api/lab/labels", l);
-export const deleteLabel = (id: string) => send<{ deleted: boolean }>("DELETE", `/api/lab/labels/${encodeURIComponent(id)}`);
-export const addReviewed = (r: { timeframe: string; start: number; end: number; tags: string[] }) =>
-  send<LabReviewed>("POST", "/api/lab/reviewed", r);
-export const deleteReviewed = (id: string) => send<{ deleted: boolean }>("DELETE", `/api/lab/reviewed/${encodeURIComponent(id)}`);
-export const startTraining = (p: TrainParams) => send<LabStatus>("POST", "/api/lab/train", p);
-export const cancelTraining = () => send<LabStatus>("DELETE", "/api/lab/train");
-export const setActiveModel = (id: string | null) => send<LabStatus>("PUT", "/api/lab/active", { id });
-export const deleteModel = (id: string) => send<LabStatus>("DELETE", `/api/lab/models/${encodeURIComponent(id)}`);
-export const modelFileUrl = (id: string) => `/api/lab/models/${encodeURIComponent(id)}/file`;
-export const confirmImport = (token: string, trust: boolean) =>
-  send<LabStatus & { imported: ModelManifest }>("POST", `/api/lab/models/import/${token}`, { trust });
-
-/** Who signed a model file: a trusted key, an unknown one, nobody, or a signature that doesn't match. */
-export interface Signature {
-  state: "trusted" | "unknown" | "unsigned" | "invalid";
-  key_id: string | null;
-  signer: string | null;
-  reason: string | null;
-}
-export interface TrustedKey { name: string; public_key: string; key_id?: string; builtin?: boolean }
-export interface TrustSettings { keys: TrustedKey[]; only_signed: boolean }
-export const fetchTrust = () => getJson<TrustSettings>("/api/lab/trust");
-export const saveTrust = (t: TrustSettings) => send<TrustSettings>("PUT", "/api/lab/trust", t);
-
-async function upload<T>(url: string, file: File): Promise<T> {
-  const res = await apiFetch(url, { method: "POST", body: file });
-  if (!res.ok) {
-    let detail = `${res.status} ${res.statusText}`;
-    try {
-      detail = (await res.json()).detail ?? detail;
-    } catch {
-      /* not JSON */
-    }
-    throw new Error(detail);
-  }
-  return res.json();
-}
-
-export interface StagedModel {
-  token: string;
-  manifest: ModelManifest;
-  exists: boolean;
-  signature: Signature;
-  only_signed: boolean; // only models signed by a trusted key may load
-  warnings: string[]; // how the model's training feed differs from this one
-}
-export const stageImport = (file: File) => upload<StagedModel>("/api/lab/models/import", file);
-
-export interface MergeCounts { new: number; updated: number; skipped: number }
-export interface StagedLabels {
-  token: string;
-  symbol: string; // the symbol the file was exported from
-  matches: boolean;
-  labels: MergeCounts;
-  reviewed: MergeCounts;
-}
-/** Several label / reviewed-range changes at once (bulk edits, undo and redo). Rows with an id are put back as given. */
-export interface LabBatch {
-  add_labels?: Partial<LabLabel>[];
-  delete_labels?: string[];
-  add_reviewed?: Partial<LabReviewed>[];
-  delete_reviewed?: string[];
-}
-export interface LabBatchResult {
-  labels: LabLabel[];
-  reviewed: LabReviewed[];
-  deleted_labels: LabLabel[];
-  deleted_reviewed: LabReviewed[];
-}
-export const labBatch = (b: LabBatch) => send<LabBatchResult>("POST", "/api/lab/batch", b);
-
-/** Scores of several models on the same window (after the newest one's training data). */
-export interface WindowScores {
-  from: string;
-  to: string;
-  timeframes: string[];
-  models: Record<string, { tags: Record<string, TagMetrics>; outcome: TagMetrics | null }>;
-}
-export const scoreOnSameWindow = (ids: string[]) => send<WindowScores>("POST", "/api/lab/compare", { ids });
-
-export interface Scorecard {
-  model_id: string;
-  since: string; // UTC ISO, when the model was turned on
-  min_samples: number;
-  reviews: { n: number; valid: number; rate: number | null; expected: number | null; low: boolean };
-  market: { calls: number; finished: number; wins: number; avg_r: number | null; expected: number | null; low: boolean };
-  inputs: { timeframe: string; input: string; title: string; trained: number[]; live: number; ratio: number; shifted: boolean }[] | null;
-  warnings: string[];
-}
-export const fetchScorecard = () => getJson<{ scorecard: Scorecard | null }>("/api/lab/scorecard");
-
-export const labelsExportUrl = "/api/lab/labels/export";
-export const stageLabels = (file: File) => upload<StagedLabels>("/api/lab/labels/import", file);
-export const confirmLabels = (token: string, mapSymbol: boolean) =>
-  send<LabStatus & { imported: { labels: MergeCounts; reviewed: MergeCounts } }>(
-    "POST", `/api/lab/labels/import/${token}`, { map_symbol: mapSymbol });
-// ---- Lab > Data: more M1 history ----
-
-export interface LabData {
+export interface HistoryStatus {
   source: string;
   symbol: string;
   clock: string; // the feed's clock; imported bars are moved to it
   can_import: boolean;
   stored: { bars: number; first_unix: number | null; last_unix: number | null };
   days: [number, number][]; // [day (unix midnight), M1 bars]
-  history_bars: number;
-  history_bars_max: number;
 }
 
-export interface BarsPreview {
+export interface HistoryPreview {
   token: string;
   format: "mt5" | "dukascopy" | "histdata" | "csv";
   suggested_clock: string | null;
@@ -1054,7 +766,7 @@ export interface BarsPreview {
   sample: { time: string; open: number; high: number; low: number; close: number; volume: number }[];
 }
 
-export interface BarsImported {
+export interface HistoryImported {
   read: number;
   added: number;
   first: string;
@@ -1062,12 +774,10 @@ export interface BarsImported {
   stored: number;
 }
 
-export const fetchLabData = () => getJson<LabData>("/api/lab/data");
-export const saveLabHistory = (history_bars: number) => send<LabData>("PUT", "/api/lab/data", { history_bars });
-export const confirmBars = (token: string, clock: string) =>
-  send<LabData & { imported: BarsImported }>("POST", `/api/lab/data/import/${token}`, { clock });
-export async function stageBars(file: File): Promise<BarsPreview> {
-  const res = await apiFetch("/api/lab/data/import", { method: "POST", body: file });
+export const fetchHistory = () => getJson<HistoryStatus>("/api/history");
+/** Uploads an M1 file and returns a preview; nothing is stored until confirmHistoryImport. */
+export async function stageHistoryImport(file: File): Promise<HistoryPreview> {
+  const res = await apiFetch("/api/history/import", { method: "POST", body: file });
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
     try {
@@ -1079,12 +789,8 @@ export async function stageBars(file: File): Promise<BarsPreview> {
   }
   return res.json();
 }
-
-export const fetchPredictions = (tf: string, limit: number, threshold: number) =>
-  getJson<{ model: { id: string; name: string } | null; blocks: MlBlock[] }>(
-    `/api/lab/predictions?tf=${encodeURIComponent(tf)}&limit=${limit}&threshold=${threshold}`);
-export const reviewBlock = (b: MlBlock, verdict: "valid" | "invalid") =>
-  send<{ verdict: string; outcome: string | null }>("POST", "/api/lab/reviews", { ...b, verdict });
+export const confirmHistoryImport = (token: string, clock: string) =>
+  send<HistoryStatus & { imported: HistoryImported }>("POST", `/api/history/import/${token}`, { clock });
 
 // ---- Plugins (e.g. the paid wednesday-ee package) ----
 
@@ -1334,34 +1040,3 @@ export const fetchApiTokens = () => getJson<{ tokens: ApiToken[] }>("/api/auth/t
 export const createApiToken = (name: string) => send<ApiToken & { token: string }>("POST", "/api/auth/tokens", { name });
 export const revokeApiToken = (id: string) => send<{ tokens: ApiToken[] }>("DELETE", `/api/auth/tokens/${encodeURIComponent(id)}`);
 
-/** Lab > Backtest: every detector order block traded with the limit plan. */
-export type BacktestFilter = "all" | "model" | "labels";
-export interface BacktestSummary {
-  trades: number; filled: number; finished: number; wins: number;
-  fill_rate: number | null; win_rate: number | null; avg_r: number | null; total_r: number; max_dd_r: number;
-}
-export interface BacktestTrade {
-  id: string; time_unix: number; start_unix: number; exit_unix: number | null;
-  direction: "bullish" | "bearish"; priority: string; swing: string; session: string; weekday: string;
-  top: number; bottom: number; entry: number; stop: number; target: number;
-  outcome: "win" | "loss" | "open" | "untouched"; r: number | null; win_prob: number | null; equity_r?: number;
-}
-export interface BacktestParams {
-  tf: string; from: number | null; to: number | null; rr: number; horizon: number; filter: BacktestFilter; min_win: number;
-}
-export interface BacktestResult {
-  params: { timeframe: string; rr: number; horizon_hours: number; max_sl: number; filter: BacktestFilter; min_win: number | null;
-    model_id: string | null; clock: string; history: { first_unix: number; last_unix: number } };
-  summary: BacktestSummary;
-  splits: Record<string, (BacktestSummary & { key: string })[]>;
-  equity: [number, number][];
-  trades: BacktestTrade[];
-}
-export const backtestUrl = (p: BacktestParams, format: "json" | "csv" = "json") => {
-  const q = new URLSearchParams({ tf: p.tf, rr: String(p.rr), horizon: String(p.horizon), filter: p.filter,
-    min_win: String(p.min_win), format });
-  if (p.from) q.set("from", String(p.from));
-  if (p.to) q.set("to", String(p.to));
-  return `/api/lab/backtest?${q}`;
-};
-export const runBacktest = (p: BacktestParams) => getJson<BacktestResult>(backtestUrl(p));

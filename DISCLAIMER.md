@@ -7,7 +7,7 @@ not agree, do not use it.
 
 Wednesday is a charting and screening tool. Its order blocks, liquidity levels,
 limit setups, entries and stops, RISK ON / RISK OFF labels, Telegram alerts,
-news briefs, suggested biases, Lab models and journal figures are the output of
+news briefs, suggested biases and journal figures are the output of
 software rules and, for the news brief, of third-party AI models. They are not
 financial, investment, trading, tax or legal advice, not a recommendation to buy
 or sell anything, and not a solicitation. The author is not a licensed financial

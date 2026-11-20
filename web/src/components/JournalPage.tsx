@@ -128,11 +128,11 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
   });
 
   if (!list) {
-    return <main className="lab-page"><p className="empty">{error ? `Can't load the journal: ${error}` : "Loading the journal…"}</p></main>;
+    return <main className="content-page"><p className="empty">{error ? `Can't load the journal: ${error}` : "Loading the journal…"}</p></main>;
   }
   if (!list.available) {
     return (
-      <main className="lab-page">
+      <main className="content-page">
         <div className="settings-intro">
           <h2>Journal</h2>
           <p>The journal needs the server running with --serve and a database.</p>
@@ -142,7 +142,7 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
   }
   if (!selected) {
     return (
-      <main className="lab-page">
+      <main className="content-page">
         <div className="settings-form journal-start">
           <div className="settings-intro">
             <h2>Start a journal</h2>
@@ -164,7 +164,7 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
   }
 
   return (
-    <main className="lab-page journal-page">
+    <main className="content-page journal-page">
       <JournalHead journal={selected} journals={journals} onPick={setCurrent} />
       {(error || notice) && (
         <p className={error ? "banner" : "journal-notice"} role={error ? "alert" : "status"}>{error ?? notice}</p>
@@ -474,7 +474,7 @@ function Trades({ journalId, stats, onSaved }: { journalId: string; stats: Journ
                 )}
               </tr>,
               open === t.id && (
-                <tr key={`${t.id}-note`} id={`note-${t.id}`} className="lab-scores-row">
+                <tr key={`${t.id}-note`} id={`note-${t.id}`} className="journal-note-row">
                   <td colSpan={cols}>
                     <NoteEditor journalId={journalId} trade={t} onClose={() => close(t.id)}
                       onSaved={() => { close(t.id); onSaved(); }} onChanged={onSaved} />

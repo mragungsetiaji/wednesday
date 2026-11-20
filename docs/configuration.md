@@ -74,5 +74,4 @@ bars are fetched each minute.
 | `XAU_AUTH_PASSWORD`, `XAU_AUTH_PASSWORD_HASH` | Dashboard login ([deploy-windows.md](deploy-windows.md#opening-it-from-a-phone-or-laptop-login--https)); the hash wins when both are set |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Telegram alerts; fallback when not set in Settings |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | News brief ([bias.md](bias.md)); fallback when not set in Settings |
-| `XAU_MODELS_DIR` | Where the Lab keeps model files (default `data/models`, see [lab.md](lab.md)) |
 | `XAU_LOG_FILE`, `XAU_JSON_OUT` | Logs and JSON lines output |

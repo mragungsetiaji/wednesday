@@ -32,7 +32,6 @@ from wednesday.brief import BriefRunner
 from wednesday.detectors import DetectorParams
 from wednesday.engine import Runtime
 from wednesday.journal.service import Journals
-from wednesday.lab.service import Lab
 from wednesday.news import Calendar
 from wednesday.scanner import ScanConfig
 from wednesday.server import create_app
@@ -66,7 +65,7 @@ def client(tmp_path, monkeypatch):
     cfg = ScanConfig(lookback=100, params=DetectorParams(swing_length=3))
     runtime = Runtime(cfg, DataSettings(source="synthetic"), store, alerts=AlertManager(store, None),
                       calendar=Calendar(store),
-                      brief=BriefRunner(store), lab=Lab(store, str(tmp_path / "models"), cfg.params),
+                      brief=BriefRunner(store),
                       journals=Journals(store, sample=True), poll=False)
     runtime.engine.step()
     # With the login on, so its routes answer too; the client stays logged in.
@@ -218,13 +217,13 @@ def build(client) -> dict:
         if any(n not in ids for n in names):
             continue
         res = client.get(re.sub(r"\{(\w+)\}", lambda m: str(ids[m.group(1)]), path), params=queries.get(path))
-        # A route that needs more set up (an active Lab model) answers 409 here: its status is the contract.
+        # A route that needs more set up answers 409 here: its status is the contract.
         assert res.status_code in (200, 409), (path, res.status_code, res.text[:200])
         kind = res.headers["content-type"].split(";")[0]
         if kind == "application/json":
             body = shape(res.json())
             responses[f"GET {path}"] = body if res.status_code == 200 else {"status": res.status_code, "body": body}
-        else:  # a file (CSV, a model): its type is the contract
+        else:  # a file (CSV, an image): its type is the contract
             responses[f"GET {path}"] = {"status": res.status_code, "content-type": kind}
     return {
         "routes": [f"{m} {p}" for m, p in routes],
