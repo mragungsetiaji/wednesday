@@ -27,7 +27,7 @@ from .journal.market import freeze
 from .markets import MarketError, Markets, clean_symbol
 from .replay import ReplayCache, view as replay_view
 from .workspaces import WorkspaceError, Workspaces
-from .news import CALENDAR_KEY, CalendarSettings
+from .news import CalendarSettings
 from .news_stats import CalendarImportError, NewsReactions, event_key, history_summary, parse_csv
 from .drawings import clean_drawing, drawing_payload
 from .drawing_alerts import clean_alert
@@ -562,12 +562,13 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     def put_calendar(body: dict = Body(...)) -> dict:
         if not runtime or runtime.calendar is None:
             raise HTTPException(409, "The calendar is only available when the server runs with --serve")
-        new = CalendarSettings.from_dict(body)
+        try:
+            new = CalendarSettings.from_dict(body)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
         if errors := new.validate():
             raise HTTPException(422, "; ".join(errors))
-        if runtime.store:
-            runtime.store.set_setting(CALENDAR_KEY, new.to_dict())
-        runtime.calendar.settings = new
+        runtime.calendar.settings = new  # saved in the store too
         return {"editable": True, **with_chart_times(runtime.calendar.snapshot())}
 
     def settings_payload() -> dict:

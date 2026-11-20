@@ -13,7 +13,7 @@ from pathlib import Path
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, parse_detectors
 from .alerts import ALERTS_KEY, AlertManager, AlertSettings, TelegramClient, TelegramError, telegram_client
 from .journal.service import Journals
-from .news import CALENDAR_KEY, Calendar, CalendarSettings
+from .news import Calendar
 from .engine import Runtime
 from .settings import ALL_SOURCES, SETTINGS_KEY, resolve
 from .storage import DEFAULT_DB_URL, Store
@@ -207,7 +207,7 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
     if alerts.configured:
         log.info("telegram alerts %s for %s, %s OBs", "on" if alert_settings.enabled else "paused",
                  ",".join(alert_settings.timeframes), "/".join(alert_settings.priorities))
-    calendar = Calendar(store, CalendarSettings.from_dict(store.get_setting(CALENDAR_KEY) if store else None))
+    calendar = Calendar(store)  # its settings are read from the store
     journals = Journals(store) if store else None
     runtime = Runtime(cfg, data, store, args.delay, publish, alerts, calendar, journals=journals,
                       poll=args.poll)

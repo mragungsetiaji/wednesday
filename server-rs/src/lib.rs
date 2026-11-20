@@ -12,6 +12,7 @@
 //! Routes that keep their data in the database ([`store`]) are served here only when this server
 //! could open the same database as Python; otherwise they go to Python like the rest.
 
+pub mod calendar;
 pub mod config;
 pub mod pyjson;
 pub mod scan;
@@ -44,6 +45,7 @@ pub const PORTED: &[&str] = &[
     "GET /api/drawing-templates",
     "PUT /api/drawing-templates/{family}/{name}",
     "DELETE /api/drawing-templates/{family}/{name}",
+    "PUT /api/calendar",
 ];
 
 /// The version the dashboard and `/api/health` report; `scripts/set_version.py` keeps it in step.
@@ -68,6 +70,7 @@ pub fn app(backend: SocketAddr, store: Option<Store>) -> Router {
         .route("/api/workspaces/{name}", get(workspace_get).put(workspace_put).delete(workspace_delete))
         .route("/api/drawing-templates", get(templates_list))
         .route("/api/drawing-templates/{family}/{name}", axum::routing::put(template_put).delete(template_delete))
+        .route("/api/calendar", axum::routing::put(calendar_put).fallback(forward))
         .route_layer(axum::middleware::map_response(served_here))
         .fallback(forward)
         .with_state(App { backend, client, store })
@@ -247,6 +250,35 @@ async fn template_delete(State(app): State<App>, Path((family, name)): Path<(Str
 }
 
 /// Liveness for proxies and monitors; the only route open without a login.
+// ---- calendar settings (calendar.rs) ----
+
+/// Check and save the settings here, then answer with Python's calendar, which reads them from
+/// the same database: the events, the chart times and the past reactions are still Python's.
+async fn calendar_put(State(app): State<App>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    let mut headers = req.headers().clone();
+    let body = match object_body(req).await {
+        Ok(body) => body,
+        Err(res) => return res,
+    };
+    if let Err(e) = calendar::save(&store, &body).await {
+        return answer(Err(e));
+    }
+    headers.remove(header::CONTENT_LENGTH);
+    headers.remove(header::CONTENT_TYPE);
+    let mut get = Request::new(Body::empty());
+    *get.uri_mut() = Uri::from_static("/api/calendar");
+    *get.headers_mut() = headers;
+    let mut res = forward(State(app), get).await;
+    if res.status().is_success() {
+        res.headers_mut().insert(SERVED_BY, HeaderValue::from_static("rust"));
+    }
+    res
+}
+
 async fn health() -> Json<serde_json::Value> {
     Json(json!({"ok": true, "version": VERSION}))
 }

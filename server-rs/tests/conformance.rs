@@ -168,7 +168,26 @@ fn steps() -> Vec<(&'static str, String, Option<Value>)> {
     for i in 0..21 {
         s.push(("PUT", format!("/api/workspaces/w{i}"), Some(json!({}))));
     }
+    // Calendar settings, on a URL nothing answers so neither server reaches the internet.
+    let url = "http://127.0.0.1:9/calendar.json";
+    for body in [json!({"url": url}),
+                 json!({"url": format!(" {url} "), "currencies": [" usd ", "", "eur"], "impacts": ["High", "Medium"]}),
+                 json!({"url": url, "enabled": 0}), json!({"url": url, "enabled": "no"}), json!({"url": url, "enabled": null}),
+                 json!({"url": "ftp://x", "impacts": ["Huge", "it's", "tab\t"], "currencies": [" "]}),
+                 json!({"url": 5}), json!({"url": "   "}), json!({"currencies": "USD"}), json!({"currencies": [1]}),
+                 json!({"impacts": null}), json!({"impacts": "High"}), json!([1]),
+                 json!({"url": url, "currencies": ["gbp"], "impacts": ["Low"], "enabled": true})] {
+        s.push(("PUT", "/api/calendar".into(), Some(body)));
+    }
     s
+}
+
+/// What both calendars answer alike: the rest (fetch time, errors, loading) is the live fetch's.
+fn calendar_part(v: &Value) -> Value {
+    match v.get("settings") {
+        Some(settings) => json!({"editable": v["editable"], "settings": settings}),
+        None => v.clone(),
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -192,7 +211,12 @@ async fn the_ported_routes_answer_as_python_does() {
         let p = call(python, method, &path, &cookie, body.as_ref()).await;
         let r = call(rust, method, &path, &cookie, body.as_ref()).await;
         // FastAPI's own validation errors are a list; Rust gives the same status and its own list.
-        let same_body = p.body["detail"].is_array() || without_saved_at(&p.body) == without_saved_at(&r.body);
+        let same_body = p.body["detail"].is_array()
+            || if path == "/api/calendar" {
+                calendar_part(&p.body) == calendar_part(&r.body)
+            } else {
+                without_saved_at(&p.body) == without_saved_at(&r.body)
+            };
         if p.status != r.status || !same_body {
             failures.push(format!("{method} {path}\n    python {} {}\n    rust   {} {}", p.status, p.body, r.status, r.body));
         }
@@ -201,7 +225,7 @@ async fn the_ported_routes_answer_as_python_does() {
 
     // And stored the same: each database's settings, read back.
     let python_store = Store::open(&format!("sqlite:///{}", dir.join("python.db").display()), &dir).await.unwrap();
-    for key in ["workspaces", "drawing_templates"] {
+    for key in ["workspaces", "drawing_templates", "calendar"] {
         let p = python_store.get_setting(key).await.unwrap();
         let r = rust_store.get_setting(key).await.unwrap();
         assert_eq!(p.as_ref().map(without_saved_at), r.as_ref().map(without_saved_at), "{key}");

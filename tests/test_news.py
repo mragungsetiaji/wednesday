@@ -80,6 +80,12 @@ def test_calendar_api(tmp_path, monkeypatch):
     assert api.put("/api/calendar", json={"impacts": ["Huge"]}).status_code == 422
     saved = api.put("/api/calendar", json={"currencies": ["USD", "EUR"], "impacts": ["High"]}).json()
     assert saved["settings"]["currencies"] == ["USD", "EUR"] and store.get_setting("calendar")["currencies"] == ["USD", "EUR"]
+    for bad in ({"url": 5}, {"currencies": "USD"}, {"currencies": [1]}, {"impacts": None}):
+        assert api.put("/api/calendar", json=bad).status_code == 422, bad
+    # Saved by another server on the same database (the Rust one, #96): read at once.
+    store.set_setting("calendar", {**saved["settings"], "currencies": ["GBP"]})
+    assert api.get("/api/calendar").json()["settings"]["currencies"] == ["GBP"]
+    assert runtime.calendar.settings.currencies == ["GBP"]
 
 
 def test_chart_times_follow_the_feed_clock():

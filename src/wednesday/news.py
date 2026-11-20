@@ -52,13 +52,26 @@ class CalendarSettings:
 
     @classmethod
     def from_dict(cls, d: dict | None) -> CalendarSettings:
+        """Settings from a saved or sent dict; ValueError for a field of the wrong type.
+
+        The Rust server (``server-rs/src/calendar.rs``) reads them the same way (#96).
+        """
         d = d or {}
         base = cls()
+        url = d.get("url")
+        if url is not None and not isinstance(url, str):
+            raise ValueError("The calendar URL must be text")
+        currencies = d.get("currencies", base.currencies)
+        if not isinstance(currencies, list) or not all(isinstance(c, str) for c in currencies):
+            raise ValueError("Currencies must be a list of currency codes, like USD")
+        impacts = d.get("impacts", base.impacts)
+        if not isinstance(impacts, list) or not all(isinstance(i, str) for i in impacts):
+            raise ValueError("Impacts must be a list of High, Medium or Low")
         return cls(
             enabled=bool(d.get("enabled", base.enabled)),
-            url=(d.get("url") or base.url).strip(),
-            currencies=[c.strip().upper() for c in d.get("currencies", base.currencies) if c and c.strip()],
-            impacts=list(d.get("impacts", base.impacts)),
+            url=(url or base.url).strip(),
+            currencies=[c.strip().upper() for c in currencies if c.strip()],
+            impacts=list(impacts),
         )
 
 
@@ -104,7 +117,8 @@ class Calendar:
 
     def __init__(self, store: Store | None, settings: CalendarSettings | None = None):
         self.store = store
-        self.settings = settings or CalendarSettings()
+        self._settings = settings or CalendarSettings()
+        self._saved: dict | None = None  # the stored dict _settings was read from
         cache = store.get_setting(CALENDAR_CACHE_KEY) if store else None
         self.events: list[dict] = (cache or {}).get("events", [])
         self.fetched_at: str | None = (cache or {}).get("fetched_at")
@@ -115,6 +129,32 @@ class Calendar:
         self._busy = False
         if store and self.events:
             store.calendar_put(store_rows(self.events))  # the cached week, into the history
+
+    @property
+    def settings(self) -> CalendarSettings:
+        """The saved settings, read from the store each time: the Rust server saves them too (#96)."""
+        if self.store is None:
+            return self._settings
+        try:
+            saved = self.store.get_setting(CALENDAR_KEY)
+        except Exception:  # a database hiccup keeps the last known settings
+            log.warning("calendar: can't read the settings", exc_info=True)
+            return self._settings
+        if saved is not None and saved != self._saved:
+            try:
+                self._settings = CalendarSettings.from_dict(saved)
+            except ValueError:
+                log.warning("calendar: ignoring invalid saved settings")
+            self._saved = saved
+        return self._settings
+
+    @settings.setter
+    def settings(self, new: CalendarSettings) -> None:
+        """Use and save ``new``."""
+        self._settings = new
+        if self.store:
+            self.store.set_setting(CALENDAR_KEY, new.to_dict())
+            self._saved = new.to_dict()
 
     def stale(self, now: datetime) -> bool:
         if self.source != self.settings.url or not self.fetched_at:
@@ -167,10 +207,11 @@ class Calendar:
 
     def snapshot(self) -> dict:
         self.maybe_refresh()
-        source_matches = self.source == self.settings.url
-        show = self.settings.enabled and source_matches
+        s = self.settings
+        source_matches = self.source == s.url
+        show = s.enabled and source_matches
         return {
-            "settings": self.settings.to_dict(),
+            "settings": s.to_dict(),
             "events": self.upcoming() if show else [],
             "week": self.matching() if show else [],
             "fetched_at": self.fetched_at if source_matches else None,

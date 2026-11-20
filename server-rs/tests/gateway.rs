@@ -167,6 +167,27 @@ async fn without_a_database_python_serves_them() {
     assert_eq!(got["line"], "GET /api/workspaces", "the stand-in Python echoed it");
 }
 
+#[tokio::test]
+async fn calendar_settings_are_saved_here_and_answered_by_python() {
+    let store = temp_store("calendar").await;
+    let addr = front_with(listen(python()).await, Some(store.clone())).await;
+    let body = serde_json::json!({"currencies": ["usd", "eur"], "url": "https://x.test/c.json"});
+    let res = send(req("PUT", addr, "/api/calendar", "wed_session=abc", Some(body))).await;
+    assert_eq!(res.headers()["x-wednesday-server"], "rust");
+    let got: serde_json::Value = serde_json::from_str(&text(res).await).unwrap();
+    assert_eq!((got["line"].as_str(), got["body"].as_str(), got["cookie"].as_str()),
+               (Some("GET /api/calendar"), Some(""), Some("wed_session=abc")), "Python's calendar, read after saving");
+    assert_eq!(store.get_setting("calendar").await.unwrap().unwrap()["currencies"], serde_json::json!(["USD", "EUR"]));
+
+    let res = send(req("PUT", addr, "/api/calendar", "", Some(serde_json::json!({"impacts": ["Huge"]})))).await;
+    assert_eq!(res.status(), 422);
+    assert_eq!(text(res).await, r#"{"detail":"Unknown impact 'Huge'"}"#);
+    assert_eq!(store.get_setting("calendar").await.unwrap().unwrap()["impacts"], serde_json::json!(["High"]));
+
+    let res = send(req("GET", addr, "/api/calendar", "", None)).await;
+    assert_eq!(res.headers()["x-wednesday-server"], "python", "reading the calendar is still Python's");
+}
+
 // ---- the contract (tests/api_contract.json) ----
 
 fn repo(path: &str) -> String {
