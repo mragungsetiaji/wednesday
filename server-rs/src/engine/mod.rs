@@ -6,7 +6,26 @@
 //! state. The Python server follows this engine while its alerts and plugins still run there: it
 //! reads the same bars through `GET /api/engine/m1`.
 
+pub mod analysis;
+pub mod charts;
 pub mod feed;
+pub mod markets;
+
+/// A route's refusal: the HTTP status and FastAPI's `detail` (a message, or its validation list).
+#[derive(Debug)]
+pub struct Refusal {
+    pub status: u16,
+    pub detail: Value,
+}
+
+impl Refusal {
+    pub fn new(status: u16, detail: impl Into<Value>) -> Refusal {
+        Refusal { status, detail: detail.into() }
+    }
+}
+
+/// What a ported engine route gives: its JSON body, or a refusal.
+pub type Answer = Result<Value, Refusal>;
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
