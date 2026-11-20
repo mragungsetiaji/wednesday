@@ -11,7 +11,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 
 > [!WARNING]
 > **Not financial advice. Every risk is yours.** Wednesday is an analysis tool: it never places
-> orders, and its levels, setups, alerts and briefs are software output, not advice. Trading
+> orders, and its levels, setups and alerts are software output, not advice. Trading
 > leveraged products can lose more than you deposit, and every decision and loss is your own
 > responsibility. By using Wednesday you accept the [disclaimer and risk agreement](DISCLAIMER.md);
 > the app asks you to accept it on first start.
@@ -22,7 +22,6 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **Nearest levels** above and below price: order blocks (extreme and mid), BSL / SSL with equal highs and lows, and inducement.
 - **Ranked limit setups**: entry on the order block's body, stop on the opposite edge capped at 3.00, extreme first, then nearest. Each one is pinned on the chart under the same tag.
 - **Your bias steers the list**: bullish, bearish or neutral, set by hand. Setups get RISK ON / RISK OFF labels.
-- **News brief**: Claude or OpenAI reads the news pages you pick and suggests a bias you can apply with one click.
 - **News risk time**: high-impact US releases on the chart, a countdown card an hour before, and how gold moved after past releases of the same event.
 - **Charts**: drawing tools, indicators (EMA, SMA, Bollinger Bands, RSI), candles, hollow candles or Heikin Ashi, snapshots, bar replay and chart settings.
 - **Sessions and reference levels**: killzones, the Asia range, previous day / week / month high and low, and the day, week, midnight and quarter opens, in New York time.

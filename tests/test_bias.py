@@ -4,10 +4,8 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from wednesday import brief as brief_mod
 from wednesday.alerts import AlertManager, AlertSettings, format_alert
 from wednesday.bias import TradeBias, active, expiry_time, setup_risk
-from wednesday.brief import BriefError, BriefRunner, BriefSettings, build_input, html_to_text, suggested_bias
 from wednesday.detectors import DetectorParams
 from wednesday.engine import Runtime
 from wednesday.scanner import LevelSet, ScanConfig, ScanResult, TimeframeResult
@@ -102,63 +100,12 @@ def test_alerts_carry_the_label_and_hold_back_when_neutral():
     assert "(extreme at LH)" in text and "RISK ON</b> (with bearish bias)" in text
 
 
-# ---- brief ------------------------------------------------------------------
-
-def test_html_to_text_and_bias_line():
-    html = "<html><head><title>x</title><style>p{}</style></head><body><nav>menu</nav><p>CPI <b>hot</b></p>" \
-           "<script>var a</script></body></html>"
-    assert html_to_text(html) == "CPI hot"
-    assert suggested_bias("- USD firm\nBIAS: Bearish") == "bearish"
-    assert suggested_bias("no line") is None
-    text = build_input({"Price": "2470"}, [{"url": "u", "ok": True, "truncated": True, "text": "news"},
-                                           {"url": "v", "ok": False, "truncated": False, "text": ""}])
-    assert '<source url="u" (cut to the first part of the page)>' in text and 'url="v"' not in text
-
-
-def test_brief_settings_validation():
-    assert BriefSettings.from_dict({"urls": ["https://a.com", " "], "model": " "}).urls == ["https://a.com"]
-    assert BriefSettings.from_dict({"model": " "}).resolved_model == "claude-opus-5"
-    assert BriefSettings(provider="openai").resolved_model == "gpt-5"
-    assert BriefSettings(urls=["ftp://x"]).validate()
-    assert BriefSettings(provider="other").validate()
-
-
-def test_brief_generate_with_fakes(monkeypatch, tmp_path):
-    calls = {}
-    monkeypatch.setattr(brief_mod, "fetch_source", lambda url, n: {
-        "url": url, "ok": url.endswith("ok"), "error": None, "chars": 4, "truncated": False, "text": "news"})
-
-    def fake_ask(model, system, user):
-        calls.update(model=model, system=system, user=user)
-        return "- DXY up\nBIAS: BEARISH"
-
-    monkeypatch.setitem(brief_mod.ASK, "anthropic", fake_ask)
-    store = Store(f"sqlite:///{tmp_path / 'b.db'}")
-    runner = BriefRunner(store, BriefSettings(urls=["https://a/ok", "https://b/fail"], prompt="Be brief."))
-    out = runner.generate({"Price": "2470"})
-    assert out["suggested_bias"] == "bearish" and out["model"] == "claude-opus-5"
-    assert [s["ok"] for s in out["sources"]] == [True, False] and "text" not in out["sources"][0]
-    assert calls["system"] == "Be brief." and "Price: 2470" in calls["user"]
-    runner.settings.urls = ["https://b/fail"]
-    with pytest.raises(BriefError, match="None of the news URLs"):
-        runner.generate({})
-
-
-def test_brief_needs_key_and_urls(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    with pytest.raises(BriefError, match="API key in Settings"):
-        BriefRunner(None, BriefSettings(urls=["https://a"])).check_ready()
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
-    with pytest.raises(BriefError, match="news URL"):
-        BriefRunner(None, BriefSettings()).check_ready()
-
-
 # ---- API ---------------------------------------------------------------------
 
-def test_bias_and_brief_api(tmp_path, monkeypatch):
+def test_bias_api(tmp_path):
     store = Store(f"sqlite:///{tmp_path / 'api.db'}")
     cfg = ScanConfig(lookback=20, timeframes=(TIMEFRAMES_BY_NAME["1H"],), params=DetectorParams(swing_length=2))
-    runtime = Runtime(cfg, DataSettings(source="synthetic"), store, brief=BriefRunner(store))
+    runtime = Runtime(cfg, DataSettings(source="synthetic"), store)
     api = TestClient(create_app(runtime, ui_dir=tmp_path))
     runtime.engine.feed.connect()
     runtime.engine.step()
@@ -175,12 +122,6 @@ def test_bias_and_brief_api(tmp_path, monkeypatch):
     assert api.put("/api/bias", json={"direction": None}).json() == {"bias": None}
     assert store.get_setting("bias") is None
 
-    assert api.put("/api/brief", json={"urls": ["nope"]}).status_code == 422
-    saved = api.put("/api/brief", json={"provider": "openai", "model": "gpt-x", "urls": ["https://a.com/x"]}).json()
-    assert saved["settings"]["model"] == "gpt-x" and store.get_setting("brief")["provider"] == "openai"
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    res = api.post("/api/brief/generate")
-    assert res.status_code == 422 and "OpenAI API key" in res.json()["detail"]
 
 
 def test_swings_are_labelled_against_the_previous_swing():

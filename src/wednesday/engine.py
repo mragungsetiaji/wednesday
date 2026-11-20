@@ -18,14 +18,12 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from .llm_usage import UsageLog
 from .bias import BIAS_KEY, TradeBias, active
 from .drawing_alerts import DrawingAlerts
 from .feeds import DataFeed, M1Buffer, build_feed
 from .plugins import Hooks
 from .scanner import ScanConfig, ScanResult, scan
 from .settings import DataSettings
-from .sizing import RISK_KEY, RiskSettings, Sizer, resolve
 from .storage import Store
 
 log = logging.getLogger(__name__)
@@ -326,20 +324,11 @@ class ScanWorker:
             self._thread.join(timeout)
 
 
-def load_risk(store: Store | None) -> RiskSettings:
-    """Saved Settings > Risk; the defaults (sizing off) when none or unreadable."""
-    try:
-        return RiskSettings.from_dict(store.get_setting(RISK_KEY) if store else None)
-    except (TypeError, ValueError):
-        log.warning("ignoring invalid risk settings")
-        return RiskSettings()
-
-
 class Runtime:
     """Owns the running engine so the dashboard can switch data sources live."""
 
     def __init__(self, cfg: ScanConfig, settings: DataSettings, store: Store | None = None,
-                 delay: float = 2.0, on_result=None, alerts=None, brief=None,
+                 delay: float = 2.0, on_result=None, alerts=None,
                  calendar=None, journals=None, poll: bool = True):
         self.cfg = cfg
         self.poll = poll  # False: every engine scans once and stops (--no-poll)
@@ -348,14 +337,10 @@ class Runtime:
         self.on_result = on_result
         self.alerts = alerts  # AlertManager or None
         self.drawing_alerts = DrawingAlerts(store) if store else None  # alerts on the trader's drawings
-        self.brief = brief  # BriefRunner or None
-        # LLM usage log and budget, shared by the brief and plugins' LLM features.
-        self.usage = brief.usage if brief is not None else UsageLog(store)
         self.calendar = calendar  # news.Calendar or None
         self.journals = journals  # journal.service.Journals or None (needs a database)
         self.hooks = Hooks()  # filled by plugins (see plugins.py)
         self.bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
-        self.risk = load_risk(store)
         self._lock = threading.Lock()
         self.settings = settings
         self.engine = self._build(settings)
@@ -379,21 +364,11 @@ class Runtime:
             else:
                 self.store.delete_setting(BIAS_KEY)
 
-    def sizer(self) -> Sizer | None:
-        """Position sizing from Settings > Risk; None when off."""
-        return resolve(self.risk)
-
-    def set_risk(self, risk: RiskSettings) -> None:
-        self.risk = risk
-        if self.store:
-            self.store.set_setting(RISK_KEY, risk.to_dict())
-
     def _after_scan(self, result) -> None:
         engine = self.engine
         if self.alerts is not None:
             try:
-                sent = self.alerts.check(self.settings.source, engine.symbol, result, engine.state.m1, self.active_bias(),
-                                         sizer=self.sizer())
+                sent = self.alerts.check(self.settings.source, engine.symbol, result, engine.state.m1, self.active_bias())
             except Exception:  # an alert problem must never stop scanning
                 log.exception("alert check failed")
             else:

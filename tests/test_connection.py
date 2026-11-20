@@ -125,7 +125,8 @@ def test_forget_all_clears_saved_secrets(monkeypatch):
     name = next(iter(secret_store.APP_SECRETS))
     assert secret_store.set_secret(name, "s3cret") == "saved"
     kr.store[("Someone else", "x")] = "theirs"
-    assert secret_store.forget_all() == 1
+    kr.store[(secret_store.SERVICE, "anthropic_api_key")] = "old"  # the removed news brief's key
+    assert secret_store.forget_all() == 2
     assert kr.store == {("Someone else", "x"): "theirs"}
     monkeypatch.setattr(secret_store, "_keyring", lambda: None)
     secret_store.set_secret(name, "session only")

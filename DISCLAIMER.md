@@ -6,9 +6,8 @@ not agree, do not use it.
 ## Not financial advice
 
 Wednesday is a charting and screening tool. Its order blocks, liquidity levels,
-limit setups, entries and stops, RISK ON / RISK OFF labels, Telegram alerts,
-news briefs, suggested biases and journal figures are the output of
-software rules and, for the news brief, of third-party AI models. They are not
+limit setups, entries and stops, RISK ON / RISK OFF labels, Telegram alerts
+and journal figures are the output of software rules. They are not
 financial, investment, trading, tax or legal advice, not a recommendation to buy
 or sell anything, and not a solicitation. The author is not a licensed financial
 adviser or broker and does not know your situation.
@@ -22,12 +21,11 @@ adviser or broker and does not know your situation.
 - Past results, backtests, statistics, win rates and model scores do not predict
   future results.
 - Data can be wrong, late or missing: TradingView and broker feeds, MT5, news
-  sources, Telegram and AI providers can fail, disconnect or return errors, and
+  sources, and Telegram can fail, disconnect or return errors, and
   so can this software. Levels and alerts can be wrong or arrive late. Always
   check prices and positions in your broker's own platform.
-- AI-written news briefs can be inaccurate, out of date or invented.
 - You are responsible for complying with the laws and your broker's rules where
-  you live, and for keeping your accounts, passwords and API keys safe.
+  you live, and for keeping your accounts, passwords and bot tokens safe.
 
 ## No warranty, no liability
 

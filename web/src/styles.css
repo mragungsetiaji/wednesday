@@ -2063,8 +2063,7 @@ p {
   grid-template-columns: auto 1fr auto auto;
   grid-template-areas:
     "tag price risk dist"
-    "meta meta meta meta"
-    "size size size size";
+    "meta meta meta meta";
   align-items: center;
   gap: 2px var(--s2);
   padding: var(--s2);
@@ -2082,9 +2081,6 @@ p {
 .ladder-dist { grid-area: dist; font-size: var(--text-sm); color: var(--text-2); }
 .ladder-meta { grid-area: meta; font-size: var(--text-xs); color: var(--text-3); }
 .ladder-meta .swing { font-weight: 700; color: var(--text-2); }
-.ladder-size { grid-area: size; font-size: var(--text-xs); color: var(--text-2); }
-.ladder-size strong { font-weight: 700; color: var(--text); }
-.ladder-size.is-over { color: var(--warn); }
 
 /* Bias labels on setups: text chips, not status colours; the bias itself carries direction. */
 .risk {
@@ -2175,81 +2171,8 @@ p {
   width: auto;
   color: var(--text-2);
 }
-.bias-error,
-.brief-error {
+.bias-error {
   font-size: var(--text-xs);
-}
-
-.brief {
-  border-top: 1px solid var(--line);
-  padding-top: var(--s2);
-}
-.brief summary {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s2);
-  cursor: pointer;
-  list-style: none;
-}
-.brief summary::-webkit-details-marker {
-  display: none;
-}
-.brief summary::before {
-  content: "";
-  flex: none;
-  align-self: center;
-  width: 6px;
-  height: 6px;
-  border-right: 1.5px solid var(--text-3);
-  border-bottom: 1.5px solid var(--text-3);
-  transform: rotate(-45deg);
-  transition: transform 150ms var(--ease-out);
-}
-.brief[open] summary::before {
-  transform: rotate(45deg);
-}
-.brief-title {
-  flex: 1;
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-.brief-meta {
-  font-size: var(--text-xs);
-  color: var(--text-3);
-}
-.brief-text {
-  margin-top: var(--s2);
-  max-height: 220px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--text-2);
-}
-.brief-empty {
-  margin-top: var(--s2);
-  font-size: var(--text-sm);
-  color: var(--text-3);
-}
-.brief-suggest {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s2);
-  margin-top: var(--s2);
-  font-size: var(--text-sm);
-}
-.brief-suggest strong {
-  text-transform: capitalize;
-}
-.brief-sources {
-  margin: var(--s2) 0 0;
-  padding-inline-start: var(--s4);
-  font-size: var(--text-xs);
-  color: var(--text-3);
-}
-.brief-refresh {
-  margin-top: var(--s2);
 }
 
 /* Bias in the top bar */
@@ -2852,9 +2775,6 @@ legend {
   color: var(--text-3);
   max-width: 62ch;
 }
-.field-narrow {
-  max-width: 220px;
-}
 td.wrap {
   word-break: break-all;
 }
@@ -3075,9 +2995,6 @@ fieldset:disabled .switch {
   gap: var(--s3) var(--s4);
 }
 .fields-grid legend {
-  grid-column: 1 / -1;
-}
-.field-span {
   grid-column: 1 / -1;
 }
 
@@ -4001,71 +3918,6 @@ fieldset:disabled .switch {
 /* Full screen covers the status bar: the news card sits at the corner. */
 .focus .news-card {
   bottom: var(--s4);
-}
-
-/* Settings > LLM usage. */
-.llm-spent {
-  margin: 0 0 var(--s2);
-  font-size: var(--text-lg);
-}
-.llm-meter {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--line);
-  overflow: hidden;
-  margin-bottom: var(--s2);
-}
-.llm-meter span {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-}
-.llm-meter.is-warn span {
-  background: var(--warn);
-}
-.llm-meter.is-over span {
-  background: var(--error);
-}
-.llm-groups {
-  display: grid;
-  gap: var(--s5);
-  min-width: 0;
-}
-.llm-groups caption {
-  text-align: start;
-  font-weight: 600;
-  padding-bottom: var(--s2);
-}
-.llm-groups table {
-  align-self: start;
-}
-.llm-daily {
-  margin: 0;
-}
-.llm-daily svg {
-  width: 100%;
-  height: 136px;
-  display: block;
-}
-.llm-bar {
-  fill: var(--accent);
-}
-.llm-axis {
-  stroke: var(--line);
-}
-.llm-price-fields {
-  min-inline-size: 0; /* a fieldset is as wide as its content by default; let the table scroll */
-}
-.llm-prices input {
-  width: 100%;
-  min-width: 72px;
-}
-.llm-prices td:first-child input {
-  min-width: 160px;
-}
-.brief-budget {
-  font-size: var(--text-xs);
-  color: var(--warn);
 }
 
 /* ---------- Keyboard shortcuts ---------- */

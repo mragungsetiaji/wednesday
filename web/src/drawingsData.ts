@@ -10,7 +10,6 @@ import {
   type Drawing,
   type DrawingAlert,
   type DrawingAlertInput,
-  type Sizing,
 } from "./api";
 import type { DrawingCtl, DrawTool } from "./drawings";
 import { announceDrawings, onOtherDrawings } from "./windowLink";
@@ -58,7 +57,7 @@ const byDrawing = (xs: DrawingAlert[]) => Object.fromEntries(xs.map((a) => [a.dr
  * takes Esc), Delete removes the selected drawing, Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or
  * Ctrl+Y redoes.
  */
-export function useDrawings(source: string | undefined, symbol: string | undefined, sizing: Sizing | null, version = 0): Drawings {
+export function useDrawings(source: string | undefined, symbol: string | undefined, version = 0): Drawings {
   const [items, setItems] = useState<Drawing[]>([]);
   const [alerts, setAlerts] = useState<Record<string, DrawingAlert>>({});
   const [available, setAvailable] = useState(true);
@@ -236,8 +235,8 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
   const canRedo = history.current.redo.length > 0;
   return useMemo(() => ({
     items, hidden, tool, setTool, selected, select, create, change, remove, available, error,
-    setHidden, sizing, editText, undo, redo, canUndo, canRedo, textFocus, alerts, setAlert, removeAlert,
+    setHidden, editText, undo, redo, canUndo, canRedo, textFocus, alerts, setAlert, removeAlert,
     magnet, setMagnet, stay, setStay, lockAll, removeAll,
-  }), [items, hidden, tool, selected, create, change, remove, available, error, setHidden, sizing, editText, undo, redo,
+  }), [items, hidden, tool, selected, create, change, remove, available, error, setHidden, editText, undo, redo,
     canUndo, canRedo, textFocus, alerts, setAlert, removeAlert, magnet, setMagnet, stay, setStay, lockAll, removeAll]);
 }

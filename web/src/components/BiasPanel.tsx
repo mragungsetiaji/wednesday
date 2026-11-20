@@ -1,9 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import {
-  fetchBrief, generateBriefAsking, saveBias,
-  type BiasDirection, type BiasExpiry, type BriefResponse, type TradeBias,
-} from "../api";
+import { saveBias, type BiasDirection, type BiasExpiry, type TradeBias } from "../api";
 import { ArrowDown, ArrowUp } from "../icons";
 
 const DIRECTIONS: { id: BiasDirection; label: string }[] = [
@@ -32,42 +29,23 @@ export function BiasIcon({ dir, size = 13 }: { dir: BiasDirection; size?: number
 }
 
 /**
- * The trader's bias, set by hand, with the LLM brief as reading material. The
- * bias only labels setups (risk on / off / no trade); it never hides them.
+ * The trader's bias, set by hand. It only labels setups (risk on / off / no trade);
+ * it never hides them.
  */
-export function BiasPanel({ bias, onChanged, onOpenSettings }: {
+export function BiasPanel({ bias, onChanged }: {
   bias: TradeBias | null;
   onChanged: () => void;
-  onOpenSettings: () => void;
 }) {
   const [note, setNote] = useState(bias?.note ?? "");
   const [expiry, setExpiry] = useState<BiasExpiry>(bias?.expiry ?? "day");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [brief, setBrief] = useState<BriefResponse | null>(null);
 
   // Follow the server when the bias changes elsewhere (another tab, a restart).
   useEffect(() => {
     setNote(bias?.note ?? "");
     setExpiry(bias?.expiry ?? "day");
   }, [bias?.set_at, bias?.note, bias?.expiry]);
-
-  // Brief status; poll faster while one is being generated.
-  const running = !!brief?.running;
-  const details = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    if (running && details.current) details.current.open = true; // show progress; closing stays up to the user
-  }, [running]);
-  useEffect(() => {
-    let alive = true;
-    const load = () => fetchBrief().then((b) => alive && setBrief(b)).catch(() => {});
-    load();
-    const id = setInterval(load, running ? 2000 : 30000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, [running]);
 
   const save = async (direction: BiasDirection | null, patch: { note?: string; expiry?: BiasExpiry } = {}) => {
     setSaving(true);
@@ -83,19 +61,6 @@ export function BiasPanel({ bias, onChanged, onOpenSettings }: {
   };
 
   const current = bias && !bias.expired ? bias.direction : null;
-  const last = brief?.last ?? null;
-  const suggestion = last?.suggested_bias ?? null;
-  const provider = brief?.providers?.find((p) => p.id === brief.settings?.provider);
-  const ready = !!(provider?.installed && provider.key_set && brief?.settings?.urls.length);
-
-  const refresh = async () => {
-    setError(null);
-    try {
-      setBrief(await generateBriefAsking());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
 
   return (
     <section className="bias" aria-labelledby="bias-h">
@@ -133,52 +98,6 @@ export function BiasPanel({ bias, onChanged, onOpenSettings }: {
           {EXPIRY.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
         </select>
       </div>
-
-      <details className="brief" ref={details}>
-        <summary>
-          <span className="brief-title">News brief</span>
-          <span className="brief-meta">
-            {running ? "Writing…" : last ? `${fmtWhen(last.created_at)} · ${last.model}` : "None yet"}
-          </span>
-        </summary>
-        {brief && !brief.editable ? (
-          <p className="brief-empty">The brief needs the server running with --serve.</p>
-        ) : !ready ? (
-          <p className="brief-empty">
-            Add an API key and news URLs to get a short read of the news here.{" "}
-            <a href="#settings" onClick={(e) => { e.preventDefault(); onOpenSettings(); }}>Set up the brief</a>
-          </p>
-        ) : (
-          <>
-            {last ? <div className="brief-text">{last.text}</div> : <p className="brief-empty">No brief yet.</p>}
-            {suggestion && (
-              <p className="brief-suggest">
-                Suggests <strong>{suggestion}</strong>
-                {suggestion !== current && (
-                  <button type="button" className="link" disabled={saving} onClick={() => save(suggestion)}>Use it</button>
-                )}
-              </p>
-            )}
-            {last && last.sources.some((s) => !s.ok || s.truncated) && (
-              <ul className="brief-sources">
-                {last.sources.filter((s) => !s.ok || s.truncated).map((s) => (
-                  <li key={s.url}>{new URL(s.url).hostname}: {s.ok ? "long page, only the first part was read" : s.error}</li>
-                ))}
-              </ul>
-            )}
-            <button type="button" className="button quiet brief-refresh" disabled={running} onClick={refresh}>
-              {running ? "Writing brief…" : last ? "Refresh brief" : "Write brief"}
-            </button>
-          </>
-        )}
-        {brief?.error && !running && <p className="text-error brief-error">{brief.error}</p>}
-        {(brief?.budget?.level === "warn" || brief?.budget?.level === "over") && (
-          <p className={`brief-budget${brief.budget.level === "over" ? " text-error" : ""}`}>
-            LLM spend this month: ${brief.budget.spent.toFixed(2)} of ${brief.budget.limit?.toFixed(2)}
-            {brief.budget.level === "over" ? " (over the budget; a brief asks first)" : ""}. See Settings &gt; LLM usage.
-          </p>
-        )}
-      </details>
 
       {error && <p className="text-error bias-error" role="alert">{error}</p>}
     </section>

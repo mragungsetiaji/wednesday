@@ -163,24 +163,6 @@ def summary_line(s: dict) -> str:
     return f"{s['title']}: median 15m range {s['range15']:.2f} (last {s['count']})"
 
 
-def brief_line(s: dict) -> str:
-    """The same facts, longer, for the LLM brief's context."""
-    if not s["count"]:
-        return "no past release with M1 bars stored"
-    m, a = s["move"], s["move_atr"]
-    atr = f" ({a['15']:.1f} ATR)" if a["15"] is not None else ""
-    parts = [f"last {s['count']} release{'s' if s['count'] != 1 else ''}: median 15m range {s['range15']:.2f}"
-             + (f" ({s['range15_atr']:.1f} ATR)" if s["range15_atr"] is not None else ""),
-             f"median size of the move after 5m {m['5']:.2f}, 15m {m['15']:.2f}{atr}, 60m {m['60']:.2f}",
-             f"15m move up {s['up15']} of {s['count']}",
-             f"first move reversed within the hour {s['reversed']} of {s['count']}"]
-    for side in ("above", "below"):
-        v = s["surprise"][side]
-        if v["count"]:
-            parts.append(f"actual {side} forecast {v['count']}x, median 15m move {v['move15']:+.2f}")
-    return "; ".join(parts)
-
-
 class NewsReactions:
     """Per event type stats over the stored calendar, cached for a few minutes."""
 

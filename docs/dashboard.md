@@ -199,10 +199,7 @@ Below them:
   the target at 2R and 20 candles wide; drag the handles on its left edge to set
   the entry, stop and target, and the one on the entry line's right end to set how
   long it runs. The stop and target stay on their own side of the entry. Hover or
-  select the position to see the prices, the distance to each, the R:R and, with
-  [position sizing](risk.md) set up in **Settings > Risk**,
-  the lot size and the money at risk and to gain, sized the same way as the
-  ladder's setups.
+  select the position to see the prices, the distance to each and the R:R.
 
   The position also follows price, live ticks included. Like a limit order, it
   fills on the first candle from its start that reaches the entry (until then
@@ -295,9 +292,8 @@ UTC time is converted to the feed clock the same way as the news lines, so the
 times line up whatever that clock is. These describe past moves; they don't say what the next
 release will do.
 
-They show in three places: a line on the risk-time card (*CPI m/m: median 15m
-range 9.40 (last 12)*), the tooltip when you hover a news line on the chart, and
-the news brief's context, as facts about the releases coming up.
+They show in two places: a line on the risk-time card (*CPI m/m: median 15m
+range 9.40 (last 12)*) and the tooltip when you hover a news line on the chart.
 
 **Settings > News calendar > Past reactions** has the table, and **Import calendar
 CSV** adds older weeks, since the feed only gives the current one. The CSV needs a

@@ -63,35 +63,13 @@ export interface TimeframeScan {
 export type Risk = "on" | "off" | "no_trade" | null;
 
 /** An order block limit setup: distance is from price to the entry. */
-/** Lot size for a setup's stop (Settings > Risk); `below_min` when even the minimum lot risks too much. */
-export interface SetupSize {
-  lots: number;
-  risk: number;
-  reward_2r: number;
-  budget: number; // after the RISK OFF multiplier
-  below_min: boolean;
-  min_lot_risk: number;
-}
-
-export type Setup = Level & { timeframe: string; distance: number; risk: Risk; size?: SetupSize | null };
-
-export interface Sizing {
-  balance: number | null;
-  currency: string;
-  budget: number;
-  per_point: number;
-  min_lot: number;
-  lot_step: number;
-  max_lot: number | null;
-  off_multiplier: number;
-}
+export type Setup = Level & { timeframe: string; distance: number; risk: Risk };
 
 export interface Scan {
   time: string;
   price: number;
   detectors: string[];
   setups: { sell: Setup[]; buy: Setup[] };
-  sizing?: Sizing | null; // null when Settings > Risk is off
   nearest: Record<string, { above: NearestLevel | null; below: NearestLevel | null }>;
   timeframes: TimeframeScan[];
 }
@@ -546,101 +524,6 @@ export interface TradeBias {
 export const saveBias = (b: { direction: BiasDirection | null; note?: string; expiry?: BiasExpiry }) =>
   send<{ bias: TradeBias | null }>("PUT", "/api/bias", b);
 
-export interface BriefSettings {
-  provider: "anthropic" | "openai";
-  model: string | null;
-  prompt: string | null;
-  urls: string[];
-  max_chars_per_source: number;
-}
-
-export interface BriefSource {
-  url: string;
-  ok: boolean;
-  error: string | null;
-  chars: number;
-  truncated: boolean;
-}
-
-export interface Brief {
-  text: string;
-  suggested_bias: BiasDirection | null;
-  created_at: string;
-  provider: string;
-  model: string;
-  sources: BriefSource[];
-}
-
-export interface BriefProvider {
-  id: "anthropic" | "openai";
-  title: string;
-  default_model: string;
-  env: string;
-  secret: "anthropic_api_key" | "openai_api_key";
-  installed: boolean;
-  key_set: boolean;
-  key_source: SecretSource;
-}
-
-export interface BriefResponse {
-  editable: boolean;
-  settings?: BriefSettings;
-  default_prompt?: string;
-  providers?: BriefProvider[];
-  running?: boolean;
-  error?: string | null;
-  last?: Brief | null;
-  budget?: LlmBudget;
-}
-
-export const fetchBrief = () => getJson<BriefResponse>("/api/brief");
-export const saveBrief = (s: BriefSettings, secrets: SecretUpdate = {}) =>
-  send<BriefResponse>("PUT", "/api/brief", { ...s, ...secrets });
-export const OVER_BUDGET = "Over the monthly LLM budget";
-export const generateBrief = (confirmOverBudget = false) =>
-  send<BriefResponse>("POST", "/api/brief/generate", confirmOverBudget ? { confirm_over_budget: true } : undefined);
-/** A manual brief: over the monthly budget, ask before spending more. */
-export async function generateBriefAsking(): Promise<BriefResponse> {
-  try {
-    return await generateBrief();
-  } catch (e) {
-    if (e instanceof Error && e.message.startsWith(OVER_BUDGET) && window.confirm(`${e.message}\n\nWrite this brief anyway?`)) {
-      return generateBrief(true);
-    }
-    throw e;
-  }
-}
-
-/** LLM spend this month against the budget (Settings > LLM usage). */
-export interface LlmBudget {
-  limit: number | null;
-  spent: number;
-  share: number | null;
-  level: "none" | "ok" | "warn" | "over";
-  calls: number;
-  unpriced_calls: number;
-}
-export interface LlmPrice { input: number; output: number; cache_read: number; cache_write: number }
-export interface LlmGroup { key: string; calls: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; cost: number; unpriced: number }
-export interface LlmCall {
-  id: string; created_at: string; feature: string; provider: string; model: string;
-  input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number;
-  cost: number | null; estimated: boolean; scheduled: boolean;
-}
-export interface LlmUsage {
-  month: string;
-  budget: LlmBudget;
-  by_feature: LlmGroup[];
-  by_model: LlmGroup[];
-  daily: [string, number][];
-  top: LlmCall[];
-  prices: Record<string, LlmPrice>;
-  warn_at: number;
-}
-export const fetchLlmUsage = () => getJson<LlmUsage>("/api/llm/usage");
-export const saveLlmBudget = (monthly_usd: number | null) => send<LlmUsage>("PUT", "/api/llm/budget", { monthly_usd });
-export const saveLlmPrices = (models: Record<string, Partial<LlmPrice>>) => send<LlmUsage>("PUT", "/api/llm/prices", { models });
-
 /** An economic calendar event (times in UTC). */
 export interface CalendarEvent {
   title: string;
@@ -715,29 +598,6 @@ export async function importCalendar(file: File, zone: string): Promise<{ import
   return res.json();
 }
 export const saveCalendar = (s: CalendarSettings) => send<CalendarResponse>("PUT", "/api/calendar", s);
-
-// ---- Risk: position size per setup ----
-
-export interface RiskSettings {
-  enabled: boolean;
-  mode: "percent" | "amount";
-  value: number;
-  balance: number | null;
-  currency: string;
-  contract_size: number;
-  min_lot: number;
-  lot_step: number;
-  risk_off_multiplier: number;
-}
-
-export interface RiskResponse {
-  editable: boolean;
-  settings: RiskSettings | null;
-  sizer: Sizing | null;
-}
-
-export const fetchRisk = () => getJson<RiskResponse>("/api/risk");
-export const saveRisk = (s: RiskSettings) => send<RiskResponse>("PUT", "/api/risk", s);
 
 // ---- Plugins (e.g. the paid wednesday-ee package) ----
 

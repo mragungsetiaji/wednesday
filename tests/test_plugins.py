@@ -118,5 +118,5 @@ def test_the_plugin_context_stays_small():
     assert members == {
         "app", "runtime",  # API 1 only: no HTTP equivalent, kept for existing plugins
         "api", "add_router", "on_after_scan", "on_alert", "add_job", "provide", "set_features",
-        "set_licence_provider", "snapshot", "store", "llm_usage",
+        "set_licence_provider", "snapshot", "store",
     }

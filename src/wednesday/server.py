@@ -12,7 +12,6 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -28,10 +27,8 @@ from .journal.market import freeze
 from .markets import MarketError, Markets, clean_symbol
 from .replay import ReplayCache, view as replay_view
 from .workspaces import WorkspaceError, Workspaces
-from .brief import BRIEF_KEY, BriefError, BriefSettings
-from .llm_usage import BudgetExceeded
 from .news import CALENDAR_KEY, CalendarSettings
-from .news_stats import CalendarImportError, NewsReactions, brief_line, event_key, history_summary, parse_csv
+from .news_stats import CalendarImportError, NewsReactions, event_key, history_summary, parse_csv
 from .drawings import clean_drawing, drawing_payload
 from .drawing_alerts import clean_alert
 from .drawing_templates import DrawingTemplates, TemplateError
@@ -46,7 +43,7 @@ from .sessions import reference_levels
 from .snapshots import Snapshots, SnapshotError
 from .distribution import distribution as move_distribution, tables as distribution_tables_of
 from .secret_store import get_secret, update_secrets
-from .sizing import RiskSettings, pip_size
+from .journal.stats import pip_size
 from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .terms import Terms
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
@@ -136,7 +133,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                 "error_at": _iso(st.error_at),
                 "conn": st.conn,
                 "tick_seconds": engine.tick_seconds if 0 < engine.tick_seconds < 60 else 0,
-                "pip": pip_size(engine.symbol, st.result.price if st.result else None),
+                "pip": pip_size(engine.symbol, st.result.price if st.result else 0.0),
                 "clock_offset": clock_offset(current_clock()),
                 "poll": engine.poll,  # False with --no-poll: one scan, then nothing new
                 "app_version": __version__,
@@ -155,36 +152,6 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         terms.accept()
         return terms.status()
 
-    def with_sizes(scan_dict: dict) -> dict:
-        """Each setup's lot size for its stop, when Settings > Risk is on."""
-        sizer = runtime.sizer() if runtime else None
-        scan_dict["sizing"] = sizer.to_dict() if sizer else None
-        for setups in scan_dict["setups"].values():
-            for s in setups:
-                s["size"] = sizer.size(s["meta"].get("risk"), s["risk"]) if sizer else None
-        return scan_dict
-
-    def risk_payload() -> dict:
-        sizer = runtime.sizer() if runtime else None
-        return {"editable": runtime is not None, "settings": runtime.risk.to_dict() if runtime else None,
-                "sizer": sizer.to_dict() if sizer else None}
-
-    @app.get("/api/risk")
-    def get_risk() -> dict:
-        """Settings > Risk and the sizing in use."""
-        return risk_payload()
-
-    @app.put("/api/risk")
-    def put_risk(body: dict = Body(...)) -> dict:
-        if not runtime:
-            raise HTTPException(409, "Risk settings need the server running with --serve")
-        try:
-            new = RiskSettings.from_dict({**runtime.risk.to_dict(), **body})
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(422, str(exc)) from exc
-        runtime.set_risk(new)
-        return risk_payload()
-
     @app.get("/api/status")
     def get_status() -> dict:
         return status()
@@ -192,7 +159,7 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     @app.get("/api/scan")
     def get_scan() -> dict:
         _, result, _ = current().snapshot()
-        return {**status(), "scan": with_sizes(result.to_dict(trade_bias())) if result else None}
+        return {**status(), "scan": result.to_dict(trade_bias()) if result else None}
 
     @app.get("/api/tick")
     def get_tick() -> dict:
@@ -549,97 +516,6 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         s = runtime.calendar.settings
         return reactions.stats(news_bars, current_clock(), s.currencies, s.impacts,
                                key=(current_source(), current().symbol))
-
-    def brief_context() -> dict:
-        engine = current()
-        _, result, _ = engine.snapshot()
-        ctx = {"Symbol": engine.symbol, "Now (UTC)": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")}
-        if result is not None:
-            ctx["Price"] = f"{result.price:.2f}"
-            for r in result.results:
-                if r.bias:
-                    ctx[f"{r.timeframe.name} structure"] = f"{r.bias.direction} {r.bias.event} at {r.bias.level:.2f}"
-        bias = trade_bias()
-        ctx["Trader's current bias"] = f"{bias.direction}" + (f" ({bias.note})" if bias and bias.note else "") if bias else "not set"
-        # How gold moved after past releases of the events coming up (facts from the stored history).
-        if runtime and runtime.calendar is not None:
-            stats = news_stats()
-            seen = set()
-            for e in runtime.calendar.upcoming(past=timedelta(0)):
-                k = event_key(e["currency"], e["title"])
-                if k in seen or k not in stats:
-                    continue
-                seen.add(k)
-                ctx[f"{engine.symbol} after past {e['currency']} {e['title']} (M1)"] = brief_line(stats[k])
-        return ctx
-
-    def need_brief():
-        if not runtime or runtime.brief is None:
-            raise HTTPException(409, "The brief is only available when the server runs with --serve")
-        return runtime.brief
-
-    @app.get("/api/brief")
-    def get_brief() -> dict:
-        if not runtime or runtime.brief is None:
-            return {"editable": False}
-        return {"editable": True, **runtime.brief.status()}
-
-    @app.put("/api/brief")
-    def put_brief(body: dict = Body(...)) -> dict:
-        brief = need_brief()
-        try:
-            new = BriefSettings.from_dict(body)
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(422, f"Invalid brief settings: {exc}") from exc
-        if errors := new.validate():
-            raise HTTPException(422, "; ".join(errors))
-        update_secrets(body, ["anthropic_api_key", "openai_api_key"])
-        if runtime.store:
-            runtime.store.set_setting(BRIEF_KEY, new.to_dict())
-        brief.settings = new
-        return {"editable": True, **brief.status()}
-
-    @app.post("/api/brief/generate", status_code=202)
-    def generate_brief(body: dict | None = Body(None)) -> dict:
-        """Start a brief. Over the monthly LLM budget it needs ``{"confirm_over_budget": true}``."""
-        brief = need_brief()
-        try:
-            brief.start(brief_context(), confirmed=bool((body or {}).get("confirm_over_budget")))
-        except BudgetExceeded as exc:
-            raise HTTPException(409, str(exc), headers={"X-Over-Budget": "1"}) from exc
-        except BriefError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        return {"editable": True, **brief.status()}
-
-    def usage_log():
-        if not runtime:
-            raise HTTPException(409, "LLM usage is only kept when the server runs with --serve")
-        return runtime.usage
-
-    @app.get("/api/llm/usage")
-    def llm_usage() -> dict:
-        """This month's LLM spend by feature and model, the last 30 days, the costliest calls,
-        the budget and the price table."""
-        return usage_log().report()
-
-    @app.put("/api/llm/budget")
-    def put_llm_budget(body: dict = Body(...)) -> dict:
-        log = usage_log()
-        try:
-            log.set_budget(body.get("monthly_usd"))
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(422, f"The budget is an amount in US dollars: {exc}") from exc
-        return log.report()
-
-    @app.put("/api/llm/prices")
-    def put_llm_prices(body: dict = Body(...)) -> dict:
-        """The price table: {model: {input, output, cache_read?, cache_write?}} in USD per million tokens."""
-        log = usage_log()
-        try:
-            log.set_prices(body.get("models") or {})
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        return log.report()
 
     def with_chart_times(snap: dict) -> dict:
         """Add each event's time on the chart's (feed clock) axis, so news lines up with the candles,

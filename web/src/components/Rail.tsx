@@ -1,5 +1,5 @@
-import type { Risk, Setup, SetupSize, Sizing, TradeBias } from "../api";
-import { detail, fmtMoney, fmtPrice, fmtSigned } from "../format";
+import type { Risk, Setup, TradeBias } from "../api";
+import { detail, fmtPrice, fmtSigned } from "../format";
 import { BookIcon } from "../icons";
 import { journalThis } from "../journalThis";
 import { useLiveTick, type LiveFeed } from "../liveData";
@@ -11,25 +11,8 @@ import { PanelTabs, type PanelTab } from "./PanelTabs";
 
 const RISK_LABEL: Record<Exclude<Risk, null>, string> = { on: "Risk on", off: "Risk off", no_trade: "No trade" };
 
-function SizeLine({ size, currency }: { size: SetupSize; currency: string }) {
-  if (size.below_min) {
-    return (
-      <span className="ladder-size is-over">
-        Min lot risks <span className="num">{fmtMoney(size.min_lot_risk, currency)}</span>, over the{" "}
-        <span className="num">{fmtMoney(size.budget, currency)}</span> budget
-      </span>
-    );
-  }
-  return (
-    <span className="ladder-size num">
-      <strong>{size.lots} lot</strong> · risk {fmtMoney(size.risk, currency)} · 2R {fmtMoney(size.reward_2r, currency)}
-    </span>
-  );
-}
-
 interface Props {
   items: RailItem[];
-  sizing?: Sizing | null;
   price: number; // the last scan's; a live tick replaces it
   live?: LiveFeed | null;
   status: { cls: string; text: string };
@@ -39,15 +22,13 @@ interface Props {
   onOpen: (tf: string) => void;
   bias: TradeBias | null;
   onBiasChanged: () => void;
-  onOpenSettings: () => void;
   panels: PanelTab[]; // more tabs after Levels, e.g. structure and events
 }
 
-function Row({ item, sizing, highlight, onHighlight, onOpen }: { item: RailItem } & Pick<Props, "sizing" | "highlight" | "onHighlight" | "onOpen">) {
+function Row({ item, highlight, onHighlight, onOpen }: { item: RailItem } & Pick<Props, "highlight" | "onHighlight" | "onOpen">) {
   const lv = item.level;
   const s = item.setup;
   const risk = s ? (lv as Setup).risk : null;
-  const size = s ? (lv as Setup).size : null;
   return (
     <li>
       <button
@@ -79,7 +60,6 @@ function Row({ item, sizing, highlight, onHighlight, onOpen }: { item: RailItem 
             </>
           )}
         </span>
-        {size && sizing && <SizeLine size={size} currency={sizing.currency} />}
       </button>
       {s && (
         <button type="button" className="ladder-journal" onClick={() => journalThis(item)}
@@ -100,16 +80,16 @@ function NowPrice({ live, fallback }: { live: LiveFeed | null; fallback: number 
   return <span className="num">{fmtPrice(useLiveTick(live)?.price ?? fallback)}</span>;
 }
 
-export function Rail({ items, sizing, price, live = null, status, hasOb, highlight, onHighlight, onOpen, bias, onBiasChanged, onOpenSettings, panels }: Props) {
+export function Rail({ items, price, live = null, status, hasOb, highlight, onHighlight, onOpen, bias, onBiasChanged, panels }: Props) {
   const [tab, setTab] = usePref<string>("wed.railTab", "levels");
   const above = items.filter((i) => i.side === "above");
   const below = items.filter((i) => i.side === "below");
-  const rowProps = { sizing, highlight, onHighlight, onOpen };
+  const rowProps = { highlight, onHighlight, onOpen };
   const panel = panels.find((p) => p.id === tab);
   const selected = panel ? panel.id : "levels";
   return (
     <aside className="rail" aria-label="Bias, levels and structure">
-      <BiasPanel bias={bias} onChanged={onBiasChanged} onOpenSettings={onOpenSettings} />
+      <BiasPanel bias={bias} onChanged={onBiasChanged} />
       <div className="rail-tabs">
         <PanelTabs tabs={[{ id: "levels", label: "Levels" }, ...panels]} selected={selected} onSelect={setTab} label="Rail" idPrefix="rail" />
       </div>

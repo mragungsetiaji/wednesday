@@ -6,12 +6,9 @@ import {
 import { fmtFeedTime } from "../format";
 import { usePlugins } from "../plugins";
 import { AccountSettings } from "./AccountSettings";
-import { RiskSettingsForm } from "./RiskSettingsForm";
 import { AlertsSettings } from "./AlertsSettings";
-import { BriefSettingsForm } from "./BriefSettingsForm";
 import { CalendarSettingsForm } from "./CalendarSettingsForm";
 import { JournalSettings } from "./JournalSettings";
-import { LlmUsageSettings } from "./LlmUsageSettings";
 
 const EMPTY: DataSettings = { source: "tradingview", symbol: null, clock: null, tick_seconds: null };
 
@@ -30,14 +27,11 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const fmtTick = (s: number) => (s === 0 || s >= 60 ? "once a minute, with each scan" : `${s}s`);
 
-type Section = "data" | "risk" | "alerts" | "calendar" | "brief" | "llm" | "journal" | "plan" | "plugins";
+type Section = "data" | "alerts" | "calendar" | "journal" | "plan" | "plugins";
 const SECTIONS: { id: Section; title: string }[] = [
   { id: "data", title: "Data source" },
-  { id: "risk", title: "Risk" },
   { id: "alerts", title: "Telegram alerts" },
   { id: "calendar", title: "News calendar" },
-  { id: "brief", title: "News brief" },
-  { id: "llm", title: "LLM usage" },
   { id: "journal", title: "Journal" },
   { id: "plan", title: "Plan" },
   { id: "plugins", title: "Plugins" },
@@ -79,11 +73,8 @@ export function SettingsPage() {
       </nav>
       <div className="settings-content">
         <div hidden={section !== "data"}><DataSourceSettings /></div>
-        <div hidden={section !== "risk"}><RiskSettingsForm /></div>
         <div hidden={section !== "alerts"}><AlertsSettings /></div>
         <div hidden={section !== "calendar"}><CalendarSettingsForm /></div>
-        <div hidden={section !== "brief"}><BriefSettingsForm /></div>
-        <div hidden={section !== "llm"}><LlmUsageSettings /></div>
         <div hidden={section !== "journal"}><JournalSettings /></div>
         <div hidden={section !== "plan"}><AccountSettings /></div>
         <div hidden={section !== "plugins"}><PluginsSection /></div>

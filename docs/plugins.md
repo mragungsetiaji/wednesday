@@ -53,8 +53,7 @@ The entry point can name any object with `register(ctx)` and `api`; `name`,
 | `ctx.provide(*features)` | Add feature ids at runtime |
 | `ctx.snapshot()` | `(version, scan result, M1 bars)` of the running engine |
 | `ctx.store` | The database (`storage.Store`) |
-| `ctx.runtime` | The `engine.Runtime`: settings, bias, calendar, brief, journals. Avoid in new code: it has no HTTP equivalent (see below) |
-| `ctx.llm_usage` | The shared LLM usage log and budget: call `guard(feature, scheduled=True)` before an LLM request (raises `llm_usage.BudgetExceeded` over the monthly budget) and `record(feature, provider, model, usage, scheduled=True)` after it with the response's token counts ([bias.md](bias.md#cost-and-the-monthly-budget)) |
+| `ctx.runtime` | The `engine.Runtime`: settings, bias, calendar, journals. Avoid in new code: it has no HTTP equivalent (see below) |
 
 Hooks and jobs are isolated: an exception is logged and never stops the scan
 loop or other plugins. A plugin that raises in `register` is skipped and its
@@ -75,8 +74,7 @@ dashboard talks to the server:
 - The server posts events to the plugin: after each scan (the `/api/scan`
   payload) and after order block alerts (their keys).
 - The plugin calls the server's API back with the token: the scan and candles,
-  its own settings (namespaced to the plugin), its feature ids, and the LLM
-  usage guard and record.
+  its own settings (namespaced to the plugin) and its feature ids.
 - Timers (the licence check) run inside the plugin.
 
 That keeps the plugin in any language (Wednesday EE can stay Python, built into
@@ -129,8 +127,8 @@ The public keys in `plugin_keys.py` are safe to publish; the matching private ke
 stays with whoever signs. A free user never gets Wednesday EE's code: the licence
 server hands it out only for a usable key.
 
-Free, with or without a licence: the screener, alerts, the bias, the news card,
-the news brief with your own API key, importing M1 history, and one journal.
+Free, with or without a licence: the screener, alerts, the bias, the news card
+and one journal.
 
 ## Versioning
 

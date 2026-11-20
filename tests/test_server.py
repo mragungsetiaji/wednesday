@@ -101,7 +101,7 @@ def test_quarters_endpoint(tmp_path):
 
 def test_status_has_pip_and_clock_offset(engine, tmp_path):
     from wednesday import server
-    from wednesday.sizing import pip_size
+    from wednesday.journal.stats import pip_size
 
     engine.step()
     client = TestClient(create_app(engine, source="synthetic", ui_dir=tmp_path, clock="Etc/GMT-3"))

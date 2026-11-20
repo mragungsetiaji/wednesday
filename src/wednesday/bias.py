@@ -1,6 +1,6 @@
 """The trader's directional bias, and the label it puts on each setup.
 
-The bias is set by hand (from news, DXY, yields, the LLM brief...). It is not a
+The bias is set by hand (from news, DXY, yields...). It is not a
 score and doesn't filter anything; it only says where to focus:
 
 * bearish: sells are ``RISK ON``, preferably at a lower-high order block;

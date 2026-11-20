@@ -65,22 +65,6 @@
     }
    }
   },
-  "POST /api/brief/generate": {
-   "body": {
-    "application/json": {
-     "anyOf": [
-      {
-       "additionalProperties": true,
-       "type": "object"
-      },
-      {
-       "type": "null"
-      }
-     ],
-     "title": "Body"
-    }
-   }
-  },
   "POST /api/calendar/import": {
    "query": [
     "zone?"
@@ -123,15 +107,6 @@
    }
   },
   "PUT /api/bias": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "PUT /api/brief": {
    "body": {
     "application/json": {
      "additionalProperties": true,
@@ -194,33 +169,6 @@
     }
    }
   },
-  "PUT /api/llm/budget": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "PUT /api/llm/prices": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "PUT /api/risk": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
   "PUT /api/settings": {
    "body": {
     "application/json": {
@@ -263,40 +211,6 @@
   },
   "GET /api/bias": {
    "bias": "null"
-  },
-  "GET /api/brief": {
-   "budget": {
-    "calls": "number",
-    "level": "string",
-    "limit": "null",
-    "share": "null",
-    "spent": "number",
-    "unpriced_calls": "number"
-   },
-   "default_prompt": "string",
-   "editable": "bool",
-   "error": "null",
-   "last": "null",
-   "providers": [
-    {
-     "default_model": "string",
-     "env": "string",
-     "id": "string",
-     "installed": "bool",
-     "key_set": "bool",
-     "key_source": "null",
-     "secret": "string",
-     "title": "string"
-    }
-   ],
-   "running": "bool",
-   "settings": {
-    "max_chars_per_source": "number",
-    "model": "null",
-    "prompt": "null",
-    "provider": "string",
-    "urls": []
-   }
   },
   "GET /api/calendar": {
    "editable": "bool",
@@ -636,58 +550,6 @@
   },
   "GET /api/licence": {
    "available": "bool"
-  },
-  "GET /api/llm/usage": {
-   "budget": {
-    "calls": "number",
-    "level": "string",
-    "limit": "null",
-    "share": "null",
-    "spent": "number",
-    "unpriced_calls": "number"
-   },
-   "by_feature": [],
-   "by_model": [],
-   "daily": [
-    [
-     "number|string"
-    ]
-   ],
-   "month": "string",
-   "prices": {
-    "claude-haiku-4-5": {
-     "cache_read": "number",
-     "cache_write": "number",
-     "input": "number",
-     "output": "number"
-    },
-    "claude-opus-4-5": {
-     "cache_read": "number",
-     "cache_write": "number",
-     "input": "number",
-     "output": "number"
-    },
-    "claude-sonnet-4-5": {
-     "cache_read": "number",
-     "cache_write": "number",
-     "input": "number",
-     "output": "number"
-    },
-    "gpt-5": {
-     "cache_read": "number",
-     "cache_write": "number",
-     "input": "number",
-     "output": "number"
-    },
-    "gpt-5-mini": {
-     "cache_read": "number",
-     "cache_write": "number",
-     "input": "number",
-     "output": "number"
-    }
-   },
-   "top": [],
-   "warn_at": "number"
   },
   "GET /api/plugins": {
    "api": "number",
@@ -1178,21 +1040,6 @@
    "first": "number",
    "last": "number"
   },
-  "GET /api/risk": {
-   "editable": "bool",
-   "settings": {
-    "balance": "null",
-    "contract_size": "number",
-    "currency": "string",
-    "enabled": "bool",
-    "lot_step": "number",
-    "min_lot": "number",
-    "mode": "string",
-    "risk_off_multiplier": "number",
-    "value": "number"
-   },
-   "sizer": "null"
-  },
   "GET /api/scan": {
    "app_version": "string",
    "clock": "string",
@@ -1349,7 +1196,6 @@
         "swing": "string"
        },
        "risk": "null",
-       "size": "null",
        "time": "string",
        "time_unix": "number",
        "timeframe": "string",
@@ -1377,7 +1223,6 @@
         "swing": "string"
        },
        "risk": "null",
-       "size": "null",
        "time": "string",
        "time_unix": "number",
        "timeframe": "string",
@@ -1386,7 +1231,6 @@
       }
      ]
     },
-    "sizing": "null",
     "time": "string",
     "timeframes": [
      {
@@ -1731,9 +1575,6 @@
   "POST /api/alerts/test",
   "GET /api/bias",
   "PUT /api/bias",
-  "GET /api/brief",
-  "PUT /api/brief",
-  "POST /api/brief/generate",
   "GET /api/calendar",
   "PUT /api/calendar",
   "POST /api/calendar/import",
@@ -1768,17 +1609,12 @@
   "DELETE /api/licence",
   "GET /api/licence",
   "PUT /api/licence",
-  "PUT /api/llm/budget",
-  "PUT /api/llm/prices",
-  "GET /api/llm/usage",
   "GET /api/markets/candles",
   "GET /api/markets/tick",
   "GET /api/plugins",
   "GET /api/quarters",
   "GET /api/replay",
   "GET /api/replay/range",
-  "GET /api/risk",
-  "PUT /api/risk",
   "GET /api/scan",
   "GET /api/sessions",
   "GET /api/settings",

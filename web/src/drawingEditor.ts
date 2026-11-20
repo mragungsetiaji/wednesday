@@ -10,7 +10,7 @@ import type {
   Time,
 } from "lightweight-charts";
 
-import type { Candle, Drawing, DrawingAlert, DrawingKind, DrawingPoint, Sizing } from "./api";
+import type { Candle, Drawing, DrawingAlert, DrawingKind, DrawingPoint } from "./api";
 import {
   canAlert,
   dragBus,
@@ -36,8 +36,7 @@ import {
   xOfLogical,
 } from "./drawings";
 import { logicalOfTime, stepOf, timeShift } from "./timeMap";
-import { fmtMoney, fmtPrice, fmtSigned } from "./format";
-import { sizeFor } from "./sizing";
+import { fmtPrice, fmtSigned } from "./format";
 import { withAlpha, type ChartPalette } from "./theme";
 import { anchorXY, hitsGeom, labelBox, shapeOf, type Geom, type GeomCtx } from "./shapes";
 
@@ -85,7 +84,7 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
   constructor(private readonly source: DrawingsPrimitive) {}
 
   draw(target: CanvasRenderingTarget2D): void {
-    const { chart, series, times, shown, selected, hovered, palette, font, sizing, candles, live, alerts } = this.source;
+    const { chart, series, times, shown, selected, hovered, palette, font, candles, live, alerts } = this.source;
     if (!chart || !series || !times.length || !shown.length) return;
     const yOf = (p: number) => series.priceToCoordinate(p);
 
@@ -225,8 +224,6 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
           const { entry, stop, target: tp } = positionOf(d);
           const risk = Math.abs(entry - stop);
           const rr = risk ? Math.abs(tp - entry) / risk : 0;
-          const size = sizing ? sizeFor(sizing, risk) : null;
-          const money = (v: number) => (size && sizing ? `  ${v < 0 ? "−" : "+"}${fmtMoney(Math.abs(v), sizing.currency)}` : "");
           if (track && track.fillT !== null) {
             // Filled: shade entry to where price stands (or where it closed), green in profit, red in loss.
             const xAt = (t: number) => xOfLogical(chart, logicalOfTime(times, t));
@@ -256,8 +253,7 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
               ctx.lineWidth = Math.max(1, Math.round(1.5 * hr));
               ctx.stroke();
               const pct = (gain / entry) * 100;
-              const text = `${TRACK_LABEL[track.state]} ${fmtSigned(gain)} (${pct >= 0 ? "+" : "−"}${Math.abs(pct).toFixed(2)}%)${
-                size && risk ? money((gain / risk) * size.risk) : ""}`;
+              const text = `${TRACK_LABEL[track.state]} ${fmtSigned(gain)} (${pct >= 0 ? "+" : "−"}${Math.abs(pct).toFixed(2)}%)`;
               const w = pillWidth(text);
               const right = xb + 8 * hr + w <= W;
               pill(text, right ? xb + 8 * hr : xb - 8 * hr - w, y, c, palette.surface, true);
@@ -271,14 +267,13 @@ class DrawingsRenderer implements IPrimitivePaneRenderer {
             const cx = (x0 + x1) / 2;
             const out = (y: number) => y + (y < ye ? -1 : 1) * (fontPx / 2 + 6 * vr);
             const pct = ((tp - entry) / entry) * 100;
-            pill(`Target ${fmtPrice(tp)}  ${fmtSigned(tp - entry)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)${size ? money(size.risk * rr) : ""}`,
+            pill(`Target ${fmtPrice(tp)}  ${fmtSigned(tp - entry)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%)`,
               cx, out(yt), palette.bull, palette.surface);
-            pill(`Stop ${fmtPrice(stop)}  ${fmtSigned(stop - entry)}${size ? money(-size.risk) : ""}`,
+            pill(`Stop ${fmtPrice(stop)}  ${fmtSigned(stop - entry)}`,
               cx, out(ys), palette.bear, palette.surface);
-            const lots = size ? ` · ${size.lots} lot` : sizing ? " · min lot over budget" : "";
             const wait = track?.state === "waiting" ? " · waiting for entry" : track?.state === "missed" ? " · entry missed" : "";
             // Centred between the entry and end handles when it fits there, else past the end handle.
-            const text = `${d.kind === "long" ? "Long" : "Short"} ${fmtPrice(entry)} · ${rr.toFixed(2)}R${lots}${wait}`;
+            const text = `${d.kind === "long" ? "Long" : "Short"} ${fmtPrice(entry)} · ${rr.toFixed(2)}R${wait}`;
             const fits = pillWidth(text) <= x1 - x0 - 24 * hr;
             pill(text, fits ? cx : x1 + 10 * hr, ye, palette.textStrong, palette.surface, !fits);
           }
@@ -382,7 +377,6 @@ class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   hovered: string | null = null; // shows a position's target and stop like the selected one
   candles: Candle[] = []; // to track positions: filled, and where price stands
   live: Candle | null = null; // the forming candle
-  sizing: Sizing | null = null;
   alerts: Record<string, DrawingAlert> = {};
   font = "system-ui, sans-serif";
   private requestUpdate?: () => void;
@@ -405,7 +399,7 @@ class DrawingsPrimitive implements ISeriesPrimitive<Time> {
     return this.views;
   }
 
-  update(patch: Partial<Pick<DrawingsPrimitive, "times" | "shown" | "selected" | "hovered" | "candles" | "live" | "palette" | "font" | "sizing" | "alerts">>): void {
+  update(patch: Partial<Pick<DrawingsPrimitive, "times" | "shown" | "selected" | "hovered" | "candles" | "live" | "palette" | "font" | "alerts">>): void {
     Object.assign(this, patch);
     this.requestUpdate?.();
   }
@@ -522,7 +516,6 @@ export class DrawingEditor {
       times: this.times,
       shown: this.draft ? [...shown, this.draft] : shown,
       selected: this.draft ? this.draft.id : ctl?.selected ?? null,
-      sizing: ctl?.sizing ?? null,
       alerts: ctl?.alerts ?? {},
     });
   }

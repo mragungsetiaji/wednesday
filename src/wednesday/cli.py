@@ -12,7 +12,6 @@ from pathlib import Path
 
 from .detectors import DEFAULT_DETECTORS, REGISTRY, DetectorParams, parse_detectors
 from .alerts import ALERTS_KEY, AlertManager, AlertSettings, TelegramClient, TelegramError, telegram_client
-from .brief import BRIEF_KEY, BriefRunner, BriefSettings
 from .journal.service import Journals
 from .news import CALENDAR_KEY, Calendar, CalendarSettings
 from .engine import Runtime
@@ -208,10 +207,9 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
     if alerts.configured:
         log.info("telegram alerts %s for %s, %s OBs", "on" if alert_settings.enabled else "paused",
                  ",".join(alert_settings.timeframes), "/".join(alert_settings.priorities))
-    brief = BriefRunner(store, BriefSettings.from_dict(store.get_setting(BRIEF_KEY) if store else None))
     calendar = Calendar(store, CalendarSettings.from_dict(store.get_setting(CALENDAR_KEY) if store else None))
     journals = Journals(store) if store else None
-    runtime = Runtime(cfg, data, store, args.delay, publish, alerts, brief, calendar, journals=journals,
+    runtime = Runtime(cfg, data, store, args.delay, publish, alerts, calendar, journals=journals,
                       poll=args.poll)
     engine = runtime.engine
     feed = engine.feed

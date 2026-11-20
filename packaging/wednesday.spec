@@ -1,7 +1,7 @@
 # PyInstaller spec for the desktop app's server, the Tauri shell's sidecar (src-tauri, #92).
 # Build from the repository root, after `npm run build` in web/, `npm ci --omit=dev` in tradingview/,
 # node (Node 22) copied to packaging/node/ with its LICENSE, and
-# `uv sync --extra desktop --extra llm`:
+# `uv sync --extra desktop`:
 #
 #   uv run --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 #

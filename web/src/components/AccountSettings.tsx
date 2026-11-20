@@ -44,7 +44,7 @@ export function AccountSettings() {
       <div className="settings-intro">
         <h2 id="account-h">Plan</h2>
         <p>
-          The screener, alerts, the bias, the news card, the news brief with your own API key, and labelling and training
+          The screener, alerts, the bias, the news card, and labelling and training
           your own models are free. The features below come with Wednesday EE and a licence.
         </p>
       </div>

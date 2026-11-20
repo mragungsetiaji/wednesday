@@ -142,10 +142,6 @@ export default function App() {
   const refreshScan = useCallback(() => {
     fetchScan().then((res) => startTransition(() => setData(res))).catch((e) => setFetchError(e instanceof Error ? e.message : String(e)));
   }, []);
-  // The bias panel only links to Settings to set up the brief: open that section.
-  const openSettings = useCallback(() => {
-    window.location.hash = "settings/brief";
-  }, []);
 
   const version = data?.version ?? 0;
   const tradeBias = data?.trade_bias ?? null;
@@ -162,7 +158,7 @@ export default function App() {
   // The live price stays out of this component's state: a tick re-renders only what shows it.
   const liveFeed = useLiveFeed(data?.tick_seconds ?? 0, data?.version ?? 0, refreshScan);
   const live = replaying ? null : liveFeed;
-  const drawings = useDrawings(data?.source, data?.symbol, liveScan?.sizing ?? null, data?.version ?? 0);
+  const drawings = useDrawings(data?.source, data?.symbol, data?.version ?? 0);
 
   useEffect(() => {
     if (timeframes.length && !timeframes.includes(tf)) setTf(timeframes[0]);
@@ -501,8 +497,8 @@ export default function App() {
             </section>
 
             {!showRail ? null : scan ? (
-              <Rail items={rail} sizing={scan.sizing} price={scan.price} live={live} status={chartStatus} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf}
-                bias={tradeBias} onBiasChanged={refreshScan} onOpenSettings={openSettings}
+              <Rail items={rail} price={scan.price} live={live} status={chartStatus} hasOb={hasOb} highlight={highlight} onHighlight={setHighlight} onOpen={setTf}
+                bias={tradeBias} onBiasChanged={refreshScan}
                 panels={config ? [
                   { id: "structure", label: "Structure", content: <StructurePanel scan={scan} selected={tf} onSelect={setTf} /> },
                   {

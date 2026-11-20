@@ -8,7 +8,7 @@ its levels by hand. It suggests; it never places trades.
 ## Commands
 
 ```bash
-make install     # uv sync --extra llm, plus npm install in web/
+make install     # uv sync, plus npm install in web/
 make test        # uv run pytest -q
 make typecheck   # tsc -b in web/
 make test-ui     # node --test on web/src/*.test.ts (Node 22.18+)
@@ -59,14 +59,13 @@ both `make test` and `make test-tauri` check them against the same `tests/golden
 - **Only closed candles.** Resampling drops the candle still forming. A detector that
   reads the forming bar, or any future bar, gives signals that look good in history
   and fail live.
-- **The bias is the trader's call.** `bias.py` is set by hand; the LLM brief
-  (`brief.py`) only offers a suggestion the trader applies with a click. Don't make
+- **The bias is the trader's call.** `bias.py` is set by hand. Don't make
   anything set the bias, or trade, on its own.
-- **Secrets never go into the database.** The Telegram bot token and
-  LLM API keys are entered in Settings and kept in the OS credential store
-  (`secret_store.py`, through `keyring`), with `.env` as a fallback. None may be
-  written to the database, logs, API responses or the dashboard: APIs take them
-  write-only and report only where one comes from. `.env` is gitignored; add new
+- **Secrets never go into the database.** The Telegram bot token is
+  entered in Settings and kept in the OS credential store
+  (`secret_store.py`, through `keyring`), with `.env` as a fallback. It may not be
+  written to the database, logs, API responses or the dashboard: APIs take it
+  write-only and report only where it comes from. `.env` is gitignored; add new
   variables to `.env.example` with an empty value and a comment.
 - **Not financial advice.** Wednesday suggests; the trader decides and carries every
   risk (`DISCLAIMER.md`, accepted in the app, see `terms.py`). Don't word anything in
@@ -92,9 +91,8 @@ both `make test` and `make test-tauri` check them against the same `tests/golden
   SQLite-only SQL. The Rust server (`server-rs/src/store.rs`) makes the same tables from
   `server-rs/schema.json`: after changing a table, run
   `UPDATE_RUST_SCHEMA=1 uv run pytest tests/test_rust_schema.py` and `make test-tauri`.
-- **Optional extras stay optional.** `anthropic`/`openai` are extras; import them
-  inside the function that needs them so the core runs without them, and report a missing one as an install hint
-  (see `brief.py`).
+- **Optional extras stay optional.** `postgres` and `desktop` are extras; import them
+  inside the function that needs them so the core runs without them, and report a missing one as an install hint.
 - **Paid features live in the sibling `../wednesday-ee` plugin** (private repo),
   loaded through the `wednesday.plugins` entry point (`docs/plugins.md`). The core
   exposes hooks and feature ids; licence checks and paid code stay in the plugin, and
@@ -102,16 +100,8 @@ both `make test` and `make test-tauri` check them against the same `tests/golden
   `plugin_install.py` downloads it from the licence server, checks its signature
   against `plugin_keys.py` and unpacks it to `data/plugins/`.
 
-## LLM news brief
-
-`brief.py` calls Claude (default `claude-opus-5`, with server-side refusal fallbacks)
-or OpenAI with the same prompt. The dashboard parses the reply's final
-`BIAS: BULLISH|BEARISH|NEUTRAL` line, so a prompt change must keep that line. Tests
-replace the model call through `brief_mod.ASK`; they never call a real API.
-
 ## Style
 
 Match the surrounding code: type hints, dataclasses for settings with
 `from_dict`/`to_dict`, short docstrings that say what and why. User-facing text (dashboard, docs, errors) is plain and
-direct, and error messages say what to do next ("Add the Claude API key in Settings > News brief
-restart").
+direct, and error messages say what to do next ("Set the bot token in Settings > Telegram alerts").

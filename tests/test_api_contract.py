@@ -27,7 +27,6 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from wednesday.alerts import AlertManager
-from wednesday.brief import BriefRunner
 from wednesday.detectors import DetectorParams
 from wednesday.engine import Runtime
 from wednesday.journal.service import Journals
@@ -64,7 +63,6 @@ def client(tmp_path, monkeypatch):
     cfg = ScanConfig(lookback=100, params=DetectorParams(swing_length=3))
     runtime = Runtime(cfg, DataSettings(source="synthetic"), store, alerts=AlertManager(store, None),
                       calendar=Calendar(store),
-                      brief=BriefRunner(store),
                       journals=Journals(store, sample=True), poll=False)
     runtime.engine.step()
     return TestClient(create_app(runtime, source="synthetic", ui_dir=tmp_path))

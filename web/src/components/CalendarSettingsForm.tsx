@@ -210,7 +210,7 @@ function NewsReactions() {
       <p className="field-note">
         Gold's move after earlier releases of each event, from the stored M1 bars: the size of the move 5, 15 and 60
         minutes after, the range of the first 15 minutes, and how often the first move had reversed by the hour. They
-        describe what happened, not what will. The risk-time card, the news lines and the brief show them too.
+        describe what happened, not what will. The risk-time card and the news lines show them too.
       </p>
       <p className="field-note num">
         {history && history.stored > 0

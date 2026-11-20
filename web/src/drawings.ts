@@ -1,7 +1,7 @@
 import type { IChartApi, ISeriesApi, Logical, SeriesType } from "lightweight-charts";
 
 import { shapeOf } from "./shapes.ts";
-import type { Candle, Drawing, DrawingAlert, DrawingKind, DrawingPoint, Sizing } from "./api";
+import type { Candle, Drawing, DrawingAlert, DrawingKind, DrawingPoint } from "./api";
 import { logicalOfTime, timeOfLogical } from "./timeMap.ts";
 
 /** The cursor, a drawing kind, the eraser (a click removes a drawing) or zoom (drag over the bars to show). */
@@ -18,7 +18,6 @@ export interface DrawingCtl {
   create: (d: Drawing) => void;
   change: (d: Drawing, commit: boolean) => void; // commit: save it (a drag ended)
   remove: (id: string) => void;
-  sizing: Sizing | null; // lot size and money at risk on positions; null without Settings > Risk
   editText: (id: string) => void; // select a text drawing and put the cursor in its text field
   alerts: Record<string, DrawingAlert>; // by drawing id
   magnet: boolean; // points snap to the nearest open, high, low or close

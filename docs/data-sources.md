@@ -22,7 +22,6 @@ never stored and not real market data. It isn't shown in Settings; start it with
 ```bash
 uv sync                      # default setup (SQLite)
 uv sync --extra postgres     # PostgreSQL storage
-uv sync --extra llm          # Claude / OpenAI SDKs for the news brief
 ```
 
 ## Picking a source

@@ -2,8 +2,7 @@
 even when it isn't installed or licensed.
 
 Everything else in Wednesday is free and needs no licence: the screener,
-alerts, the bias, the news card, the manual news brief with your own API key,
-importing M1 history, and one trading journal.
+alerts, the bias, the news card and one trading journal.
 """
 
 from __future__ import annotations

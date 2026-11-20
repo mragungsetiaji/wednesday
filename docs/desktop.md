@@ -46,7 +46,7 @@ preferences in `%LOCALAPPDATA%\app.wednesday.desktop`.
 | `webview\` | The 0.3.0-and-earlier window's storage, no longer used |
 
 Everything is set in the dashboard under **Settings**; the app needs no `.env`.
-The Telegram bot token and the LLM API keys are kept in Windows
+The Telegram bot token is kept in Windows
 Credential Manager (entries named `Wednesday`), never in the database or a file. A `.env` in this folder is still read if you create one.
 
 On first start the app shows the [disclaimer and risk agreement](../DISCLAIMER.md);
@@ -61,7 +61,7 @@ whose monitor is gone (a laptop undocked) opens on the main screen, fully
 visible. Named workspaces (see [Workspaces](dashboard.md#workspaces)) switch
 between saved window sets.
 
-The installer includes the news brief extra, and Node.js with the
+The installer includes Node.js with the
 TradingView helper, so every source and feature works without installing Python
 or Node.
 
@@ -122,7 +122,7 @@ Setup build before installing.
 1. the dashboard (`npm ci && npm run build` in `web/`),
 2. the TradingView helper (`npm ci --omit=dev` in `tradingview/`) and `node.exe`
    with its license, copied into `packaging\node\`,
-3. the Python environment (`uv sync --frozen --extra desktop --extra llm`),
+3. the Python environment (`uv sync --frozen --extra desktop`),
 4. the server with PyInstaller (`packaging/wednesday.spec`,
    output `dist\wednesday-server\`),
 5. the Tauri shell and its NSIS installer (`cargo tauri build --config
@@ -164,7 +164,7 @@ npm ci --omit=dev --prefix tradingview
 New-Item -ItemType Directory -Force packaging\node
 Copy-Item (Get-Command node).Source packaging\node\node.exe   # Node 22
 Copy-Item (Join-Path (Split-Path (Get-Command node).Source) LICENSE) packaging\node\LICENSE
-uv sync --frozen --extra desktop --extra llm
+uv sync --frozen --extra desktop
 uv run --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 cargo install tauri-cli --version "^2" --locked
 cd src-tauri; cargo tauri build --config tauri.release.conf.json

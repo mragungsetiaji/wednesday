@@ -17,9 +17,9 @@ OLD_SERVICES = ("Wednesday MT5",)
 # Secrets set from Settings, with the environment variable each falls back to.
 APP_SECRETS = {
     "telegram_bot_token": "TELEGRAM_BOT_TOKEN",
-    "anthropic_api_key": "ANTHROPIC_API_KEY",
-    "openai_api_key": "OPENAI_API_KEY",
 }
+# Secrets of removed features (the LLM news brief), still cleared by forget_all.
+OLD_SECRETS = ("anthropic_api_key", "openai_api_key")
 
 _session: dict[tuple[str, str], str] = {}
 
@@ -129,7 +129,7 @@ def forget_all() -> int:
     """
     _session.clear()
     gone = 0
-    for name in APP_SECRETS:
+    for name in (*APP_SECRETS, *OLD_SECRETS):
         if keyring_get(SERVICE, name) is not None:
             keyring_delete(SERVICE, name)
             gone += 1

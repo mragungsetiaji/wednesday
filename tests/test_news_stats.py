@@ -6,10 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from wednesday import news
-from wednesday.brief import BriefRunner
 from wednesday.engine import Runtime
 from wednesday.news import Calendar, parse_events
-from wednesday.news_stats import (CalendarImportError, NewsReactions, brief_line, number, parse_csv, reaction,
+from wednesday.news_stats import (CalendarImportError, NewsReactions, number, parse_csv, reaction,
                                   store_rows, surprise)
 from wednesday.quarters import utc_to_feed
 from wednesday.scanner import ScanConfig
@@ -79,7 +78,6 @@ def test_stats_per_event_type_on_the_feed_clock(tmp_path):
     assert s["move"]["5"] == pytest.approx(4.0, abs=0.05) and s["reversed"] == 0 and s["up15"] == 2
     assert s["surprise"]["above"] == {"count": 1, "move15": pytest.approx(4.55, abs=0.01)}  # 5 at 4m, halving by 59m
     assert s["surprise"]["below"]["count"] == 1
-    assert "actual above forecast 1x" in brief_line(s)
     # Read on the wrong clock, the "release" lands in the quiet hours before it.
     wrong = NewsReactions(store).stats(bars, "UTC", ["USD"], ["High"], now=datetime(2026, 5, 1, tzinfo=timezone.utc).timestamp())
     assert wrong["usd cpi m/m"]["move"]["5"] < 1
@@ -118,7 +116,7 @@ def test_api_import_and_reactions_on_the_calendar(tmp_path, monkeypatch):
     monkeypatch.setattr(news, "fetch_events", lambda url: parse_events(FF))
     store = Store(f"sqlite:///{tmp_path / 'api.db'}")
     cfg = ScanConfig(lookback=20, timeframes=(TIMEFRAMES_BY_NAME["1H"],))
-    runtime = Runtime(cfg, DataSettings(source="synthetic"), store, calendar=Calendar(store), brief=BriefRunner(store))
+    runtime = Runtime(cfg, DataSettings(source="synthetic"), store, calendar=Calendar(store))
     runtime.calendar.refresh()
     assert [r["title"] for r in store.calendar_history()] == ["CPI m/m"]  # the fetched week went into the history
     monkeypatch.setattr(runtime.engine.feed, "persist", True)
@@ -134,9 +132,3 @@ def test_api_import_and_reactions_on_the_calendar(tmp_path, monkeypatch):
     assert t["count"] == 1 and t["stored"] == 1 and t["move"]["60"] == pytest.approx(10.0, abs=0.05)
     [e] = api.get("/api/calendar").json()["week"]
     assert e["reaction"]["summary"].startswith("CPI m/m: median 15m range") and e["reaction"]["count"] == 1
-    # The brief gets the same facts for the release coming up.
-    sent = {}
-    monkeypatch.setattr(runtime.brief, "start", lambda ctx, confirmed=False: sent.update(ctx))
-    api.post("/api/brief/generate")
-    line = sent[f"{runtime.engine.symbol} after past USD CPI m/m (M1)"]
-    assert line.startswith("last 1 release: median 15m range") and "60m 10.00" in line
