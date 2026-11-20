@@ -119,3 +119,44 @@ def test_bias_from_real_structure():
     b = latest_bias(Context(candles([bar(m) for m in mids])), 2)
     # Two bullish breaks: 105.5 (idx 8) then 107.5 (idx 12).
     assert (b.direction, b.event, b.streak, b.level, b.bars_ago) == ("bullish", "BOS", 2, 107.5, 1)
+
+
+def test_atr_is_the_mean_of_the_last_14_true_ranges():
+    import numpy as np
+
+    from wednesday.structure import average_true_range
+
+    high = np.array([10.0, 12, 11, 15] + [14] * 20)
+    low = np.array([9.0, 10, 8, 13] + [12] * 20)
+    close = np.array([9.5, 11, 9, 14] + [13] * 20)
+    atr = average_true_range(high, low, close, 14)
+    tr = [1.0, 2.5, 3.0, 6.0] + [2.0] * 20  # high-low, or a gap from the previous close
+    for i in range(len(tr)):
+        window = tr[max(0, i - 13) : i + 1]
+        assert atr[i] == pytest.approx(sum(window) / len(window))
+
+
+def test_the_detectors_and_structure_do_without_pandas():
+    """They work on plain arrays and times (#96), so they read the same in another language."""
+    import ast
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "src" / "wednesday"
+    files = [src / "structure.py", src / "levels.py", *sorted((src / "detectors").glob("*.py"))]
+    for f in files:
+        for node in ast.walk(ast.parse(f.read_text())):
+            names = [a.name for a in node.names] if isinstance(node, ast.Import) else \
+                [node.module or ""] if isinstance(node, ast.ImportFrom) else []
+            assert not any(n.split(".")[0] == "pandas" for n in names), f"{f.name} imports pandas"
+
+
+def test_a_context_from_plain_arrays_finds_the_same_levels():
+    from datetime import datetime, timedelta
+
+    df = _two_equal_highs()
+    times = [datetime(2026, 3, 2) + timedelta(minutes=15 * i) for i in range(len(df))]
+    plain = Context.from_arrays(times, *(df[c].tolist() for c in ("open", "high", "low", "close")))
+    params = DetectorParams(swing_length=2, eq_tolerance=0.01)
+    framed = LiquidityDetector(params).detect(Context(df.set_axis(pd.DatetimeIndex(times))))
+    assert framed
+    assert [lv.to_dict() for lv in LiquidityDetector(params).detect(plain)] == [lv.to_dict() for lv in framed]

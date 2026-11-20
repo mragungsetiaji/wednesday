@@ -2,16 +2,24 @@
 
 Detectors never recompute these; they ask the :class:`Context` for a
 ``structure(length)``, which is computed once per swing length and cached.
+
+Like the detectors, this works on plain arrays and the candles' open times, without pandas
+(#96): every step is a loop or an array operation that reads the same in another language.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from functools import cached_property
 from typing import Literal
 
 import numpy as np
-import pandas as pd
+
+from .levels import unix
+
+ATR_LENGTH = 14
 
 
 @dataclass(frozen=True)
@@ -90,16 +98,16 @@ class SwingPoint:
     """A confirmed swing with its structure label against the previous swing of the same kind."""
 
     kind: Literal["high", "low"]
-    time: pd.Timestamp
+    time: datetime
     price: float
     label: Literal["HH", "LH", "HL", "LL"] | None  # None for the first swing of its kind
 
     def to_dict(self) -> dict:
-        return {"kind": self.kind, "time": self.time.isoformat(), "time_unix": int(self.time.timestamp()),
+        return {"kind": self.kind, "time": self.time.isoformat(), "time_unix": unix(self.time),
                 "price": self.price, "label": self.label}
 
 
-def label_swings(structure: Structure, times: pd.Index) -> list[SwingPoint]:
+def label_swings(structure: Structure, times: Sequence[datetime]) -> list[SwingPoint]:
     """HH/LH for swing highs, HL/LL for swing lows, each against the previous one of its kind."""
     prev: dict[str, float] = {}
     out = []
@@ -117,16 +125,23 @@ def label_swings(structure: Structure, times: pd.Index) -> list[SwingPoint]:
 
 
 class Context:
-    """Closed candles of one timeframe plus lazily computed, shared analysis."""
+    """Closed candles of one timeframe plus lazily computed, shared analysis.
 
-    def __init__(self, df: pd.DataFrame):
-        self.df = df
-        self.times = df.index
-        self.open = df["open"].to_numpy(dtype=float)
-        self.high = df["high"].to_numpy(dtype=float)
-        self.low = df["low"].to_numpy(dtype=float)
-        self.close = df["close"].to_numpy(dtype=float)
+    ``candles`` is anything with an index of open times and open / high / low / close columns
+    (the scanner passes a DataFrame); :meth:`from_arrays` builds one from plain sequences.
+    """
+
+    def __init__(self, candles):
+        self.times: Sequence[datetime] = candles.index  # open time of each candle, on the feed's clock
+        self.open = np.asarray(candles["open"], dtype=float)
+        self.high = np.asarray(candles["high"], dtype=float)
+        self.low = np.asarray(candles["low"], dtype=float)
+        self.close = np.asarray(candles["close"], dtype=float)
         self._structures: dict[int, Structure] = {}
+
+    @classmethod
+    def from_arrays(cls, times: Sequence[datetime], open, high, low, close) -> Context:
+        return cls(_Columns(times, {"open": open, "high": high, "low": low, "close": close}))
 
     def __len__(self) -> int:
         return len(self.close)
@@ -138,10 +153,30 @@ class Context:
 
     @cached_property
     def atr(self) -> np.ndarray:
-        """14-period ATR (simple mean of true range; the first bars use what is available)."""
-        prev_close = np.concatenate([[self.close[0]], self.close[:-1]])
-        tr = np.maximum(self.high - self.low, np.maximum(abs(self.high - prev_close), abs(self.low - prev_close)))
-        return pd.Series(tr).rolling(14, min_periods=1).mean().to_numpy()
+        """ATR(14): the mean of the last 14 true ranges (the first bars average what there is)."""
+        return average_true_range(self.high, self.low, self.close, ATR_LENGTH)
+
+
+@dataclass(frozen=True)
+class _Columns:
+    index: Sequence[datetime]
+    columns: dict
+
+    def __getitem__(self, name: str):
+        return self.columns[name]
+
+
+def average_true_range(high: np.ndarray, low: np.ndarray, close: np.ndarray, length: int) -> np.ndarray:
+    """Simple mean of the true range over ``length`` bars, ending at each bar (the first bars
+    average what there is). The true range of the first bar is its high minus its low."""
+    n = len(close)
+    if n == 0:
+        return np.zeros(0)
+    prev_close = np.concatenate([[close[0]], close[:-1]])
+    tr = np.maximum(high - low, np.maximum(np.abs(high - prev_close), np.abs(low - prev_close)))
+    padded = np.concatenate([np.zeros(length - 1), tr])  # zeros add nothing to the first windows' sums
+    sums = np.lib.stride_tricks.sliding_window_view(padded, length).sum(axis=1)
+    return sums / np.minimum(np.arange(1, n + 1), length)
 
 
 @dataclass(frozen=True)
@@ -151,8 +186,8 @@ class Bias:
     direction: Literal["bullish", "bearish"]
     event: Literal["BOS", "CHoCH"]  # CHoCH = the break flipped the previous direction
     level: float  # price of the swing that was broken
-    swing_time: pd.Timestamp  # when that swing printed
-    break_time: pd.Timestamp  # candle that closed beyond it
+    swing_time: datetime  # when that swing printed
+    break_time: datetime  # candle that closed beyond it
     bars_ago: int  # closed candles since the break candle
     streak: int  # consecutive breaks in this direction, including this one
 
@@ -162,9 +197,9 @@ class Bias:
             "event": self.event,
             "level": self.level,
             "swing_time": self.swing_time.isoformat(),
-            "swing_time_unix": int(self.swing_time.timestamp()),
+            "swing_time_unix": unix(self.swing_time),
             "break_time": self.break_time.isoformat(),
-            "break_time_unix": int(self.break_time.timestamp()),
+            "break_time_unix": unix(self.break_time),
             "bars_ago": self.bars_ago,
             "streak": self.streak,
         }

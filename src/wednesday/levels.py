@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass, field
+from datetime import datetime
 
-import pandas as pd
+
+def unix(t: datetime | None) -> int | None:
+    """Seconds since 1970 with a naive feed time read as UTC, as the charts show it."""
+    return calendar.timegm(t.utctimetuple()) if t is not None else None
 
 
 @dataclass
@@ -13,11 +18,11 @@ class Level:
     kind: str  # detector specific: "bullish"/"bearish" for OB and IDM, "bsl"/"ssl" for liquidity
     top: float
     bottom: float
-    time: pd.Timestamp  # open time of the origin candle (OB candle, swing candle)
-    confirmed_time: pd.Timestamp  # when the level became known (break candle, swing confirmation)
+    time: datetime  # open time of the origin candle (OB candle, swing candle)
+    confirmed_time: datetime  # when the level became known (break candle, swing confirmation)
     label: str = ""  # short human name, e.g. "BULL OB", "EQH x3"
     touches: int = 0  # candles that traded into the level without ending it
-    ended_time: pd.Timestamp | None = None  # mitigated / swept
+    ended_time: datetime | None = None  # mitigated / swept
     meta: dict = field(default_factory=dict)
 
     @property
@@ -34,10 +39,6 @@ class Level:
     def to_dict(self) -> dict:
         def ts(t):
             return t.isoformat() if t is not None else None
-
-        # Feed times are naive (broker server time); unix values treat them as UTC so charts show them as-is.
-        def unix(t):
-            return int(t.timestamp()) if t is not None else None
 
         return {
             "detector": self.detector,

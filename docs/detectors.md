@@ -111,7 +111,10 @@ levels price is inside plus recent sweeps.
 1. Create `src/wednesday/detectors/<name>.py` with a `Detector` subclass:
    set `name` and `title`, implement `detect(ctx) -> list[Level]`. Use
    `ctx.structure(length)` for swings / BOS and `ctx.atr` instead of recomputing,
-   and set `ended_time` on levels that were mitigated or swept.
+   and set `ended_time` on levels that were mitigated or swept. Work on the
+   context's arrays (`ctx.open`, `ctx.high`, `ctx.low`, `ctx.close`, `ctx.times`)
+   with loops and numpy, not pandas: the detectors, `structure.py` and `levels.py`
+   stay free of it (a test checks), so they read the same in another language (#96).
 2. Register the class in `detectors/__init__.py` (`REGISTRY`).
 3. If it needs a new setting, add it to `DetectorParams` and a CLI flag.
 4. Rewrite the reference output (`UPDATE_GOLDEN=1 uv run pytest tests/test_golden.py`)
