@@ -127,13 +127,14 @@ own role in `web/src/format.ts` (`roleOf`).
 ## Reference output
 
 `tests/test_golden.py` runs the scan on fixed M1 candles in `tests/golden/<case>/`
-(`m1.csv.gz`: market hours only, rounded to cents) and compares everything it
+(`m1.csv.gz`: market hours only, rounded to cents or a coarser tick) and compares everything it
 makes with `expected.json`: the closed candles per timeframe, swings and the
 latest break of structure, every level per detector (active or ended), the scan
 and its setups with no bias, bullish and bearish, the session levels and the
 quarterly blocks. The cases cover the UTC clock with the default settings, wick
-zones with close mitigation and shorter swings, and a broker clock (NY+7) ending
-on a Friday.
+zones with close mitigation and shorter swings, a broker clock (NY+7) ending
+on a Friday, and prices on a 0.50 grid so equal highs and lows, and every
+tie-break between them, come up often.
 
 A change to a detector that moves a level fails this test with the first
 differences. When it is meant, rewrite the output and review its diff:
@@ -142,4 +143,7 @@ differences. When it is meant, rewrite the output and review its diff:
 UPDATE_GOLDEN=1 uv run pytest tests/test_golden.py
 ```
 
-The same files are the reference for any other implementation of the scan (#96).
+The same files are the reference for the Rust port of the scan in
+`server-rs/src/scan/` (#96), checked by `server-rs/tests/golden.rs` (`make test-tauri`).
+Until Python's scan goes, a detector change goes into both: change the Python one,
+rewrite the output, then make the Rust one match it.

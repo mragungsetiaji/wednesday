@@ -21,7 +21,8 @@
   },
   "price": 2164.24,
   "recent_bars": 3,
-  "seed": 7
+  "seed": 7,
+  "tick": 0.01
  },
  "quarters": {
   "clock": "UTC",

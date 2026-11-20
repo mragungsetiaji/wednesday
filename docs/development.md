@@ -104,6 +104,11 @@ make serve PORT=8001            # the Python server ...
 make serve-rs PORT=8000         # ... and the Rust one in front, on http://127.0.0.1:8000
 ```
 
+The scan is ported (`server-rs/src/scan/`: resampling, structure, the detectors,
+setups, session levels and quarters) and gives the same output as Python's on
+`tests/golden/`, but no route serves it yet: the scan routes need the engine's
+state (the live M1 buffer, settings, the store), which come with step 8.
+
 The Rust server only listens on `127.0.0.1` for now: the login, and the address it
 counts failed logins by, are still Python's.
 

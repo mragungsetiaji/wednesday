@@ -9,6 +9,8 @@
 //! the login can only move once the login itself is ported: until then, only routes the Python
 //! server leaves open (`auth.PUBLIC`) are served here.
 
+pub mod scan;
+
 use std::net::SocketAddr;
 
 use axum::body::Body;

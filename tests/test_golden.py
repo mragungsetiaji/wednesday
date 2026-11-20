@@ -48,6 +48,7 @@ class Case:
     end: str = "2026-03-04 15:00"  # UTC, a Wednesday in New York's afternoon
     lookback: int = 100
     params: dict = field(default_factory=dict)  # DetectorParams overrides
+    tick: float = 0.01  # prices are rounded to this; a coarse one makes equal highs and lows common
     note: str = ""
 
 
@@ -57,6 +58,8 @@ CASES = [
          note="full-candle zones, mitigation on a close beyond, shorter swings"),
     Case("broker-ny7", seed=42, clock="NY+7", end="2026-03-06 18:00",
          note="a broker clock (New York + 7h, as many MT5 servers), ending Friday near the close"),
+    Case("utc-ties", seed=5, tick=0.5,
+         note="prices on a 0.50 grid: equal highs and lows everywhere, so every tie-break is exercised"),
 ]
 
 
@@ -76,7 +79,9 @@ def make_input(case: Case) -> pd.DataFrame:
     # Enough minutes that, after the closed hours, every timeframe still has its lookback.
     feed = SyntheticFeed(seed=case.seed, history=int(cfg.required_m1_bars() * 1.6), end=pd.Timestamp(case.end))
     bars = feed._bars
-    bars = bars[_market_hours(bars.index)].round(2)
+    bars = bars[_market_hours(bars.index)]
+    prices = ["open", "high", "low", "close"]
+    bars[prices] = ((bars[prices] / case.tick).round() * case.tick).round(2)  # monotonic: high stays the highest
     bars["volume"] = bars["volume"].astype(int)
     bars.index = utc_index_to_feed(bars.index.tz_localize("UTC"), case.clock)
     return bars

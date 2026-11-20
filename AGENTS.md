@@ -48,7 +48,10 @@ The backend is moving to Rust route by route (#96). `server-rs/` is the Rust ser
 shell runs it on the dashboard's port, it answers the routes in `PORTED` and passes the rest
 to the Python sidecar on another local port (`WEDNESDAY_GATEWAY=0` turns it off). A ported
 route must answer as `tests/api_contract.json` says and match `tests/golden/` where it
-scans; routes behind the login stay in Python until the login is ported.
+scans; routes behind the login stay in Python until the login is ported. The scan itself
+(resampling, structure, detectors, setups, sessions, quarters) exists twice for now,
+`src/wednesday/` and `server-rs/src/scan/`: a change to one must go into the other, and
+both `make test` and `make test-tauri` check them against the same `tests/golden/`.
 
 ## Rules that matter here
 
