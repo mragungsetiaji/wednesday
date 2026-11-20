@@ -14,7 +14,7 @@ WEB  := web
 UI_BUILD   := $(WEB)/dist/index.html
 UI_SOURCES := $(shell find $(WEB)/src -type f 2>/dev/null) $(WEB)/index.html $(WEB)/vite.config.ts $(WEB)/package.json
 
-.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui scan check test test-ui typecheck telegram-chats telegram-test clean release
+.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui scan check test test-ui typecheck telegram-chats telegram-test clean release tauri test-tauri serve-rs
 
 help: ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -64,8 +64,12 @@ dev-ui:
 tauri: $(UI_BUILD) ## The Tauri desktop shell (src-tauri, #92) with the Python server as its sidecar
 	cd src-tauri && cargo run
 
-test-tauri: ## Run the Tauri shell's Rust tests
+test-tauri: ## Run the Rust tests: the Tauri shell and the Rust server in front of Python (server-rs, #96)
 	cd src-tauri && cargo test
+	cd server-rs && cargo test
+
+serve-rs: ## The Rust server on PORT in front of a running Python one on PORT+1 (make serve PORT=8001 first)
+	cd server-rs && cargo run -- --port $(PORT) --backend $$(( $(PORT) + 1 ))
 
 scan: ## One scan in the console
 	$(UV) run wednesday --once $(ARGS)

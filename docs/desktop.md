@@ -93,9 +93,15 @@ the app closed is kept in the shell's own data folder (`windows.json`) and resto
 on the next start; a window left on an unplugged monitor comes back onto the
 first one. The server stops with the app, and by itself if the shell crashes.
 
+The windows don't talk to the Python server directly. The shell runs the Rust server
+(`server-rs/`, #96) on the dashboard's port, and the Python sidecar on another local
+port behind it: the Rust server answers the routes already ported to Rust and passes
+everything else through unchanged, the live price stream included. Set
+`WEDNESDAY_GATEWAY=0` to show the Python server directly, to rule the Rust one out.
+
 ```bash
 make tauri        # the shell, starting `uv run wednesday-server` from this checkout
-make test-tauri   # its Rust tests
+make test-tauri   # its Rust tests, and the Rust server's
 ```
 
 It needs Rust 1.77.2 or newer. `WEDNESDAY_HOME` and `XAU_SOURCE=synthetic` work as

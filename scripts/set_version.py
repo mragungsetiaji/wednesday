@@ -32,6 +32,9 @@ PLACES: list[tuple[str, re.Pattern, int]] = [
     ("src-tauri/tauri.conf.json", re.compile(r'^(  "version": ")([^"]+)(")', re.M), 1),
     ("src-tauri/Cargo.toml", re.compile(r'^(version = ")([^"]+)(")', re.M), 1),
     ("src-tauri/Cargo.lock", re.compile(r'(\[\[package\]\]\nname = "wednesday-desktop"\nversion = ")([^"]+)(")'), 1),
+    ("src-tauri/Cargo.lock", re.compile(r'(\[\[package\]\]\nname = "wednesday-rs"\nversion = ")([^"]+)(")'), 1),
+    ("server-rs/Cargo.toml", re.compile(r'^(version = ")([^"]+)(")', re.M), 1),
+    ("server-rs/Cargo.lock", re.compile(r'(\[\[package\]\]\nname = "wednesday-rs"\nversion = ")([^"]+)(")'), 1),
 ]
 
 

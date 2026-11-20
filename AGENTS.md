@@ -44,6 +44,12 @@ exposes the commands `web/src/desktop.ts` calls. Its commands must be listed in
 `src-tauri/build.rs` and granted in `src-tauri/capabilities/default.json`, since the
 page comes from `http://127.0.0.1:<port>`. Run `make test-tauri` after changes there.
 
+The backend is moving to Rust route by route (#96). `server-rs/` is the Rust server: the
+shell runs it on the dashboard's port, it answers the routes in `PORTED` and passes the rest
+to the Python sidecar on another local port (`WEDNESDAY_GATEWAY=0` turns it off). A ported
+route must answer as `tests/api_contract.json` says and match `tests/golden/` where it
+scans; routes behind the login stay in Python until the login is ported.
+
 ## Rules that matter here
 
 - **Only closed candles.** Resampling drops the candle still forming. A detector that

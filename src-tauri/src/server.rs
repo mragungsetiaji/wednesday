@@ -20,6 +20,23 @@ pub struct Server {
     stderr: Arc<Mutex<Vec<String>>>, // the last lines, to explain a failed start
 }
 
+/// Whether the Rust server (`server-rs`, #96) sits in front of the Python one: yes, unless
+/// `WEDNESDAY_GATEWAY=0`, which shows the Python server directly (to rule the front out).
+pub fn gateway_enabled() -> bool {
+    std::env::var("WEDNESDAY_GATEWAY").map(|v| v != "0").unwrap_or(true)
+}
+
+/// The dashboard's address, bound now so it stays ours while the Python server starts:
+/// `preferred` when it's free (the layout is kept per address), else any free port.
+pub fn bind_front(preferred: u16) -> std::io::Result<TcpListener> {
+    TcpListener::bind(("127.0.0.1", preferred)).or_else(|_| TcpListener::bind(("127.0.0.1", 0)))
+}
+
+/// Any free local port (for the Python server behind the Rust one).
+pub fn free_port() -> Option<u16> {
+    TcpListener::bind(("127.0.0.1", 0)).and_then(|l| l.local_addr()).map(|a| a.port()).ok()
+}
+
 /// `preferred` when it's free (the dashboard's layout is kept per address), else any free port.
 pub fn pick_port(preferred: u16) -> u16 {
     if TcpListener::bind(("127.0.0.1", preferred)).is_ok() {

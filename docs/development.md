@@ -57,6 +57,8 @@ src/wednesday/
   plugins.py      loads plugins (entry point group wednesday.plugins): routes, hooks, jobs
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)
+src-tauri/        the Tauri desktop shell (#92)
+server-rs/        the Rust server in front of the Python one (#96)
 scripts/          Windows VPS: auto-restart wrapper + Task Scheduler installer
 docs/             these docs
 tests/
@@ -78,6 +80,32 @@ UPDATE_API_CONTRACT=1 uv run pytest tests/test_api_contract.py
 It is also what a replacement server must answer the same way (#96).
 The scan's own output is kept the same way in `tests/golden/` (see
 [Reference output](detectors.md#reference-output)).
+
+## The Rust server (#96)
+
+The backend moves to Rust a route at a time. `server-rs/` is a small
+[axum](https://github.com/tokio-rs/axum) server that sits on the dashboard's address,
+answers the routes listed in `PORTED` (`server-rs/src/lib.rs`) and passes every other
+request to the Python server, streaming the answer back. The Tauri shell runs it in
+front of the sidecar, so the app works the same at every step.
+
+To port a route:
+
+1. Add its handler to `app()` in `server-rs/src/lib.rs` and the route to `PORTED`.
+2. Its answer must have the shape `tests/api_contract.json` gives it; the Rust tests
+   check every ported GET route against that file. A route that scans must also
+   match `tests/golden/`.
+3. Routes behind the login stay in Python until the login itself is ported: the Rust
+   tests refuse a ported route that isn't in `auth.PUBLIC`.
+
+```bash
+make test-tauri                 # the shell's and the Rust server's tests
+make serve PORT=8001            # the Python server ...
+make serve-rs PORT=8000         # ... and the Rust one in front, on http://127.0.0.1:8000
+```
+
+The Rust server only listens on `127.0.0.1` for now: the login, and the address it
+counts failed logins by, are still Python's.
 
 ## How a scan flows
 

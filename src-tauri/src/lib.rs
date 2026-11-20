@@ -9,6 +9,9 @@
 //! Where the windows were when the app last closed is kept in `windows.json` in the app's data
 //! folder and restored on the next start. Closing the main window closes everything and stops
 //! the server; the server also stops by itself if the shell dies (`--parent-pid`).
+//!
+//! The windows show the Rust server (`server-rs`, #96) on the dashboard's port. It answers the
+//! routes ported to Rust and passes the rest to the Python server on another local port.
 
 mod screens;
 mod server;
@@ -350,7 +353,23 @@ pub fn run() {
                 _ => {}
             });
 
-            let port = server::pick_port(8000);
+            // The dashboard's address: the Rust server there answers what's ported and passes the
+            // rest to the Python server on a port of its own (#96). Without it, Python's is the address.
+            let front = if server::gateway_enabled() {
+                match server::bind_front(8000).and_then(|l| l.local_addr().map(|a| (l, a.port()))) {
+                    Ok(f) => Some(f),
+                    Err(e) => {
+                        show_failure(&handle, &format!("Couldn't open a local port for the dashboard ({e})."));
+                        return Ok(());
+                    }
+                }
+            } else {
+                None
+            };
+            let port = match &front {
+                Some(_) => server::free_port().unwrap_or(8001),
+                None => server::pick_port(8000),
+            };
             match server::Server::start(port, handle.path().resource_dir().ok()) {
                 Ok(s) => *handle.state::<Shell>().server.lock().unwrap() = Some(s),
                 Err(e) => {
@@ -364,7 +383,19 @@ pub fn run() {
                     show_failure(&handle, &e);
                     return;
                 }
-                let base = format!("http://127.0.0.1:{port}");
+                let shown = match front {
+                    Some((listener, front_port)) => {
+                        let backend = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = wednesday_rs::serve_std(listener, backend).await {
+                                log::error!("the Rust server stopped: {e}");
+                            }
+                        });
+                        front_port
+                    }
+                    None => port,
+                };
+                let base = format!("http://127.0.0.1:{shown}");
                 *shell.base.lock().unwrap() = Some(base.clone());
                 if let (Some(main), Ok(url)) = (handle.get_webview_window(MAIN), tauri::Url::parse(&base)) {
                     let _ = main.navigate(url);

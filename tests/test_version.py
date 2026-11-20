@@ -34,7 +34,7 @@ def test_set_version_writes_every_place_and_nothing_else(copy):
     assert {v for vs in sv.current(copy).values() for v in vs} == {"9.8.7"}
     for name, text in before.items():  # only the version lines moved
         old, new = text.splitlines(), (copy / name).read_text().splitlines()
-        assert len(old) == len(new) and sum(a != b for a, b in zip(old, new)) == (2 if name.endswith("lock.json") else 1)
+        assert len(old) == len(new) and sum(a != b for a, b in zip(old, new)) == sum(n == name for n, _, _ in sv.PLACES)
     assert sv.set_version("9.8.7", copy) == []  # already set
 
 
