@@ -75,6 +75,15 @@ pub const ENGINE_ROUTES: &[&str] = &[
     "GET /api/settings",
     "PUT /api/settings",
     "POST /api/settings/reconnect",
+    "GET /api/candles",
+    "GET /api/replay/range",
+    "GET /api/replay",
+    "GET /api/clock/feed",
+    "GET /api/quarters",
+    "GET /api/sessions",
+    "GET /api/distribution",
+    "GET /api/markets/candles",
+    "GET /api/markets/tick",
 ];
 
 /// The version the dashboard and `/api/health` report; `scripts/set_version.py` keeps it in step.
@@ -87,6 +96,7 @@ struct App {
     store: Option<Store>,
     journals: journal::service::Cache,
     engine: Option<Arc<engine::Runtime>>,
+    markets: Arc<engine::markets::Markets>,
 }
 
 /// The server: ported routes, then the Python server at `backend` for the rest. Without a
@@ -111,7 +121,16 @@ pub fn app_with(backend: SocketAddr, store: Option<Store>, runtime: Option<Arc<e
             .route("/api/settings", get(engine_settings).put(engine_settings_put))
             .route("/api/settings/reconnect", axum::routing::post(engine_reconnect))
             .route("/api/engine/m1", get(engine_m1))
-            .route("/api/engine/daily", get(engine_daily));
+            .route("/api/engine/daily", get(engine_daily))
+            .route("/api/candles", get(charts_candles))
+            .route("/api/replay/range", get(charts_replay_range))
+            .route("/api/replay", get(charts_replay))
+            .route("/api/clock/feed", get(charts_clock_feed))
+            .route("/api/quarters", get(analysis_quarters))
+            .route("/api/sessions", get(analysis_sessions))
+            .route("/api/distribution", get(analysis_distribution))
+            .route("/api/markets/candles", get(markets_candles))
+            .route("/api/markets/tick", get(markets_tick));
     }
     router
         .route("/api/health", get(health))
@@ -132,7 +151,8 @@ pub fn app_with(backend: SocketAddr, store: Option<Store>, runtime: Option<Arc<e
         .route("/api/journals/{id}/entries/{entry}", axum::routing::patch(journal_entry_update).delete(journal_entry_delete))
         .route_layer(axum::middleware::map_response(served_here))
         .fallback(forward)
-        .with_state(App { backend, client, store, journals: Default::default(), engine: runtime })
+        .with_state(App { backend, client, store, journals: Default::default(), engine: runtime,
+                          markets: Default::default() })
 }
 
 /// Which server answered, for anyone debugging the move: `x-wednesday-server: rust` or `python`.
@@ -778,6 +798,60 @@ async fn engine_reconnect(State(app): State<App>, req: Request) -> Response {
     }
     python_follow(&app).await;
     Json(settings_json(&app).await).into_response()
+}
+
+/// An engine route's answer: its body, or `{"detail": ...}` with the refusal's status.
+fn engine_answer(result: engine::Answer) -> Response {
+    match result {
+        Ok(v) => Json(v).into_response(),
+        // An exception Python's route doesn't catch: FastAPI answers it in plain text.
+        Err(r) if r.status == 500 && r.detail == "Internal Server Error" => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
+        }
+        Err(r) => {
+            let mut res = Json(json!({"detail": r.detail})).into_response();
+            *res.status_mut() = StatusCode::from_u16(r.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            res
+        }
+    }
+}
+
+type Query = axum::extract::Query<HashMap<String, String>>;
+
+async fn charts_candles(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
+    engine_answer(engine::charts::candles(runtime_of(&app), &q).await)
+}
+
+async fn charts_replay_range(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
+    engine_answer(engine::charts::replay_range(runtime_of(&app), &q).await)
+}
+
+async fn charts_replay(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
+    engine_answer(engine::charts::replay(runtime_of(&app), &q).await)
+}
+
+async fn charts_clock_feed(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
+    engine_answer(engine::charts::clock_feed(runtime_of(&app), &q).await)
+}
+
+async fn analysis_quarters(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
+    engine_answer(engine::analysis::quarters(runtime_of(&app), &q).await)
+}
+
+async fn analysis_sessions(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
+    engine_answer(engine::analysis::sessions(runtime_of(&app), &q).await)
+}
+
+async fn analysis_distribution(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
+    engine_answer(engine::analysis::distribution(runtime_of(&app), &q).await)
+}
+
+async fn markets_candles(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
+    engine_answer(engine::markets::candles(&app.markets, runtime_of(&app), &q).await)
+}
+
+async fn markets_tick(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
+    engine_answer(engine::markets::tick(&app.markets, runtime_of(&app), &q).await)
 }
 
 /// For the Python server that follows this engine: the closed M1 bars it scanned, with the price

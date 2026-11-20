@@ -111,11 +111,14 @@ Ported so far: `/api/health`, workspaces, drawing templates, the calendar settin
 - **The engine** runs in Rust (`server-rs/src/engine/`): the feed (`feed.rs`: the TradingView
   helper, synthetic data), the M1 buffer stored in `m1_bars`, the scan after each minute close,
   the live price and the forming candle. It answers `/api/status`, `/api/scan`, `/api/tick`,
-  `/api/stream` and `/api/settings` (`ENGINE_ROUTES`). The Python server *follows* it: with
+  `/api/stream`, `/api/settings`, the charts (`charts.rs`: `/api/candles`, `/api/replay`,
+  `/api/replay/range`, `/api/clock/feed`), the analysis views (`analysis.rs`: `/api/sessions`,
+  `/api/quarters`, `/api/distribution`) and other markets (`markets.rs`: `/api/markets/candles`,
+  `/api/markets/tick`), all in `ENGINE_ROUTES`. `tests/golden/distribution/` and
+  `tests/test_markets_parity.py` check them against Python. The Python server *follows* it: with
   `WEDNESDAY_FOLLOW=http://127.0.0.1:<port>` its feed is `feeds.FollowFeed`, which reads the bars,
   the scan price and the ticks from `GET /api/engine/m1` and `/api/tick` instead of connecting to
-  TradingView, so its alerts, drawing alerts, plugins and the routes not ported yet (candles,
-  replay, sessions, quarters, the distribution, other markets) see what Rust scanned. A settings
+  TradingView, so its alerts, drawing alerts and plugins see what Rust scanned. A settings
   change saved through Rust tells Python to follow (`POST /api/settings/reconnect`).
   From a checkout: `make serve-rs ARGS=--engine` (Rust on 8000), then
   `WEDNESDAY_FOLLOW=http://127.0.0.1:8000 make serve PORT=8001`; `conformance.rs` checks the follower's
