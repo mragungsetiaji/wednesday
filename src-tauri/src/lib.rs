@@ -370,7 +370,37 @@ pub fn run() {
                 Some(_) => server::free_port().unwrap_or(8001),
                 None => server::pick_port(8000),
             };
-            match server::Server::start(port, handle.path().resource_dir().ok()) {
+            // The Rust server runs the scan engine (the TradingView feed) and Python follows it, so
+            // Rust starts first: Python waits for it.
+            let resources = handle.path().resource_dir().ok();
+            let follow = front.as_ref().map(|(_, p)| format!("http://127.0.0.1:{p}"));
+            let shown = match front {
+                Some((listener, front_port)) => {
+                    if let Some(r) = &resources {
+                        wednesday_rs::engine::feed::set_bundle_dir(r.join("server"));
+                    }
+                    let backend = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+                    tauri::async_runtime::spawn(async move {
+                        // The same database as the Python server (same home folder and .env);
+                        // without it, Python serves the routes that need it.
+                        let home = wednesday_rs::config::home_dir();
+                        let store = wednesday_rs::open_store(&home).await;
+                        let served = match wednesday_rs::start_engine(&home, store.clone()).await {
+                            Ok(rt) => wednesday_rs::serve_std_with_engine(listener, backend, store, rt).await,
+                            Err(e) => {
+                                log::error!("the scan engine didn't start ({e}); the Python server runs it");
+                                wednesday_rs::serve_std(listener, backend, store).await
+                            }
+                        };
+                        if let Err(e) = served {
+                            log::error!("the Rust server stopped: {e}");
+                        }
+                    });
+                    front_port
+                }
+                None => port,
+            };
+            match server::Server::start(port, resources, follow) {
                 Ok(s) => *handle.state::<Shell>().server.lock().unwrap() = Some(s),
                 Err(e) => {
                     show_failure(&handle, &e);
@@ -383,21 +413,6 @@ pub fn run() {
                     show_failure(&handle, &e);
                     return;
                 }
-                let shown = match front {
-                    Some((listener, front_port)) => {
-                        let backend = std::net::SocketAddr::from(([127, 0, 0, 1], port));
-                        tauri::async_runtime::spawn(async move {
-                            // The same database as the Python server (same home folder and .env);
-                            // without it, Python serves the routes that need it.
-                            let store = wednesday_rs::open_store(&wednesday_rs::config::home_dir()).await;
-                            if let Err(e) = wednesday_rs::serve_std(listener, backend, store).await {
-                                log::error!("the Rust server stopped: {e}");
-                            }
-                        });
-                        front_port
-                    }
-                    None => port,
-                };
                 let base = format!("http://127.0.0.1:{shown}");
                 *shell.base.lock().unwrap() = Some(base.clone());
                 if let (Some(main), Ok(url)) = (handle.get_webview_window(MAIN), tauri::Url::parse(&base)) {

@@ -65,8 +65,8 @@ test-tauri: ## Run the Rust tests: the Tauri shell and the Rust server in front 
 	cd src-tauri && cargo test
 	cd server-rs && cargo test
 
-serve-rs: ## The Rust server on PORT in front of a running Python one on PORT+1 (make serve PORT=8001 first)
-	cd server-rs && cargo run -- --port $(PORT) --backend $$(( $(PORT) + 1 )) --home $(CURDIR)
+serve-rs: ## The Rust server on PORT in front of a running Python one on PORT+1 (make serve PORT=8001 first; ARGS=--engine runs the engine)
+	cd server-rs && cargo run -- --port $(PORT) --backend $$(( $(PORT) + 1 )) --home $(CURDIR) $(ARGS)
 
 scan: ## One scan in the console
 	$(UV) run wednesday --once $(ARGS)

@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import queue
 import shutil
 import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -318,6 +321,91 @@ class SyntheticFeed(DataFeed):
         return self._bars.tail(count).copy()
 
 
+FOLLOW_ENV = "WEDNESDAY_FOLLOW"  # the Rust server's address, when its engine runs the feed (#96)
+
+
+def follow_url() -> str | None:
+    """The Rust server this one follows (the desktop shell sets it), or None."""
+    return os.environ.get(FOLLOW_ENV) or None
+
+
+def follow_get(base: str, path: str, timeout: float = 10):
+    """JSON from the Rust server this one follows."""
+    try:
+        with urllib.request.urlopen(base.rstrip("/") + path, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise RuntimeError(f"The Rust server isn't answering ({exc}). Restart Wednesday if this stays.") from exc
+
+
+class FollowFeed(DataFeed):
+    """The Rust server's engine (#96): its M1 bars, scan price and live prices, so this server's
+    alerts, plugins and drawing alerts see exactly what it scanned. It connects to nothing else."""
+
+    persist = False  # the Rust engine stores the bars
+    retry_connect = True
+    WAIT = 15.0  # seconds to wait for the Rust engine's next scan at a minute close
+
+    def __init__(self, base: str, name: str):
+        self.base = base
+        self.name = name  # the source the Rust engine runs, so keys (drawings, alerts) stay the same
+        self._version = None
+        self._price: float | None = None
+        self._tick = None
+
+    def connect(self) -> None:
+        follow_get(self.base, "/api/engine/m1?count=0")
+
+    def fetch_m1(self, count: int) -> pd.DataFrame:
+        deadline = time.monotonic() + self.WAIT
+        while True:
+            d = follow_get(self.base, f"/api/engine/m1?count={int(count)}")
+            if (d["version"] and d["version"] != self._version) or time.monotonic() > deadline:
+                break
+            time.sleep(0.25)  # its scan for this minute hasn't finished yet
+        if not d["bars"]:
+            raise RuntimeError(d.get("error") or "The Rust engine has no bars yet")
+        self._version, self._price = d["version"], d["price"]
+        df = pd.DataFrame(d["bars"], columns=["time", *OHLCV_COLUMNS])
+        df.index = pd.to_datetime(df.pop("time"), unit="s")
+        return normalize_ohlcv(df)
+
+    def last_price(self) -> float | None:
+        return self._price
+
+    def new_ticks(self) -> list[tuple[pd.Timestamp, float]]:
+        t = follow_get(self.base, "/api/tick", 5)
+        if t["price"] is None or t["tick"] == self._tick:
+            return []
+        self._tick = t["tick"]
+        return [(pd.Timestamp(int(t["time"]), unit="s"), float(t["price"]))]
+
+    def daily_history(self, clock: str, count: int) -> pd.DataFrame | None:
+        d = follow_get(self.base, f"/api/engine/daily?clock={urllib.request.quote(clock)}&count={int(count)}", 180)
+        if not d.get("bars"):
+            return None
+        df = pd.DataFrame(d["bars"], columns=["time", *OHLCV_COLUMNS])
+        df.index = pd.to_datetime(df.pop("time"), unit="s")
+        return normalize_ohlcv(df)
+
+    def describe(self) -> dict:
+        return {"feed": self.name, "following": self.base}
+
+
+def followed_settings(base: str, wait: float = 60.0) -> DataSettings:
+    """The data source settings the Rust engine runs, waiting for it to start."""
+    from .settings import DataSettings
+
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            return DataSettings.from_dict(follow_get(base, "/api/engine/m1?count=0", 5)["settings"])
+        except RuntimeError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.5)
+
+
 class M1Buffer:
     """Rolling store of M1 bars: one big initial load, then small incremental updates."""
 
@@ -358,6 +446,8 @@ class M1Buffer:
 
 def build_feed(settings: DataSettings) -> DataFeed:
     source, symbol = settings.source, settings.resolved_symbol
+    if base := follow_url():
+        return FollowFeed(base, source)
     if source == "tradingview":
         return TradingViewFeed(symbol)
     if source == "synthetic":

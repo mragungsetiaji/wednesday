@@ -35,6 +35,11 @@ fn repo() -> PathBuf {
 }
 
 fn start_python(dir: &Path, port: u16) -> Option<Python> {
+    start_python_with(dir, port, &[], &[])
+}
+
+/// The Python server with extra environment variables (`WEDNESDAY_FOLLOW`, ...).
+fn start_python_with(dir: &Path, port: u16, env: &[(&str, String)], args: &[&str]) -> Option<Python> {
     if Command::new("uv").arg("--version").stdout(Stdio::null()).status().is_err() {
         eprintln!("uv isn't installed: the conformance test is skipped");
         return None;
@@ -44,7 +49,9 @@ fn start_python(dir: &Path, port: u16) -> Option<Python> {
         .args(["run", "--project"]).arg(repo())
         .args(["wednesday", "--serve", "--source", "synthetic", "--lookback", "50", "--host", "127.0.0.1"])
         .args(["--port", &port.to_string(), "--db", &db, "--env-file"]).arg(dir.join("none.env"))
+        .args(args)
         .current_dir(dir)
+        .envs(env.iter().map(|(k, v)| (*k, v.as_str())))
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -414,4 +421,100 @@ async fn the_journal_answers_as_python_does() {
         }
     }
     assert!(failures.is_empty(), "Rust answered differently:\n{}", failures.join("\n"));
+}
+
+
+// ---- the engine (#96, step 9d): Rust runs the feed, Python follows it ----
+
+/// Equal JSON, numbers within 1e-9 (the scan's floats, as tests/golden allows).
+fn close_enough(a: &Value, b: &Value, path: &str, out: &mut Vec<String>) {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => {
+            let (x, y) = (x.as_f64().unwrap(), y.as_f64().unwrap());
+            if (x - y).abs() > 1e-9 * x.abs().max(1.0) {
+                out.push(format!("{path}: {x} vs {y}"));
+            }
+        }
+        (Value::Object(x), Value::Object(y)) => {
+            let (kx, ky): (Vec<_>, Vec<_>) = (x.keys().collect(), y.keys().collect());
+            if kx != ky {
+                out.push(format!("{path}: keys {kx:?} vs {ky:?}"));
+                return;
+            }
+            for (k, v) in x {
+                close_enough(v, &y[k], &format!("{path}.{k}"), out);
+            }
+        }
+        (Value::Array(x), Value::Array(y)) => {
+            if x.len() != y.len() {
+                out.push(format!("{path}: {} items vs {}", x.len(), y.len()));
+                return;
+            }
+            for (i, (v, w)) in x.iter().zip(y).enumerate() {
+                close_enough(v, w, &format!("{path}[{i}]"), out);
+            }
+        }
+        _ if a != b => out.push(format!("{path}: {a} vs {b}")),
+        _ => {}
+    }
+}
+
+/// Drop what differs by when or where each server ran: scan times and database URLs.
+fn without_run(mut v: Value) -> Value {
+    if let Some(m) = v.as_object_mut() {
+        for k in ["scanned_at", "url"] {
+            if m.contains_key(k) {
+                m.insert(k.into(), json!("-"));
+            }
+        }
+        for (_, x) in m.iter_mut() {
+            *x = without_run(x.take());
+        }
+    } else if let Some(a) = v.as_array_mut() {
+        for x in a.iter_mut() {
+            *x = without_run(x.take());
+        }
+    }
+    v
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn python_follows_the_rust_engine() {
+    use wednesday_rs::engine::{DataSettings, Options, Runtime};
+    let dir = std::env::temp_dir().join(format!("wed-conformance-engine-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let port = free_port();
+    let python: SocketAddr = ([127, 0, 0, 1], port).into();
+
+    // Rust first: the synthetic feed, one scan, the same scan config as the Python server's flags.
+    let rust_store = Store::open(&format!("sqlite:///{}", dir.join("rust.db").display()), &dir).await.unwrap();
+    let mut cfg = wednesday_rs::scan::ScanConfig::default();
+    cfg.lookback = 50;
+    let settings = DataSettings { source: "synthetic".into(), ..Default::default() };
+    let runtime = Runtime::start(settings, Options { cfg, poll: false, delay: 0.0 }, Some(rust_store.clone())).unwrap();
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let rust = l.local_addr().unwrap();
+    tokio::spawn(wednesday_rs::serve_with_engine(l, python, Some(rust_store.clone()), runtime));
+
+    let follow = [("WEDNESDAY_FOLLOW", format!("http://{rust}"))];
+    let Some(_python) = start_python_with(&dir, port, &follow, &["--no-poll"]) else { return };
+
+    // Both scanned the same bars once.
+    let start = Instant::now();
+    loop {
+        let (p, r) = (call(python, "GET", "/api/status", "", None).await, call(rust, "GET", "/api/status", "", None).await);
+        if p.body["version"] == 1 && r.body["version"] == 1 {
+            break;
+        }
+        assert!(start.elapsed() < Duration::from_secs(90), "no scan: python {} rust {}", p.body, r.body);
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+    let mut failures = Vec::new();
+    for path in ["/api/status", "/api/scan", "/api/tick", "/api/settings"] {
+        let p = without_run(call(python, "GET", path, "", None).await.body);
+        let r = without_run(call(rust, "GET", path, "", None).await.body);
+        close_enough(&p, &r, path, &mut failures);
+    }
+    assert!(failures.is_empty(), "Rust's engine answered differently:\n{}", failures.join("\n"));
 }

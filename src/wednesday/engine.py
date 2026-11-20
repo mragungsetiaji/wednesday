@@ -20,7 +20,7 @@ import pandas as pd
 
 from .bias import BIAS_KEY, TradeBias, active
 from .drawing_alerts import DrawingAlerts
-from .feeds import DataFeed, M1Buffer, build_feed
+from .feeds import DataFeed, M1Buffer, build_feed, follow_url, followed_settings
 from .plugins import Hooks
 from .scanner import ScanConfig, ScanResult, scan
 from .settings import DataSettings
@@ -403,8 +403,10 @@ class Runtime:
         self.engine.stop()
 
     def reconnect(self) -> None:
-        """Restart the feed with the current settings (after it gave up)."""
-        self.apply(self.settings)
+        """Restart the feed with the current settings (after it gave up). Following the Rust
+        server's engine (#96), take the settings it now runs: it calls this after a change."""
+        base = follow_url()
+        self.apply(followed_settings(base, wait=10) if base else self.settings)
 
     def apply(self, settings: DataSettings) -> None:
         """Stop the current feed, then start one for ``settings``."""

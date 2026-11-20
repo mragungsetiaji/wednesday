@@ -15,6 +15,7 @@ from .alerts import ALERTS_KEY, AlertManager, AlertSettings, TelegramClient, Tel
 from .journal.service import Journals
 from .news import Calendar
 from .engine import Runtime
+from .feeds import follow_url, followed_settings
 from .settings import ALL_SOURCES, SETTINGS_KEY, resolve
 from .storage import DEFAULT_DB_URL, Store
 from .report import format_scan
@@ -180,10 +181,13 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
     store = None if args.db.lower() == "none" else Store(args.db)
     if store and args.reset_settings:
         store.delete_setting(SETTINGS_KEY)
-    data = resolve({
-        "source": args.source, "symbol": args.symbol,
-        "clock": args.clock,
-    }, store)
+    if base := follow_url():  # the Rust server runs the feed (#96): run what it runs
+        data = followed_settings(base)
+    else:
+        data = resolve({
+            "source": args.source, "symbol": args.symbol,
+            "clock": args.clock,
+        }, store)
     if errors := data.validate():
         raise SystemExit("; ".join(errors))
     json_path = Path(args.json_out) if args.json_out else None

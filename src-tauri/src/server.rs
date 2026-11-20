@@ -62,8 +62,12 @@ fn program(resources: Option<PathBuf>) -> Command {
 }
 
 impl Server {
-    pub fn start(port: u16, resources: Option<PathBuf>) -> Result<Server, String> {
+    /// Start the Python server on `port`; `follow` is the Rust server whose engine it follows (#96).
+    pub fn start(port: u16, resources: Option<PathBuf>, follow: Option<String>) -> Result<Server, String> {
         let mut cmd = program(resources);
+        if let Some(url) = follow {
+            cmd.env("WEDNESDAY_FOLLOW", url);
+        }
         cmd.arg("--port")
             .arg(port.to_string())
             .arg("--parent-pid")

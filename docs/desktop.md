@@ -98,7 +98,10 @@ first one. The server stops with the app, and by itself if the shell crashes.
 The windows don't talk to the Python server directly. The shell runs the Rust server
 (`server-rs/`, #96) on the dashboard's port, and the Python sidecar on another local
 port behind it: the Rust server answers the routes already ported to Rust and passes
-everything else through unchanged, the live price stream included. Set
+everything else through unchanged. The Rust server runs the scan engine (the TradingView
+connection, the minute scans, the live price) and the Python sidecar follows it, reading its bars
+instead of opening a second connection; Python keeps the alerts, plugins and the routes not yet
+ported. Set
 `WEDNESDAY_GATEWAY=0` to show the Python server directly, to rule the Rust one out.
 
 ```bash

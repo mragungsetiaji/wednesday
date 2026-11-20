@@ -1,7 +1,9 @@
-//! `wednesday-rs --port 8000 --backend 8001 [--home DIR] [--db URL]`: the Rust server on
+//! `wednesday-rs --port 8000 --backend 8001 [--home DIR] [--db URL] [--engine]`: the Rust server on
 //! 127.0.0.1:<port>, in front of a Python server (`wednesday --serve --port 8001`) that answers
 //! what isn't ported yet. `--home` is the folder the Python server runs in (its `.env` and
 //! relative database path); `--db` overrides the database URL (`none`: no database here).
+//! `--engine` runs the scan engine here; start the Python server with
+//! `WEDNESDAY_FOLLOW=http://127.0.0.1:<port>` so it follows it, as the desktop app does.
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -32,7 +34,7 @@ async fn main() {
         },
         None => wednesday_rs::open_store(&home).await,
     };
-    // Loopback only: the login, and the client address it counts failed logins by, are still Python's.
+    // Loopback only: the dashboard has no login.
     let listener = match tokio::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], port))).await {
         Ok(l) => l,
         Err(e) => {
@@ -45,7 +47,19 @@ async fn main() {
         wednesday_rs::VERSION,
         store.as_ref().map_or("none (Python serves it)", |s| s.backend())
     );
-    if let Err(e) = wednesday_rs::serve(listener, SocketAddr::from(([127, 0, 0, 1], backend)), store).await {
+    let backend = SocketAddr::from(([127, 0, 0, 1], backend));
+    let served = if args.iter().any(|a| a == "--engine") {
+        match wednesday_rs::start_engine(&home, store.clone()).await {
+            Ok(rt) => wednesday_rs::serve_with_engine(listener, backend, store, rt).await,
+            Err(e) => {
+                eprintln!("the scan engine didn't start: {e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        wednesday_rs::serve(listener, backend, store).await
+    };
+    if let Err(e) = served {
         eprintln!("{e}");
         std::process::exit(1);
     }

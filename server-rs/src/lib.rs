@@ -14,13 +14,16 @@
 
 pub mod calendar;
 pub mod config;
+pub mod engine;
 pub mod journal;
 pub mod pyjson;
 pub mod scan;
 pub mod settings_routes;
 pub mod store;
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use axum::body::Body;
 use axum::extract::{Path, Request, State};
@@ -62,6 +65,18 @@ pub const PORTED: &[&str] = &[
     "GET /api/journals/{journal_id}/trades.csv",
 ];
 
+/// The routes the scan engine answers when it runs here ([`app_with`]); the Python server follows
+/// it through `GET /api/engine/m1` and `/api/engine/daily`, which only the follower uses.
+pub const ENGINE_ROUTES: &[&str] = &[
+    "GET /api/status",
+    "GET /api/scan",
+    "GET /api/tick",
+    "GET /api/stream",
+    "GET /api/settings",
+    "PUT /api/settings",
+    "POST /api/settings/reconnect",
+];
+
 /// The version the dashboard and `/api/health` report; `scripts/set_version.py` keeps it in step.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -71,15 +86,34 @@ struct App {
     client: Client<HttpConnector, Body>,
     store: Option<Store>,
     journals: journal::service::Cache,
+    engine: Option<Arc<engine::Runtime>>,
 }
 
 /// The server: ported routes, then the Python server at `backend` for the rest. Without a
 /// `store`, the routes that need the database go to Python too.
 pub fn app(backend: SocketAddr, store: Option<Store>) -> Router {
+    app_with(backend, store, None)
+}
+
+/// The server with the scan engine running here (`runtime`): the engine's routes are answered by
+/// it, and the Python server follows it (`WEDNESDAY_FOLLOW`).
+pub fn app_with(backend: SocketAddr, store: Option<Store>, runtime: Option<Arc<engine::Runtime>>) -> Router {
     let mut connector = HttpConnector::new();
     connector.set_nodelay(true);
     let client = Client::builder(TokioExecutor::new()).build(connector);
-    Router::new()
+    let mut router = Router::new();
+    if runtime.is_some() {
+        router = router
+            .route("/api/status", get(engine_status))
+            .route("/api/scan", get(engine_scan))
+            .route("/api/tick", get(engine_tick))
+            .route("/api/stream", get(engine_stream))
+            .route("/api/settings", get(engine_settings).put(engine_settings_put))
+            .route("/api/settings/reconnect", axum::routing::post(engine_reconnect))
+            .route("/api/engine/m1", get(engine_m1))
+            .route("/api/engine/daily", get(engine_daily));
+    }
+    router
         .route("/api/health", get(health))
         .route("/api/workspaces", get(workspaces_list))
         .route("/api/workspaces/{name}", get(workspace_get).put(workspace_put).delete(workspace_delete))
@@ -98,7 +132,7 @@ pub fn app(backend: SocketAddr, store: Option<Store>) -> Router {
         .route("/api/journals/{id}/entries/{entry}", axum::routing::patch(journal_entry_update).delete(journal_entry_delete))
         .route_layer(axum::middleware::map_response(served_here))
         .fallback(forward)
-        .with_state(App { backend, client, store, journals: Default::default() })
+        .with_state(App { backend, client, store, journals: Default::default(), engine: runtime })
 }
 
 /// Which server answered, for anyone debugging the move: `x-wednesday-server: rust` or `python`.
@@ -116,11 +150,34 @@ pub async fn serve(listener: tokio::net::TcpListener, backend: SocketAddr, store
     axum::serve(listener, app(backend, store)).await
 }
 
+/// [`serve_with_engine`] on a listener the caller already bound (the Tauri shell).
+pub async fn serve_std_with_engine(listener: std::net::TcpListener, backend: SocketAddr, store: Option<Store>,
+                                   runtime: Arc<engine::Runtime>) -> std::io::Result<()> {
+    listener.set_nonblocking(true)?;
+    serve_with_engine(tokio::net::TcpListener::from_std(listener)?, backend, store, runtime).await
+}
+
+/// Serve with the scan engine running here; the Python server at `backend` follows it.
+pub async fn serve_with_engine(listener: tokio::net::TcpListener, backend: SocketAddr, store: Option<Store>,
+                               runtime: Arc<engine::Runtime>) -> std::io::Result<()> {
+    axum::serve(listener, app_with(backend, store, Some(runtime))).await
+}
+
 /// Serve on a listener the caller already bound (the Tauri shell binds the dashboard's port
 /// before the Python server is up, so nothing else takes it meanwhile). Needs a Tokio runtime.
 pub async fn serve_std(listener: std::net::TcpListener, backend: SocketAddr, store: Option<Store>) -> std::io::Result<()> {
     listener.set_nonblocking(true)?;
     serve(tokio::net::TcpListener::from_std(listener)?, backend, store).await
+}
+
+/// The scan engine with the settings and scan config the Python server in `home` would run:
+/// saved from the dashboard over the environment and `home/.env`.
+pub async fn start_engine(home: &std::path::Path, store: Option<Store>) -> Result<Arc<engine::Runtime>, String> {
+    let env_file = home.join(".env");
+    let env = |k: &str| config::env_setting(k, &env_file);
+    let settings = engine::resolve(store.as_ref(), &env).await;
+    let cfg = engine::scan_config(&env);
+    engine::Runtime::start(settings, engine::Options { cfg, ..Default::default() }, store)
 }
 
 /// The database the Python server in `home` uses, opened; None (with a log line) when there is
@@ -479,6 +536,283 @@ async fn journal_csv(State(app): State<App>, Path(id): Path<String>, req: Reques
             Err(e) => journal_answer(Err(e)),
         },
         Err(res) => res,
+    }
+}
+
+// ---- the scan engine (engine/) ----
+
+const STREAM_SECONDS: u64 = 600; // a stream's lifetime; EventSource reconnects by itself
+
+fn runtime_of(app: &App) -> &Arc<engine::Runtime> {
+    app.engine.as_ref().expect("engine routes are only mounted with a runtime")
+}
+
+/// `/api/status`, with the saved bias read from the database.
+async fn status_json(app: &App) -> Value {
+    let rt = runtime_of(app);
+    let e = rt.engine();
+    let st = e.state();
+    let (bias, _) = engine::bias(app.store.as_ref()).await;
+    let price = st.result.as_ref().map(|r| r.price).unwrap_or(0.0);
+    json!({
+        "symbol": e.symbol,
+        "source": e.source,
+        "clock": e.clock,
+        "trade_bias": bias,
+        "version": st.version,
+        "scanned_at": st.scanned_at.map(engine::py_iso_utc),
+        "error": st.error,
+        "error_at": st.error_at.map(engine::py_iso_utc),
+        "conn": st.conn,
+        "tick_seconds": e.tick_seconds,
+        "pip": journal::stats::pip_size(&e.symbol, price),
+        "clock_offset": engine::clock_offset(&e.clock),
+        "poll": e.poll,
+        "app_version": VERSION,
+        "config": engine::config_json(&rt.opts.cfg),
+    })
+}
+
+async fn engine_status(State(app): State<App>) -> Response {
+    Json(status_json(&app).await).into_response()
+}
+
+async fn engine_scan(State(app): State<App>) -> Response {
+    let mut out = status_json(&app).await;
+    let st = runtime_of(&app).engine().state();
+    let (_, active) = engine::bias(app.store.as_ref()).await;
+    out["scan"] = st.result.as_ref().map_or(Value::Null, |r| r.to_json(active.as_deref()));
+    Json(out).into_response()
+}
+
+fn tick_json(e: &engine::Engine) -> Value {
+    let st = e.state();
+    let unix = |t: scan::Time| t.and_utc().timestamp();
+    let bar = st.live.as_ref().and_then(|l| l.bar);
+    json!({
+        "version": st.version,
+        "tick": st.tick,
+        "price": st.live.as_ref().map(|l| l.price),
+        "time": st.live.as_ref().map(|l| unix(l.time)),
+        "bar": bar.map(|b| json!({"time": unix(b.time), "open": b.open, "high": b.high, "low": b.low, "close": b.close})),
+    })
+}
+
+async fn engine_tick(State(app): State<App>) -> Response {
+    Json(tick_json(&runtime_of(&app).engine())).into_response()
+}
+
+/// Server-sent events: `tick` (the /api/tick body) whenever the price or the scan changes, a
+/// comment every 15 s, ending after 10 minutes or `limit` events.
+async fn engine_stream(State(app): State<App>, axum::extract::Query(q): axum::extract::Query<HashMap<String, String>>)
+    -> Response {
+    let limit: u64 = match q.get("limit").map(|l| l.parse::<i64>()) {
+        None => 0,
+        Some(Ok(l)) if l >= 0 => l as u64,
+        _ => {
+            return detail(StatusCode::UNPROCESSABLE_ENTITY,
+                          json!([{"type": "greater_than_equal", "loc": ["query", "limit"], "msg": "Input should be greater than or equal to 0"}]));
+        }
+    };
+    let rt = runtime_of(&app).clone();
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<axum::body::Bytes, std::convert::Infallible>>(16);
+    tokio::spawn(async move {
+        let send = |s: String| tx.send(Ok(axum::body::Bytes::from(s)));
+        if send("retry: 2000\n\n".into()).await.is_err() {
+            return;
+        }
+        let ends = tokio::time::Instant::now() + std::time::Duration::from_secs(STREAM_SECONDS);
+        let mut engine = rt.engine();
+        let mut changes = engine.subscribe();
+        let (mut last, mut sent) = (None::<(u64, u64)>, 0u64);
+        loop {
+            // A settings change swaps the engine: follow the new one.
+            let now_engine = rt.engine();
+            if !Arc::ptr_eq(&now_engine, &engine) {
+                engine = now_engine;
+                changes = engine.subscribe();
+            }
+            let body = tick_json(&engine);
+            let key = (body["tick"].as_u64().unwrap_or(0), body["version"].as_u64().unwrap_or(0));
+            if Some(key) != last {
+                last = Some(key);
+                if send(format!("event: tick\ndata: {}\n\n", pyjson::dumps(&body))).await.is_err() {
+                    return;
+                }
+                sent += 1;
+                if limit > 0 && sent >= limit {
+                    return;
+                }
+            }
+            let left = ends.saturating_duration_since(tokio::time::Instant::now());
+            if left.is_zero() {
+                return;
+            }
+            let wait = left.min(std::time::Duration::from_secs(15));
+            tokio::select! {
+                changed = changes.changed() => {
+                    if changed.is_err() {
+                        tokio::time::sleep(std::time::Duration::from_millis(200)).await; // the engine stopped: a new one comes
+                    }
+                }
+                _ = tokio::time::sleep(wait) => {
+                    if send(": ping\n\n".into()).await.is_err() {
+                        return;
+                    }
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_millis(250)) => {} // catch an engine swap
+            }
+        }
+    });
+    let mut res = Body::from_stream(tokio_stream::wrappers::ReceiverStream::new(rx)).into_response();
+    let h = res.headers_mut();
+    h.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/event-stream; charset=utf-8"));
+    h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    h.insert("x-accel-buffering", HeaderValue::from_static("no"));
+    res
+}
+
+/// The data sources the dashboard offers, and whether each can run here (`settings.catalog`).
+fn catalog() -> Value {
+    engine::SOURCES
+        .iter()
+        .filter(|s| s.offered)
+        .map(|s| {
+            let why = match s.id {
+                "tradingview" => engine::feed::tradingview_command().err(),
+                _ => None,
+            };
+            json!({"id": s.id, "title": s.title, "description": s.description, "default_symbol": s.default_symbol,
+                   "default_clock": s.default_clock, "default_tick": s.default_tick, "min_tick": s.min_tick,
+                   "available": why.is_none(), "unavailable_reason": why})
+        })
+        .collect()
+}
+
+async fn settings_json(app: &App) -> Value {
+    let rt = runtime_of(app);
+    let e = rt.engine();
+    let st = e.state();
+    let running = json!({
+        "source": e.source,
+        "symbol": e.symbol,
+        "version": st.version,
+        "scanned_at": st.scanned_at.map(engine::py_iso_utc),
+        "error": st.error,
+        "conn": st.conn,
+        "attempt": st.attempt,
+        "max_attempts": if e.retry_connect { Value::Null } else { json!(engine::RECONNECT_ATTEMPTS) },
+        "bars_loaded": st.m1.len(),
+        "bars_needed": e.max_bars,
+        "first_bar": st.m1.first().map(|b| engine::py_iso_naive(b.time)),
+        "last_bar": st.m1.last().map(|b| engine::py_iso_naive(b.time)),
+    });
+    let storage = match &app.store {
+        Some(store) => {
+            let mut d = store.describe();
+            d["series"] = json!(store.bar_stats().await.unwrap_or_default());
+            d
+        }
+        None => Value::Null,
+    };
+    json!({"editable": true, "settings": rt.settings().to_json(), "sources": catalog(), "running": running,
+           "storage": storage})
+}
+
+async fn engine_settings(State(app): State<App>) -> Response {
+    Json(settings_json(&app).await).into_response()
+}
+
+/// Tell the Python server, which follows this engine, to follow the new settings too.
+async fn python_follow(app: &App) {
+    let mut req = Request::new(Body::empty());
+    *req.method_mut() = Method::POST;
+    *req.uri_mut() = Uri::from_static("/api/settings/reconnect");
+    let res = forward(State(app.clone()), req).await;
+    if !res.status().is_success() {
+        log::warn!("the Python server didn't follow the new settings ({})", res.status());
+    }
+}
+
+async fn engine_settings_put(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let body = match object_body(req).await {
+        Ok(b) => b,
+        Err(res) => return res,
+    };
+    let mut merged = engine::DataSettings::default().to_json().as_object().cloned().unwrap_or_default();
+    merged.extend(body);
+    let new = match engine::DataSettings::from_json(&merged) {
+        Ok(s) => s,
+        Err(e) => return detail(StatusCode::UNPROCESSABLE_ENTITY, format!("Invalid settings: {e}")),
+    };
+    let mut errors = new.validate();
+    if errors.is_empty() && new.source == "tradingview" {
+        if let Err(why) = engine::feed::tradingview_command() {
+            errors.push(why);
+        }
+    }
+    if !errors.is_empty() {
+        return detail(StatusCode::UNPROCESSABLE_ENTITY, errors.join("; "));
+    }
+    if let Some(store) = &app.store {
+        if let Err(e) = store.set_setting(engine::SETTINGS_KEY, &new.to_json()).await {
+            return answer(Err(Refused::Store(e)));
+        }
+    }
+    if let Err(e) = runtime_of(&app).apply(new) {
+        return detail(StatusCode::UNPROCESSABLE_ENTITY, e);
+    }
+    python_follow(&app).await;
+    Json(settings_json(&app).await).into_response()
+}
+
+async fn engine_reconnect(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    if let Err(e) = runtime_of(&app).reconnect() {
+        return detail(StatusCode::UNPROCESSABLE_ENTITY, e);
+    }
+    python_follow(&app).await;
+    Json(settings_json(&app).await).into_response()
+}
+
+/// For the Python server that follows this engine: the closed M1 bars it scanned, with the price
+/// and the scan version, and what it runs (source, symbol, clock).
+async fn engine_m1(State(app): State<App>, axum::extract::Query(q): axum::extract::Query<HashMap<String, String>>)
+    -> Response {
+    let e = runtime_of(&app).engine();
+    let st = e.state();
+    let count = q.get("count").and_then(|c| c.parse::<usize>().ok()).unwrap_or(st.m1.len());
+    let start = st.m1.len().saturating_sub(count);
+    let bars: Vec<Value> = st.m1[start..]
+        .iter()
+        .map(|b| json!([b.time.and_utc().timestamp(), b.open, b.high, b.low, b.close, b.volume]))
+        .collect();
+    Json(json!({"source": e.source, "symbol": e.symbol, "clock": e.clock, "settings": e.settings.to_json(),
+                "version": st.version, "conn": st.conn, "error": st.error,
+                "price": st.result.as_ref().map(|r| r.price), "bars": bars}))
+    .into_response()
+}
+
+/// For the follower: daily bars from the feed (the move distribution's long lookbacks).
+async fn engine_daily(State(app): State<App>, axum::extract::Query(q): axum::extract::Query<HashMap<String, String>>)
+    -> Response {
+    let e = runtime_of(&app).engine();
+    let clock = q.get("clock").cloned().unwrap_or_else(|| e.clock.clone());
+    let count = q.get("count").and_then(|c| c.parse::<usize>().ok()).unwrap_or(3000);
+    let (reply, rx) = tokio::sync::oneshot::channel();
+    if let Err(err) = e.call(engine::Command::DailyHistory { clock, count, reply }).await {
+        return detail(StatusCode::SERVICE_UNAVAILABLE, err);
+    }
+    match rx.await {
+        Ok(Ok(Some(bars))) => Json(json!({"bars": bars.iter().map(|b| json!([b.time.and_utc().timestamp(), b.open, b.high, b.low, b.close, b.volume])).collect::<Vec<_>>()})).into_response(),
+        Ok(Ok(None)) => Json(json!({"bars": null})).into_response(),
+        Ok(Err(err)) => detail(StatusCode::BAD_GATEWAY, err),
+        Err(_) => detail(StatusCode::SERVICE_UNAVAILABLE, "The scanner is stopping"),
     }
 }
 

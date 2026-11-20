@@ -38,6 +38,7 @@ pub struct Store {
     pool: Pool,
     schema: Value,
     home: PathBuf,
+    url: String,
 }
 
 /// `postgresql+psycopg://u:p@host/db` -> `postgres://u:p@host/db`; Some for a PostgreSQL URL.
@@ -103,12 +104,26 @@ impl Store {
         } else {
             return Err(format!("unsupported database URL scheme: {}", url.split(':').next().unwrap_or("")));
         };
-        Ok(Store { pool, schema, home: home.to_path_buf() })
+        Ok(Store { pool, schema, home: home.to_path_buf(), url: url.to_string() })
     }
 
     /// The home folder: relative paths (`data/snapshots`) resolve in it, as Python's working folder.
     pub fn home(&self) -> &Path {
         &self.home
+    }
+
+    /// Backend and URL without the password, for the settings page (`Store.describe`).
+    pub fn describe(&self) -> Value {
+        let url = match self.url.split_once("://") {
+            Some((scheme, rest)) => match rest.split_once('@') {
+                Some((auth, host)) if auth.contains(':') => {
+                    format!("{scheme}://{}:***@{host}", auth.split(':').next().unwrap_or(""))
+                }
+                _ => self.url.clone(),
+            },
+            None => self.url.clone(),
+        };
+        serde_json::json!({"backend": self.backend(), "url": url})
     }
 
     pub fn backend(&self) -> &'static str {
@@ -368,6 +383,40 @@ impl Store {
     }
 
     // ---- M1 bars ----
+
+    /// Per stored stream: source, symbol, bars, and the first and last bar's open time (`bar_stats`).
+    pub async fn bar_stats(&self) -> Result<Vec<Value>, String> {
+        let sql = "SELECT source, symbol, COUNT(*), MIN(time), MAX(time) FROM m1_bars GROUP BY source, symbol ORDER BY source, symbol";
+        let err = |e: sqlx::Error| e.to_string();
+        let iso = |t: Option<i64>| -> Value {
+            t.and_then(|t| chrono::DateTime::from_timestamp(t, 0))
+                .map(|d| d.naive_utc().format("%Y-%m-%dT%H:%M:%S").to_string().into())
+                .unwrap_or(Value::Null)
+        };
+        macro_rules! go {
+            ($pool:expr) => {
+                sqlx::query(sql)
+                    .fetch_all($pool)
+                    .await
+                    .map_err(err)?
+                    .iter()
+                    .map(|r| {
+                        Ok(serde_json::json!({
+                            "source": r.try_get::<String, _>(0).map_err(err)?,
+                            "symbol": r.try_get::<String, _>(1).map_err(err)?,
+                            "bars": r.try_get::<i64, _>(2).map_err(err)?,
+                            "first": iso(r.try_get::<Option<i64>, _>(3).map_err(err)?),
+                            "last": iso(r.try_get::<Option<i64>, _>(4).map_err(err)?),
+                        }))
+                    })
+                    .collect()
+            };
+        }
+        match &self.pool {
+            Pool::Sqlite(p) => go!(p),
+            Pool::Postgres(p) => go!(p),
+        }
+    }
 
     /// (source, symbol, bars) per stored stream, by source and symbol (`bar_stats` in storage.py).
     pub async fn bar_counts(&self) -> Result<Vec<(String, String, i64)>, String> {

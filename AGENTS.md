@@ -47,7 +47,9 @@ page comes from `http://127.0.0.1:<port>`. Run `make test-tauri` after changes t
 
 The backend is moving to Rust route by route (#96). `server-rs/` is the Rust server: the
 shell runs it on the dashboard's port, it answers the routes in `PORTED` and passes the rest
-to the Python sidecar on another local port (`WEDNESDAY_GATEWAY=0` turns it off). A ported
+to the Python sidecar on another local port (`WEDNESDAY_GATEWAY=0` turns it off). The Rust server also runs the scan engine
+(`server-rs/src/engine/`, the TradingView feed); the Python server follows it (`FollowFeed`,
+`WEDNESDAY_FOLLOW`) for the alerts, plugins and routes still in Python. A ported
 route must answer as `tests/api_contract.json` says and match `tests/golden/` where it
 scans, and refuses cross-site writes as `same_site.py` does. The scan itself
 (resampling, structure, detectors, setups, sessions, quarters) exists twice for now,

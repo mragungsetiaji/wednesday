@@ -228,6 +228,42 @@ async fn ported_answers_have_the_contract_shape() {
     }
 }
 
+#[tokio::test]
+async fn engine_routes_have_the_contract_shape() {
+    use wednesday_rs::engine::{DataSettings, Options, Runtime};
+    let contract: serde_json::Value = serde_json::from_str(&repo("tests/api_contract.json")).unwrap();
+    let routes: Vec<&str> = contract["routes"].as_array().unwrap().iter().map(|r| r.as_str().unwrap()).collect();
+    let store = temp_store("engine").await;
+    let settings = DataSettings { source: "synthetic".into(), ..Default::default() };
+    let rt = Runtime::start(settings, Options { poll: false, delay: 0.0, ..Default::default() }, Some(store.clone())).unwrap();
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = l.local_addr().unwrap();
+    tokio::spawn(wednesday_rs::serve_with_engine(l, listen(python()).await, Some(store), rt.clone()));
+    let start = std::time::Instant::now();
+    while rt.engine().state().version == 0 {
+        assert!(start.elapsed() < std::time::Duration::from_secs(30), "no scan");
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    for route in wednesday_rs::ENGINE_ROUTES {
+        assert!(routes.contains(route), "{route} isn't in tests/api_contract.json");
+        if !route.starts_with("GET ") || route.ends_with("/stream") {
+            continue;
+        }
+        let res = send(req("GET", addr, &route[4..], "", None)).await;
+        assert_eq!(res.headers()["x-wednesday-server"], "rust", "{route}");
+        let body: serde_json::Value = serde_json::from_str(&text(res).await).unwrap();
+        let mut problems = Vec::new();
+        differences(&contract["responses"][*route], &shape(&body), "", &mut problems);
+        assert!(problems.is_empty(), "{route}: {problems:?}");
+    }
+    let res = send(req("GET", addr, "/api/stream?limit=1", "", None)).await;
+    assert_eq!(res.headers()["content-type"], "text/event-stream; charset=utf-8");
+    let events = text(res).await;
+    assert!(events.starts_with("retry: 2000\n\nevent: tick\ndata: {\"version\": 1, "), "{events}");
+    let res = send(req("PUT", addr, "/api/settings", "", Some(serde_json::json!({"source": "nope"})))).await;
+    assert_eq!(res.status(), 422);
+}
+
 // ---- shapes, as tests/test_api_contract.py makes and compares them ----
 
 fn data_key(k: &str) -> bool {
