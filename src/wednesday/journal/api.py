@@ -47,11 +47,6 @@ def journal_router(get_journals: Callable[[], Journals | None], get_engine: Call
         except JournalError as exc:
             raise HTTPException(422, str(exc)) from exc
 
-    @r.post("/sample")
-    def restore_sample() -> dict:
-        """Bring back the sample portfolio after it was deleted."""
-        return svc().restore_sample()
-
     @r.patch("/{journal_id}")
     def update(journal_id: str, body: dict = Body(...)) -> dict:
         one(journal_id)

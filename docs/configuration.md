@@ -11,8 +11,7 @@ never commit real credentials.
 | --- | --- |
 | `make setup` | First run: check uv + Node, create `.env`, install everything, build the dashboard |
 | `make serve` | Scan loop + dashboard on `http://HOST:PORT` |
-| `make demo` | Dashboard on demo data, no market data needed |
-| `make dev` | Demo API + Vite dev server with hot reload on http://localhost:5173 |
+| `make dev` | API on synthetic data (a random walk, for development) + Vite dev server with hot reload on http://localhost:5173 |
 | `make tauri` | The [desktop app](desktop.md)'s shell from this checkout (needs Rust) |
 | `make scan` | One scan in the console |
 | `make check` | Test the data feed connection |
@@ -30,7 +29,7 @@ wednesday ...` commands directly (see [deploy-windows.md](deploy-windows.md)).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
-| `--source` | `yfinance` | `yfinance`, `tradingview`, `csv` or `synthetic` (`XAU_SOURCE`). A saved or env `mt5` (from older versions) falls back to `yfinance` with a warning |
+| `--source` | `tradingview` | `tradingview`, or `synthetic` for development and tests (`XAU_SOURCE`). A saved or env `mt5`, `yfinance` or `csv` (from older versions) falls back to `tradingview` with a warning |
 | `--symbol` | per source | Symbol to scan (`XAU_SYMBOL`) |
 | `--clock` | per source | The feed's clock for the quarterly view: `UTC`, `NY+7`, `UTC+3`, `Europe/London` (`XAU_CLOCK`; default `UTC`) |
 | `--timeframes` | `4H,1H,30M,15M,5M` | Timeframes to scan (always processed high to low) |

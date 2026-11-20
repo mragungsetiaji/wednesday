@@ -1,34 +1,26 @@
 # Data sources and storage
 
 Wednesday reads closed 1-minute bars and builds every higher timeframe from
-them. Where those bars come from is a setting you can change live.
+them. They come from TradingView, and every bar fetched is stored, so history
+grows while the screener runs.
 
 ## Sources
 
 | Source | Cost | Notes |
 | --- | --- | --- |
-| `yfinance` (default) | Free | COMEX gold futures `GC=F`, not spot; Yahoo only serves ~7 days of 1-minute bars |
-| `tradingview` | Free | Spot gold from TradingView, `FX:XAUUSD` (FXCM) by default; ~5 days of 1-minute bars at first. Needs Node 20+ when run from source; the Windows app bundles it (see [TradingView](#tradingview)) |
-| `csv` | - | M1 bars from a file another process keeps appending to (`time, open, high, low, close[, volume]`) |
-| `synthetic` | - | Demo data, never stored: the newest real bars in the database, then a random walk from them (see below) |
+| `tradingview` (default) | Free | Spot gold from TradingView, `FX:XAUUSD` (FXCM) by default; ~5 days of 1-minute bars at first. Needs Node 20+ when run from source; the Windows app bundles it (see [TradingView](#tradingview)) |
 
-MetaTrader 5 is no longer a data source: connecting to the terminal froze it when
-the Windows app started. A source saved as `mt5` by an older version, or
-`XAU_SOURCE=mt5`, falls back to Yahoo Finance with a warning in the log; pick
-another one in Settings. To use your broker's own prices, export M1 bars from
-MT5 and [import them](#importing-m1-history), or keep a CSV up to date for
-the `csv` source.
+TradingView is the only source the dashboard offers. MetaTrader 5, Yahoo Finance
+and the CSV file source were removed. A source saved by an older version (`mt5`,
+`yfinance` or `csv`), or set in `XAU_SOURCE`, falls back to TradingView with a
+warning in the log.
 
-When the database holds real bars (the most recent stream of any real source; never the
-sample journal's), the demo shows them: the last 45 days of real candles as
-stored, then a random walk from the last real close to now, and on live. Before
-the first real bar a made-up walk leads into its open, since a scan needs more
-history than a few stored days. So the recent chart is real gold and only the
-part after the last stored bar is invented. With no real bars stored, the whole
-demo is a random walk from 2650.
+For development and tests there is also `synthetic`: a random walk from 2650,
+never stored and not real market data. It isn't shown in Settings; start it with
+`--source synthetic` or `XAU_SOURCE=synthetic` (`make dev` does).
 
 ```bash
-uv sync                      # default setup (Yahoo Finance + SQLite)
+uv sync                      # default setup (SQLite)
 uv sync --extra postgres     # PostgreSQL storage
 uv sync --extra llm          # Claude / OpenAI SDKs for the news brief
 ```
@@ -36,44 +28,41 @@ uv sync --extra llm          # Claude / OpenAI SDKs for the news brief
 ## Picking a source
 
 Open the dashboard and go to **Settings > Data source** (the menu on the left picks
-a section). Saving restarts the feed live, no server restart needed.
+a section) to set the symbol, the feed clock and the live price interval. Saving
+restarts the feed live, no server restart needed.
 
 ![Settings page](images/settings.png)
 
 Where a setting comes from, strongest first:
 
-1. A command line flag (`--source tradingview`)
+1. A command line flag (`--source tradingview`, `--symbol OANDA:XAUUSD`)
 2. The choice saved from the dashboard
-3. `XAU_SOURCE` in `.env`
-4. The default (`yfinance`)
+3. `XAU_SOURCE` in `.env` (with `XAU_SYMBOL`, `XAU_CLOCK`, which only count when `XAU_SOURCE` is set)
+4. The default (`tradingview`, `FX:XAUUSD`)
 
-`--reset-settings` forgets the saved choice. Switching the source resets the
-symbol to that source's default (`GC=F` for Yahoo, `FX:XAUUSD` for TradingView,
-`XAUUSD` for CSV).
+`--reset-settings` forgets the saved choice.
 
 ```bash
 uv run wednesday --source tradingview                  # FX:XAUUSD, FXCM spot gold
 uv run wednesday --source tradingview --symbol OANDA:XAUUSD
-uv run wednesday --source csv --csv data/xauusd_m1.csv
-uv run wednesday --source synthetic --once    # demo data, one scan
+uv run wednesday --source synthetic --once             # development: random walk, one scan
 ```
 
 ## Feed clock
 
-Bar times are kept in the feed's own clock. Yahoo Finance and TradingView give
-UTC; a CSV file is in whatever clock wrote it. The quarterly view converts them to New York time, so it needs to know
-that clock. Set it in **Settings > Data source > Feed clock**, `XAU_CLOCK` or `--clock`:
+Bar times are kept in the feed's own clock. TradingView gives UTC, which is the
+default. The quarterly view converts bar times to New York time, so it needs to
+know that clock. Set it in **Settings > Data source > Feed clock**, `XAU_CLOCK`
+or `--clock`:
 
 | Value | Meaning |
 | --- | --- |
-| `UTC` | Default for Yahoo Finance, TradingView, CSV and demo data |
-| `NY+7` | New York time plus 7 hours: the server time of most gold brokers (midnight there is the 17:00 NY close, UTC+2 in winter and UTC+3 in summer), for a CSV written in broker time |
+| `UTC` | Default, for TradingView and synthetic data |
+| `NY+7` | New York time plus 7 hours: the server time of most gold brokers (midnight there is the 17:00 NY close, UTC+2 in winter and UTC+3 in summer) |
 | `UTC+2`, `UTC+3`, ... | A fixed offset with no daylight saving |
 | `Europe/London`, `Asia/Jakarta`, ... | Any IANA time zone |
 
-For a CSV in broker time whose broker doesn't follow the NY+7 convention,
-compare the time of the last candle in the broker's platform with the time in
-New York and pick the matching value.
+With TradingView, leave it at UTC.
 
 ## Live price
 
@@ -97,9 +86,7 @@ Set the interval in **Settings > Data source > Live price every**, `XAU_TICK` in
 | Source | Default | Fastest |
 | --- | --- | --- |
 | TradingView | 1 s | 0.5 s: read from a quote stream kept open, not a request each time |
-| Demo data | 2 s | 0.5 s |
-| Yahoo Finance | 60 s (once a minute, with the scan) | 15 s: each update is a request to Yahoo |
-| CSV | none: a CSV has closed bars only | - |
+| Synthetic (development) | 2 s | 0.5 s |
 
 `0` turns live prices off. A tick only starts a forming candle within 5 minutes of
 the last closed bar, so a closed market doesn't draw a candle after the gap.
@@ -111,7 +98,7 @@ The `tradingview` source reads TradingView's market data through
 (`@mathieuc/tradingview`), a community library. It is **unofficial**: TradingView
 doesn't offer this as an API, its terms don't allow automated access to its data,
 and the library can stop working when TradingView changes its site. Use it for
-personal charts, and keep Yahoo Finance as a fallback.
+personal charts only.
 
 It runs as a small Node helper (`tradingview/feed.mjs`) that the screener starts
 and keeps running, with one websocket open. The Windows app bundles Node.js and
@@ -134,22 +121,23 @@ The symbol takes TradingView's exchange prefix. `FX:` is FXCM:
 
 `FXCM:XAUUSD` doesn't exist; the source then says to use `FX:XAUUSD`. Without a
 TradingView account the server gives about 7,000 one-minute bars (~5 trading
-days), so the 4H timeframe fills in as stored history grows, as with Yahoo. Bar
+days), so the 4H timeframe fills in as stored history grows. Bar
 times are UTC. The candle still forming is dropped; the live price comes from
 TradingView's quote and builds the forming candle between scans.
 
 The same helper feeds a full-screen chart set to another symbol (`FX:XAGUSD`
-beside gold, see [Dashboard](dashboard.md#full-screen-and-multiple-charts)),
-whatever the main source is: only its candles and live price, through
+beside gold, see [Dashboard](dashboard.md#full-screen-and-multiple-charts)):
+only its candles and live price, through
 `/api/markets/candles` and `/api/markets/tick`. Nothing about that symbol is
 scanned or stored.
 
 ## Storage
 
 Every fetched M1 bar is stored per source and symbol. A restart resumes from
-the database instead of refetching, and Yahoo's 7-day window stops being a
-limit: history keeps growing while the screener runs. The 4H timeframe with the
-default lookback wants ~48k M1 bars, about 5 weeks.
+the database instead of refetching, and TradingView's few days stop being a
+limit: history keeps growing while the screener runs. This stored history is the
+only history there is; there is no import. The 4H timeframe with the default
+lookback wants ~48k M1 bars, about 5 weeks. Synthetic data is never stored.
 
 | Backend | How |
 | --- | --- |
@@ -159,31 +147,6 @@ default lookback wants ~48k M1 bars, about 5 weeks.
 
 The database also keeps the saved settings and the Telegram alert log.
 
-## Importing M1 history
-
-**Settings > History** shows how much M1 history is stored for the running source
-and symbol, and adds more. Early on there is little: Yahoo Finance and TradingView
-only give days of M1, so importing files is how to get months or years. More
-history lets the chart [scroll further back](#scrolling-back) and gives the
-[journal](journal.md) M1 prices to rebuild drawdown from.
-
-- **Stored history**: one row per month, one square per day. Paler squares
-  have fewer bars, outlined ones none, grey ones are weekends.
-- **Import a file**: M1 bars from an MT5 export (`<DATE> <TIME> <OPEN> ...`,
-  UTF-16 is fine), Dukascopy (`Gmt time,...`), HistData ASCII (`20240102
-  180000;...` or `2024.01.02,18:00,...`) or any CSV with a time column and
-  open, high, low, close, up to 500 MB. The preview shows the format, range and
-  first rows; nothing is stored until you confirm. Confirm the file's clock
-  (Dukascopy UTC, HistData UTC-5, an MT5 export the broker's server time) and
-  the times are moved to the feed's clock. Importing is an upsert on time, so a
-  file imported twice adds nothing.
-
-Use prices of the same market as the feed: spot gold for TradingView
-(`FX:XAUUSD`) or a spot CSV, COMEX futures for Yahoo Finance. Demo data is never
-stored, so there is nothing to add to: switch to another source first. The API
-is `GET /api/history` (coverage), `POST /api/history/import` (upload, returns the
-preview) and `POST /api/history/import/{token}` (confirm, with `clock`).
-
 ## Scrolling back
 
 The chart opens on the last `--lookback` candles of a timeframe, the ones the
@@ -191,15 +154,14 @@ scan uses. Drag it to the left and older candles load as you reach the edge,
 300 at a time, with no effect on the scan. They come from the M1 bars in
 memory first, then:
 
-- **Yahoo Finance, TradingView and CSV**: the M1 bars stored in the database, so as far back
-  as the screener has been running (Yahoo itself only gives ~7 days of M1), or
-  as far as the [imported files](#importing-m1-history).
-- **Demo data**: only what is in memory.
+- **TradingView**: the M1 bars stored in the database, so as far back as the
+  screener has been running on that symbol.
+- **Synthetic data**: only what is in memory.
 
 Older candles show prices only; levels are drawn from the latest scan.
 
 ## Adding a source
 
 Subclass `feeds.DataFeed` and implement `fetch_m1(count)`, returning closed M1
-bars oldest first, then register it in `settings.py` (`SOURCES`) and
-`feeds.build_feed`.
+bars oldest first, then register it in `settings.py` (`SOURCES`, or
+`DEV_SOURCES` for one that shouldn't appear in Settings) and `feeds.build_feed`.

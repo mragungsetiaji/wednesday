@@ -66,85 +66,6 @@ class DataFeed(ABC):
         return {"feed": self.name}
 
 
-class YFinanceFeed(DataFeed):
-    """Yahoo Finance: free, the default source.
-
-    Yahoo only serves ~7 days of 1m bars and ``GC=F`` is COMEX gold futures,
-    not spot XAUUSD, so levels differ from a broker chart by a few dollars.
-    Bars are UTC. Stored history (see ``M1Buffer``) grows beyond 7 days over time.
-    """
-
-    name = "yfinance"
-
-    def __init__(self, symbol: str = "GC=F"):
-        self.symbol = symbol
-
-    def _history(self, period: str) -> pd.DataFrame:
-        import yfinance as yf
-
-        return yf.Ticker(self.symbol).history(period=period, interval="1m", auto_adjust=False)
-
-    def fetch_m1(self, count: int) -> pd.DataFrame:
-        # Small updates only need today; the first load takes everything Yahoo has.
-        df = self._history("1d" if count <= 390 else "7d")
-        if df.empty and count <= 390:
-            df = self._history("5d")  # e.g. just after the weekly open
-        if df.empty:
-            raise RuntimeError(f"Yahoo Finance returned no 1m data for {self.symbol}")
-        df = df.copy()
-        if df.index.tz is not None:
-            df.index = df.index.tz_convert("UTC").tz_localize(None)
-        df = normalize_ohlcv(df)
-        # Drop the still-forming minute.
-        now = pd.Timestamp.now(tz="UTC").tz_localize(None).floor("min")
-        df = df[df.index < now]
-        return df.tail(count)
-
-    def daily_history(self, clock: str, count: int) -> pd.DataFrame | None:
-        # Yahoo dates a futures daily bar by its session, which ends at the 17:00 New York close.
-        import yfinance as yf
-
-        df = yf.Ticker(self.symbol).history(period="max", interval="1d", auto_adjust=False)
-        if df.empty:
-            return None
-        df = df.copy()
-        df.index = (df.index.tz_convert("America/New_York").tz_localize(None) if df.index.tz is not None
-                    else df.index).normalize()
-        return normalize_ohlcv(df).iloc[:-1].tail(count)  # the last one may still be forming
-
-    def last_tick(self) -> tuple[pd.Timestamp, float] | None:
-        # The forming minute's close. Its bar time also says when the price is from, so a
-        # closed market (last bar hours old) doesn't start a candle now.
-        df = self._history("1d")
-        if df.empty:
-            return None
-        t = df.index[-1]
-        t = t.tz_convert("UTC").tz_localize(None) if t.tz is not None else t
-        return t, float(df["Close"].iloc[-1])
-
-
-class CSVFeed(DataFeed):
-    """M1 bars from a CSV with columns time/datetime, open, high, low, close[, volume].
-
-    The file is re-read on every fetch, so another process can keep appending to it.
-    """
-
-    name = "csv"
-
-    def __init__(self, path: str | Path, time_column: str | None = None):
-        self.path = Path(path)
-        self.time_column = time_column
-
-    def fetch_m1(self, count: int) -> pd.DataFrame:
-        raw = pd.read_csv(self.path)
-        raw.columns = [c.strip().lower() for c in raw.columns]
-        col = self.time_column or next((c for c in ("time", "datetime", "date", "timestamp") if c in raw.columns), None)
-        if col is None:
-            raise ValueError(f"{self.path}: no time column found")
-        raw.index = pd.to_datetime(raw.pop(col))
-        return normalize_ohlcv(raw).tail(count)
-
-
 TRADINGVIEW_DIR = Path(__file__).resolve().parents[2] / "tradingview"  # the Node helper, beside src/
 
 
@@ -346,60 +267,19 @@ class TradingViewFeed(DataFeed):
 
 
 class SyntheticFeed(DataFeed):
-    """Random-walk gold-like prices for demos and tests. Each fetch advances one minute.
-
-    With ``real`` (stored market bars, UTC), the demo shows those real candles and random-walks on from
-    the last real close to now (and live); before the first real bar, a made-up walk leads into its
-    open, since a scan needs more history than a few stored days. ``anchor`` (time, price) is the
-    same without the real candles: the walk passes through that price at that time."""
+    """Random-walk gold-like prices for development and tests (``--source synthetic``), not offered
+    in the dashboard. Each fetch advances one minute."""
 
     name = "synthetic"
     persist = False  # every run is a different random walk; storing it would splice unrelated series
 
     def __init__(self, start_price: float = 2650.0, seed: int | None = 42,
-                 history: int = 60_000, end: pd.Timestamp | None = None,
-                 anchor: tuple[pd.Timestamp, float] | None = None, real: pd.DataFrame | None = None):
+                 history: int = 60_000, end: pd.Timestamp | None = None):
         self._rng = np.random.default_rng(seed)
         self._forming: dict | None = None  # the next minute, built from ticks
         end = (end or pd.Timestamp.now(tz="UTC").tz_localize(None)).floor("min") - M1
         index = pd.date_range(end=end, periods=history, freq="1min")
-        if real is not None and len(real):
-            self._bars = self._with_real(index, real)
-        elif anchor is not None:
-            self._bars = self._anchored(index, *anchor)
-        else:
-            self._bars = self._generate(index, start_price)
-
-    def _with_real(self, index: pd.DatetimeIndex, real: pd.DataFrame) -> pd.DataFrame:
-        """Real candles in the window, a walk into the first one's open before them, a walk on after."""
-        real = real[(real.index >= index[0]) & (real.index <= index[-1])][OHLCV_COLUMNS].astype(float)
-        if real.empty:
-            return self._generate(index, 2650.0)
-        first, last = real.index[0], real.index[-1]
-        after = index[index > last]
-        lead = max(0, len(index) - len(real) - len(after))  # keep about ``history`` bars in all
-        before = index[index < first]
-        before = before[len(before) - lead:] if lead else before[:0]
-        parts = []
-        if len(before):
-            walk = self._generate(before, float(real["open"].iloc[0]))
-            # end the lead-in on the first real open, so the joint has no jump
-            parts.append(walk + np.array([float(real["open"].iloc[0]) - walk["close"].iloc[-1]] * 4 + [0.0]))
-        parts.append(real)
-        if len(after):
-            parts.append(self._generate(after, float(real["close"].iloc[-1])))
-        return pd.concat(parts)
-
-    def _anchored(self, index: pd.DatetimeIndex, at: pd.Timestamp, price: float) -> pd.DataFrame:
-        """A walk that passes through ``price`` at ``at``: shifted to end there, then walking on from it."""
-        before, after = index[index <= at], index[index > at]
-        parts = []
-        if len(before):
-            walk = self._generate(before, price)
-            parts.append(walk + np.array([price - walk["close"].iloc[-1]] * 4 + [0.0]))  # shift OHLC, not volume
-        if len(after):
-            parts.append(self._generate(after, price))
-        return pd.concat(parts)
+        self._bars = self._generate(index, start_price)
 
     def _generate(self, index: pd.DatetimeIndex, start: float) -> pd.DataFrame:
         n = len(index)
@@ -476,17 +356,10 @@ class M1Buffer:
         return self.bars
 
 
-def build_feed(settings: DataSettings, real: pd.DataFrame | None = None) -> DataFeed:
-    """``real``: stored market bars (UTC) for the demo data to show and walk on from (see SyntheticFeed)."""
+def build_feed(settings: DataSettings) -> DataFeed:
     source, symbol = settings.source, settings.resolved_symbol
-    if source == "yfinance":
-        return YFinanceFeed(symbol)
-    if source == "csv":
-        if not settings.csv_path:
-            raise ValueError("A CSV path is required for the CSV source")
-        return CSVFeed(settings.csv_path)
     if source == "tradingview":
         return TradingViewFeed(symbol)
     if source == "synthetic":
-        return SyntheticFeed(real=real)
+        return SyntheticFeed()
     raise ValueError(f"Unknown source {source!r}")

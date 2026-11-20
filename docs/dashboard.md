@@ -243,8 +243,8 @@ every timeframe and in full screen: a position from 10:00 to 11:00 is 12 candles
 wide on 5M, 4 on 15M and one on 1H. Time past the last candle runs at the
 timeframe's length, and moving a drawing shifts it by whole candles of time, so
 it keeps its duration across the daily break or a weekend. They are saved in the database per data
-source and symbol (sources can differ in clock, and Yahoo's `GC=F` isn't
-spot XAUUSD), in the `drawings` table.
+source and symbol (symbols differ in price, and sources can differ in clock), in the
+`drawings` table.
 
 ## Risk-time news card
 
@@ -383,8 +383,8 @@ decide candle by candle as you would have live.
   pop-out wait until you exit.
 - The status reads **Replay** instead of Live. **Exit replay** returns to the live chart.
 
-How far back it can go depends on the stored M1 history ([Settings > History](data-sources.md#importing-m1-history)
-imports more from files).
+How far back it can go depends on the stored M1 history: as far back as the
+screener has been running ([Storage](data-sources.md#storage)).
 
 ## Charts in their own windows
 
@@ -550,7 +550,7 @@ the move and the sample count.
 what the next one did: facts about the history, not a forecast or advice.
 
 History: the stored M1 bars and the live window. Days and weeks reach further back
-with the feed's daily bars when it has them: Yahoo's or TradingView's daily
+with the feed's daily bars when it has them: TradingView's daily
 history. The tables are rebuilt at
 most every 6 hours; the current period updates with every scan.
 

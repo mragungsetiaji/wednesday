@@ -67,16 +67,18 @@ or Node.
 
 ## Data source
 
-In **Settings > Data source**, pick Yahoo Finance (the default), TradingView,
-a CSV file or demo data; see [Data sources](data-sources.md). **Save and restart
+The data source is TradingView (spot gold, `FX:XAUUSD` by default). In
+**Settings > Data source** you can change the symbol, the feed clock and the live
+price interval; see [Data sources](data-sources.md). **Save and restart
 feed** applies it. The status says **Connecting…** until the first scan is in,
 and only then **Connected**.
 
-MetaTrader 5 is no longer a data source: connecting to it opened the terminal
-when the app started and froze it. If an older version was set to MT5, the app
-starts on Yahoo Finance instead; pick the source you want in Settings. The
-[journal](journal.md) still imports MT5's history report, and
-[Settings > History](data-sources.md#importing-m1-history) imports M1 bars exported from MT5.
+MetaTrader 5, Yahoo Finance and CSV files are no longer data sources
+(connecting to MT5 opened the terminal when the app started and froze it). If an
+older version was set to one of them, the app starts on TradingView instead.
+The [journal](journal.md) still imports MT5's history report. Price history is
+what the TradingView feed fetches and the app stores while it runs; there is no
+import of M1 files.
 
 Only one copy runs at a time; starting a second one says it is already running.
 

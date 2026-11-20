@@ -21,7 +21,7 @@ adviser or broker and does not know your situation.
   trades; if you act on anything it shows, you do so at your own risk.
 - Past results, backtests, statistics, win rates and model scores do not predict
   future results.
-- Data can be wrong, late or missing: Yahoo Finance and broker feeds, MT5, news
+- Data can be wrong, late or missing: TradingView and broker feeds, MT5, news
   sources, Telegram and AI providers can fail, disconnect or return errors, and
   so can this software. Levels and alerts can be wrong or arrive late. Always
   check prices and positions in your broker's own platform.

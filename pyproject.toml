@@ -12,7 +12,6 @@ dependencies = [
     "pandas>=2.2",
     "sqlalchemy>=2.0",
     "uvicorn>=0.30",
-    "yfinance>=0.2.40",
 ]
 
 [project.optional-dependencies]

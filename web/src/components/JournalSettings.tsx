@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  createJournal, deleteJournal, fetchJournals, importReport, journalCsvUrl, restoreSample,
+  createJournal, deleteJournal, fetchJournals, importReport, journalCsvUrl,
   updateJournal, type Journal, type JournalPatch, type JournalsResponse,
 } from "../api";
 import { usePref } from "../prefs";
@@ -132,17 +132,6 @@ export function JournalSettings() {
       <fieldset className="fields">
         <legend>Journals</legend>
         <JournalList journals={journals} current={j?.id ?? ""} busy={busy} onOpen={setCurrent} onRemove={remove} />
-        {!journals.some((x) => x.sample) && (
-          <p className="field-note">
-            <button type="button" className="link-button" disabled={busy} onClick={() => run(async () => {
-              const s = await restoreSample();
-              setCurrent(s.id);
-            })}>
-              Show the sample
-            </button>{" "}
-            portfolio again: made-up trades that show every panel, and don't count as a journal.
-          </p>
-        )}
         <section className="journal-new" aria-labelledby="journal-new-h">
           <h3 id="journal-new-h">New journal</h3>
           {!list.multi && own >= 1 ? (

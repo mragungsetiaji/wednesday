@@ -96,5 +96,3 @@ def test_sample_api(tmp_path, monkeypatch):
     assert api.post("/api/journals", json={"name": "Main"}).status_code == 200
     assert api.delete(f"/api/journals/{SAMPLE_ID}").json() == {"deleted": True}
     assert [x["name"] for x in api.get("/api/journals").json()["journals"]] == ["Main"]
-    assert api.post("/api/journals/sample").json()["name"] == "Sample portfolio"
-    assert len(api.get("/api/journals").json()["journals"]) == 2

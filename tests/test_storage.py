@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from wednesday.detectors import DetectorParams
 from wednesday.engine import Engine, Runtime
-from wednesday.feeds import DataFeed, M1Buffer, YFinanceFeed
+from wednesday.feeds import DataFeed, M1Buffer
 from wednesday.scanner import ScanConfig
 from wednesday.server import create_app
 from wednesday.settings import SETTINGS_KEY, DataSettings
@@ -105,26 +105,6 @@ def test_synthetic_feed_is_not_stored(store):
     assert store.bar_stats() == []
 
 
-def test_yfinance_feed_uses_short_period_for_updates(monkeypatch):
-    feed = YFinanceFeed("GC=F")
-    periods = []
-    idx = pd.date_range("2026-03-02 10:00", periods=5, freq="1min", tz="America/New_York")
-    frame = pd.DataFrame({"Open": 1.0, "High": 2.0, "Low": 0.5, "Close": 1.5, "Volume": 10}, index=idx)
-
-    def fake_history(period):
-        periods.append(period)
-        return frame.iloc[0:0] if period == "1d" else frame
-
-    monkeypatch.setattr(feed, "_history", fake_history)
-    df = feed.fetch_m1(30)
-    assert periods == ["1d", "5d"]  # empty today (weekend) -> wider window
-    assert df.index[0] == pd.Timestamp("2026-03-02 15:00")  # converted to naive UTC
-    assert list(df.columns) == ["open", "high", "low", "close", "volume"]
-    periods.clear()
-    feed.fetch_m1(48000)
-    assert periods == ["7d"]
-
-
 class FailingConnectFeed(ListFeed):
     name = "failing"
 
@@ -165,27 +145,23 @@ def test_settings_api_switches_source_live(store, tmp_path):
     body = client.get("/api/settings").json()
     assert body["editable"] is True
     assert body["settings"]["source"] == "synthetic"
-    assert {s["id"] for s in body["sources"]} == {"yfinance", "tradingview", "csv", "synthetic"}
+    assert [s["id"] for s in body["sources"]] == ["tradingview"]  # synthetic is for development only
     assert body["storage"]["backend"] == "sqlite"
     assert body["running"]["bars_needed"] == cfg.required_m1_bars()
 
-    assert client.put("/api/settings", json={"source": "csv"}).status_code == 422  # path missing
-    assert client.put("/api/settings", json={"source": "nope"}).status_code == 422
+    for gone in ("nope", "yfinance", "csv"):
+        assert client.put("/api/settings", json={"source": gone}).status_code == 422
 
-    csv = tmp_path / "m1.csv"
-    df = bars("2026-03-02 00:00", 300)
-    df.rename_axis("time").reset_index().to_csv(csv, index=False)
-    res = client.put("/api/settings", json={"source": "csv", "csv_path": str(csv), "symbol": "XAUUSD"})
+    res = client.put("/api/settings", json={"source": "synthetic", "symbol": "XAUTEST", "tick_seconds": 0})
     assert res.status_code == 200, res.text
     assert runtime.engine is not first_engine
-    assert store.get_setting(SETTINGS_KEY)["source"] == "csv"
+    assert store.get_setting(SETTINGS_KEY)["symbol"] == "XAUTEST"
     deadline = time.time() + 5
     while time.time() < deadline and runtime.engine.state.version == 0:
         time.sleep(0.02)
-    assert client.get("/api/status").json()["source"] == "csv"
+    assert client.get("/api/status").json()["source"] == "synthetic"
     assert client.get("/api/scan").json()["scan"] is not None
-    stats = client.get("/api/settings").json()["storage"]["series"]
-    assert stats and stats[0]["source"] == "csv" and stats[0]["bars"] == cfg.required_m1_bars()
+    assert client.get("/api/settings").json()["storage"]["series"] == []  # synthetic bars are never stored
     runtime.stop()
 
 

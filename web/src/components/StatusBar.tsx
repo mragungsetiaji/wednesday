@@ -4,7 +4,7 @@ import { fetchLicence, LICENCE_EVENT } from "../api";
 import { fmtAgo, fmtFeedTime } from "../format";
 import { TagIcon } from "../icons";
 
-export const SOURCES: Record<string, string> = { yfinance: "Yahoo Finance", tradingview: "TradingView", csv: "CSV", synthetic: "Demo" };
+export const SOURCES: Record<string, string> = { tradingview: "TradingView", synthetic: "Synthetic (development)" };
 
 interface Props {
   version: string | undefined;

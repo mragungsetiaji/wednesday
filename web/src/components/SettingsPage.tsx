@@ -10,11 +10,10 @@ import { RiskSettingsForm } from "./RiskSettingsForm";
 import { AlertsSettings } from "./AlertsSettings";
 import { BriefSettingsForm } from "./BriefSettingsForm";
 import { CalendarSettingsForm } from "./CalendarSettingsForm";
-import { HistoryImport } from "./HistoryImport";
 import { JournalSettings } from "./JournalSettings";
 import { LlmUsageSettings } from "./LlmUsageSettings";
 
-const EMPTY: DataSettings = { source: "yfinance", symbol: null, csv_path: null, clock: null, tick_seconds: null };
+const EMPTY: DataSettings = { source: "tradingview", symbol: null, clock: null, tick_seconds: null };
 
 const same = (a: DataSettings, b: DataSettings) => JSON.stringify(a) === JSON.stringify(b);
 const orNull = (v: string) => (v.trim() === "" ? null : v.trim());
@@ -31,10 +30,9 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const fmtTick = (s: number) => (s === 0 || s >= 60 ? "once a minute, with each scan" : `${s}s`);
 
-type Section = "data" | "history" | "risk" | "alerts" | "calendar" | "brief" | "llm" | "journal" | "plan" | "plugins";
+type Section = "data" | "risk" | "alerts" | "calendar" | "brief" | "llm" | "journal" | "plan" | "plugins";
 const SECTIONS: { id: Section; title: string }[] = [
   { id: "data", title: "Data source" },
-  { id: "history", title: "History" },
   { id: "risk", title: "Risk" },
   { id: "alerts", title: "Telegram alerts" },
   { id: "calendar", title: "News calendar" },
@@ -81,7 +79,6 @@ export function SettingsPage() {
       </nav>
       <div className="settings-content">
         <div hidden={section !== "data"}><DataSourceSettings /></div>
-        <div hidden={section !== "history"}><HistoryImport /></div>
         <div hidden={section !== "risk"}><RiskSettingsForm /></div>
         <div hidden={section !== "alerts"}><AlertsSettings /></div>
         <div hidden={section !== "calendar"}><CalendarSettingsForm /></div>
@@ -213,7 +210,7 @@ function DataSourceSettings() {
                 <span className="choice-body">
                   <span className="choice-title">
                     {s.title}
-                    {s.id === "yfinance" && <span className="badge">Default</span>}
+                    {s.id === "tradingview" && <span className="badge">Default</span>}
                   </span>
                   <span className="choice-desc">{s.description}</span>
                   {!s.available && <span className="choice-warn">{s.unavailable_reason}</span>}
@@ -229,7 +226,7 @@ function DataSourceSettings() {
                 onChange={(e) => set({ symbol: orNull(e.target.value) })} />
             </Field>
             <Field label="Feed clock"
-              hint={`The time zone of the bar times, for the quarterly view. Leave empty for ${source?.default_clock ?? "UTC"}. NY+7 is New York time plus 7 hours, the server time of most gold brokers (for a CSV exported from one).`}>
+              hint={`The time zone of the bar times, for the quarterly view. Leave empty for ${source?.default_clock ?? "UTC"}. NY+7 is New York time plus 7 hours, the server time of most gold brokers.`}>
               <input type="text" list="clock-options" value={form.clock ?? ""} placeholder={source?.default_clock} spellCheck={false}
                 onChange={(e) => set({ clock: orNull(e.target.value) })} />
               <datalist id="clock-options">
@@ -243,17 +240,10 @@ function DataSourceSettings() {
             </Field>
             {source && source.min_tick > 0 && (
               <Field label="Live price every (seconds)"
-                hint={`Between the minute scans, the price and the forming candle update this often. Leave empty for ${fmtTick(source.default_tick)}; 0 turns it off. ${source.min_tick}s at the fastest${form.source === "yfinance" ? ", as each update is a request to Yahoo" : ""}.`}>
+                hint={`Between the minute scans, the price and the forming candle update this often. Leave empty for ${fmtTick(source.default_tick)}; 0 turns it off. ${source.min_tick}s at the fastest.`}>
                 <input type="number" inputMode="decimal" min={0} max={60} step={0.5} value={form.tick_seconds ?? ""}
                   placeholder={String(source.default_tick)}
                   onChange={(e) => set({ tick_seconds: e.target.value === "" ? null : Number(e.target.value) })} />
-              </Field>
-            )}
-
-            {form.source === "csv" && (
-              <Field label="CSV file" hint="Columns: time, open, high, low, close, and optionally volume.">
-                <input type="text" value={form.csv_path ?? ""} placeholder="data/xauusd_m1.csv" spellCheck={false} required
-                  onChange={(e) => set({ csv_path: orNull(e.target.value) })} />
               </Field>
             )}
 
@@ -351,7 +341,7 @@ function DataSourceSettings() {
                   </tbody>
                 </table>
               ) : (
-                <p className="empty">No bars stored yet. Demo data is never stored.</p>
+                <p className="empty">No bars stored yet.</p>
               )}
             </>
           ) : (

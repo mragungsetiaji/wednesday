@@ -6,8 +6,7 @@ Run from source (macOS, Linux or Windows):
 git clone https://github.com/mragungsetiaji/wednesday.git
 cd wednesday
 make setup       # checks uv + Node, creates .env, installs everything, builds the dashboard
-make serve       # dashboard on http://127.0.0.1:8000 (Yahoo Finance data)
-make demo        # the same on random demo data
+make serve       # dashboard on http://127.0.0.1:8000 (TradingView data)
 make tauri       # the desktop app from this checkout (needs Rust)
 make             # list every target
 ```
@@ -20,7 +19,7 @@ On Windows without make, run the `uv` commands directly: see
 make install     # Python deps (uv) + dashboard deps (npm)
 make test        # pytest
 make typecheck   # TypeScript
-make dev         # demo API + Vite hot reload on http://localhost:5173
+make dev         # API on synthetic data (random walk) + Vite hot reload on http://localhost:5173
 ```
 
 Needs [uv](https://docs.astral.sh/uv/) and Node 20+. Without make:
@@ -38,7 +37,7 @@ src/wednesday/
   structure.py    shared swings / break of structure / ATR (computed once per timeframe)
   levels.py       Level: the common output of every detector
   detectors/      order blocks, liquidity (BSL/SSL, EQH/EQL), inducement + registry
-  feeds.py        yfinance, TradingView, CSV, synthetic feeds + rolling M1 buffer
+  feeds.py        TradingView and synthetic (development) feeds + rolling M1 buffer
   scanner.py      multi-timeframe scan, nearest level above/below, limit setups
   quarters.py     quarterly theory blocks (weekday, session, 90m) in New York time + green stats
   report.py       console table
@@ -52,8 +51,7 @@ src/wednesday/
   brief.py        LLM news brief (Claude or OpenAI): fetch news pages, ask, suggest a bias
   storage.py      SQLAlchemy store: settings, M1 history, alert log, journals (SQLite / PostgreSQL)
   history.py      older candles for the chart as it scrolls left (memory, then stored M1)
-  history_import.py  M1 file import (MT5, Dukascopy, HistData, CSV) into the stored bars, /api/history
-  journal/        MT5 accounts: HTML report import, gain and drawdown rebuilt from M1 bars, the sample portfolio, /api/journals
+  journal/        MT5 accounts: HTML report import, gain and drawdown rebuilt from M1 bars, /api/journals; sample.py builds a made-up portfolio for tests and the docs screenshot
   plugins.py      loads plugins (entry point group wednesday.plugins): routes, hooks, jobs
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)
@@ -158,7 +156,7 @@ view skips live ticks until it shows again. Animations that run all the time
 must animate only `opacity` and `transform`: an animated `box-shadow` on the Live
 dot repainted every frame and was over half of the idle CPU. **Alt+Shift+P** (or
 `?perf` in the address) shows frames per second and the loads, updates and ticks
-per second. With 4 panes on the demo feed, Chrome's task time over 75 s went from
+per second. With 4 panes on the synthetic feed, Chrome's task time over 75 s went from
 21.7 s to 9.9 s with these changes.
 
 Things that follow the mouse stay out of React state (#91): the crosshair's

@@ -86,15 +86,6 @@
     "zone?"
    ]
   },
-  "POST /api/history/import/{token}": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
   "POST /api/journals": {
    "body": {
     "application/json": {
@@ -467,18 +458,6 @@
   "GET /api/health": {
    "ok": "bool",
    "version": "string"
-  },
-  "GET /api/history": {
-   "can_import": "bool",
-   "clock": "string",
-   "days": [],
-   "source": "string",
-   "stored": {
-    "bars": "number",
-    "first_unix": "null",
-    "last_unix": "null"
-   },
-   "symbol": "string"
   },
   "GET /api/journals": {
    "available": "bool",
@@ -1177,30 +1156,7 @@
          "touches": "number"
         },
         "inside": [],
-        "recent": [
-         {
-          "bottom": "number",
-          "confirmed_time": "string",
-          "detector": "string",
-          "ended_time": "string",
-          "ended_time_unix": "number",
-          "kind": "string",
-          "label": "string",
-          "meta": {
-           "body": "number",
-           "entry": "number",
-           "priority": "string",
-           "risk": "number",
-           "sl": "number",
-           "sl_capped": "bool",
-           "swing": "string"
-          },
-          "time": "string",
-          "time_unix": "number",
-          "top": "number",
-          "touches": "number"
-         }
-        ]
+        "recent": []
        }
       },
       "timeframe": "string"
@@ -1608,30 +1564,7 @@
          "touches": "number"
         },
         "inside": [],
-        "recent": [
-         {
-          "bottom": "number",
-          "confirmed_time": "string",
-          "detector": "string",
-          "ended_time": "string",
-          "ended_time_unix": "number",
-          "kind": "string",
-          "label": "string",
-          "meta": {
-           "body": "number",
-           "entry": "number",
-           "priority": "string",
-           "risk": "number",
-           "sl": "number",
-           "sl_capped": "bool",
-           "swing": "string"
-          },
-          "time": "string",
-          "time_unix": "number",
-          "top": "number",
-          "touches": "number"
-         }
-        ]
+        "recent": []
        }
       },
       "timeframe": "string"
@@ -1685,7 +1618,6 @@
    },
    "settings": {
     "clock": "null",
-    "csv_path": "null",
     "source": "string",
     "symbol": "null",
     "tick_seconds": "null"
@@ -1819,12 +1751,8 @@
   "DELETE /api/drawings/{drawing_id}/alert",
   "PUT /api/drawings/{drawing_id}/alert",
   "GET /api/health",
-  "GET /api/history",
-  "POST /api/history/import",
-  "POST /api/history/import/{token}",
   "GET /api/journals",
   "POST /api/journals",
-  "POST /api/journals/sample",
   "DELETE /api/journals/{journal_id}",
   "GET /api/journals/{journal_id}",
   "PATCH /api/journals/{journal_id}",

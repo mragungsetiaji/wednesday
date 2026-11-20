@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  createJournal, fetchJournal, fetchJournals, restoreSample, saveTradeNote, type Journal, type JournalStats,
+  createJournal, fetchJournal, fetchJournals, saveTradeNote, type Journal, type JournalStats,
   type JournalTrade, type JournalsResponse,
   detachSnapshot,
   snapshotUrl,
@@ -121,12 +121,6 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
     return `Created ${j.name} for account ${j.login}. Import its history report in journal settings.`;
   });
 
-  const restore = () => run(async () => {
-    const j = await restoreSample();
-    setCurrent(j.id);
-    await loadList();
-  });
-
   if (!list) {
     return <main className="content-page"><p className="empty">{error ? `Can't load the journal: ${error}` : "Loading the journal…"}</p></main>;
   }
@@ -152,11 +146,6 @@ export function JournalPage({ palette }: { palette: ChartPalette }) {
             </p>
           </div>
           <NewJournal journals={journals} busy={busy} onCreate={create} />
-          <p className="field-note">
-            To see a filled journal first:{" "}
-            <button type="button" className="link-button" disabled={busy} onClick={restore}>show the sample portfolio</button>{" "}
-            (made-up trades, deletable).
-          </p>
           {(error || notice) && <p className={error ? "text-error" : "journal-notice"} role={error ? "alert" : "status"}>{error ?? notice}</p>}
         </div>
       </main>
@@ -376,7 +365,7 @@ function Verification({ stats }: { stats: JournalStats }) {
               ({v.offset_detected ? "detected" : <>set in <a href="#settings/journal">journal settings</a></>}). </>
             : "The trade times didn't line up with the stored prices at any offset. "}
           {from.length > 0 && <>Prices: {from.map(([sym, src]) => `${sym} from ${src}`).join(", ")}. </>}
-          {v.no_prices.length > 0 && <>No stored prices for {v.no_prices.join(", ")}: run the scanner on that symbol (TradingView or Yahoo Finance) to check them. </>}
+          {v.no_prices.length > 0 && <>No stored prices for {v.no_prices.join(", ")}: run the scanner on that symbol (TradingView) to check them. </>}
         </p>
       </details>
     </div>

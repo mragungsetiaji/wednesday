@@ -18,7 +18,7 @@ def clean_env(monkeypatch):
 
 
 def cli_values(a):
-    return {"source": a.source, "symbol": a.symbol, "csv_path": a.csv}
+    return {"source": a.source, "symbol": a.symbol}
 
 
 def test_env_file_and_cli_precedence(tmp_path):
@@ -36,9 +36,13 @@ def test_env_file_and_cli_precedence(tmp_path):
 
     # Saved dashboard settings beat the environment; switching source resets the symbol.
     store = Store(f"sqlite:///{tmp_path / 'x.db'}")
-    store.set_setting(SETTINGS_KEY, {"source": "yfinance", "symbol": None})
+    store.set_setting(SETTINGS_KEY, {"source": "synthetic", "symbol": None})
     d = resolve(cli_values(args), store)
-    assert (d.source, d.resolved_symbol) == ("yfinance", "GC=F")
+    assert (d.source, d.resolved_symbol) == ("synthetic", "XAUUSD")
+    # A source this version doesn't have any more (Yahoo, CSV) falls back to the environment's.
+    store.set_setting(SETTINGS_KEY, {"source": "yfinance", "symbol": "GC=F"})
+    d = resolve(cli_values(args), store)
+    assert (d.source, d.resolved_symbol) == ("tradingview", "OANDA:XAUUSD")
 
     # Explicit flags beat everything.
     args = cli.parse_args(["--env-file", str(env), "--source", "tradingview", "--symbol", "FX:XAGUSD"])
@@ -48,15 +52,17 @@ def test_env_file_and_cli_precedence(tmp_path):
     assert resolve(cli_values(args), store).resolved_symbol == "XAUUSD"
 
 
-def test_a_saved_mt5_source_falls_back_to_yahoo(tmp_path, monkeypatch):
-    """MT5 is gone: an install that had it saved starts on the default source, not a dead terminal."""
+def test_a_removed_source_falls_back_to_the_default(tmp_path, monkeypatch):
+    """MT5, Yahoo Finance and CSV are gone: an install that had one saved starts on the default source."""
     from wednesday.settings import DEFAULT_SOURCE, SETTINGS_KEY, from_env, resolve
     from wednesday.storage import Store
 
     store = Store(f"sqlite:///{tmp_path / 'x.db'}")
     store.set_setting(SETTINGS_KEY, {"source": "mt5", "symbol": "XAUUSD.m", "clock": "NY+7", "mt5_login": 5})
     d = resolve({}, store)
-    assert (d.source, d.resolved_symbol, d.resolved_clock) == (DEFAULT_SOURCE, "GC=F", "UTC")
+    assert (d.source, d.resolved_symbol, d.resolved_clock) == (DEFAULT_SOURCE, "FX:XAUUSD", "UTC")
+    store.set_setting(SETTINGS_KEY, {"source": "csv", "csv_path": "x.csv"})
+    assert resolve({}, store).source == DEFAULT_SOURCE == "tradingview"
     assert d.validate() == []
     monkeypatch.setenv("XAU_SOURCE", "mt5")
     monkeypatch.setenv("XAU_SYMBOL", "XAUUSD.m")

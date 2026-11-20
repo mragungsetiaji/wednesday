@@ -30,7 +30,7 @@ Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setup
 - **1, 2 or 4 charts** full screen with linked crosshairs, and charts in their own windows for other monitors, saved as workspaces.
 - **Journal**: import an MT5 history report for gain, drawdown and the growth curve, with the drawdown rebuilt from M1 prices.
 - **Telegram alerts** when price trades into an order block.
-- **Free data**: Yahoo Finance by default, or spot gold from TradingView, no account needed; history in SQLite or PostgreSQL, and M1 files (MT5, Dukascopy, HistData, CSV) imported for more.
+- **Free data**: spot gold from TradingView, no account needed; the M1 history it fetches is kept in SQLite or PostgreSQL and grows while the screener runs.
 
 ## Why "Wednesday"
 
@@ -54,8 +54,8 @@ and its stats count how often each one closed green or red, so you can check it 
    No Python or Node needed. Windows may say "Windows protected your PC" because the
    installer isn't code signed: click **More info > Run anyway**.
 2. Start **Wednesday** from the Start menu or the desktop.
-3. It starts on free Yahoo Finance data (COMEX futures). For spot gold, open
-   **Settings > Data source**, pick **TradingView** and save.
+3. It starts on TradingView's spot gold (`FX:XAUUSD`). Another symbol, such as
+   `OANDA:XAUUSD`, goes in **Settings > Data source**.
 4. Upgrading? Run the new installer: your data and settings stay.
 
 From source (macOS, Linux, Windows with uv and Node 20+):
@@ -63,7 +63,6 @@ From source (macOS, Linux, Windows with uv and Node 20+):
 ```bash
 make setup   # installs everything and builds the dashboard
 make serve   # dashboard on http://127.0.0.1:8000
-make demo    # the same on demo data
 ```
 
 Everything else is in the [docs](docs/README.md).

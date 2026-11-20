@@ -7,32 +7,22 @@ from the price, minute by minute, instead of read off the closed results.
 <img src="images/journal.png" alt="The journal on the sample portfolio: account numbers on the left, the growth curve on the right, trades below" width="100%">
 
 Open **Journal** in the top bar. It needs a database (the default SQLite one is fine).
-One journal is free (the sample portfolio doesn't count); more than one (say, one
+One journal is free (a sample portfolio from an older version doesn't count); more than one (say, one
 per account) needs the **Multiple journals** feature in your plan (Settings, Plan).
 
 ## The sample portfolio
 
-On first start the journal holds a **Sample portfolio**: five months of made-up
-XAUUSD trades (longs and shorts, winning and losing runs, some that sat deep in
-loss before closing green), two deposits and a withdrawal. It shows every panel
-filled before you hand over an account. The screenshots on this page are of it.
+Older versions made a **Sample portfolio** on first start: five months of made-up
+XAUUSD trades, marked **Sample data: not a real account**. No account, strategy
+or broker produced its numbers. It is no longer created, and the app can't bring
+it back. A database from an older version may still hold it: it doesn't count as
+a journal, takes no report, and **Delete…** next to it under Settings, Journal,
+Journals removes it with its prices like any journal.
 
-- It's marked **Sample data: not a real account** in the header and next to the
-  gain and drawdown. No account, strategy or broker produced these numbers, and
-  they say nothing about what trading returns.
-- It doesn't count as a journal: with the free plan you keep it and still make
-  one journal of your own.
-- A report can't be imported into it, and it has no MT5 account.
-- **Delete…** next to it under Settings, Journal, Journals removes its trades and
-  its prices. It stays deleted after a restart. To bring it back, **Show the
-  sample** in the same place (or the link on the empty journal page).
-
-The trades come from a generator with a fixed seed (`journal/sample.py`), so it
-is the same on every install. It makes the M1 bars too, since the drawdown is
-rebuilt from them: they are stored under the source `sample` (it shows under
-Settings, Storage), and only the sample reads them. The scanner, the chart and your
-own journals never do. Every entry and exit price sits inside its minute's bar,
-so the checks below pass the way they would for a real account.
+The screenshot on this page is of that sample, made by a generator with a fixed
+seed (`journal/sample.py`) that the tests and the docs use. Its M1 bars are
+stored under their own source `sample`, which the scanner, the chart and your own
+journals never read.
 
 ## The header and Journal settings
 
@@ -162,9 +152,10 @@ The box under the chart says how far the numbers are checked:
 The broker's deal clock and the price feed's clock can be hours apart. Unless
 you set the offset (Broker time offset in Settings, Journal), the journal tries every
 whole hour from −14 to +14 and uses the one where most deal prices fit their bars.
-Spot gold bars (TradingView's `FX:XAUUSD`, or your broker's M1 bars imported in
-[Settings > History](data-sources.md#importing-m1-history)) line up best; Yahoo's
-`GC=F` is futures, priced differently from spot, so it won't match.
+Bars from the same market as the account line up best: TradingView's
+`FX:XAUUSD` is spot gold. Only the M1 bars the screener has stored count, so
+trades from before it started running (see [Storage](data-sources.md#storage))
+are counted at their closed result.
 
 ## Trades
 
@@ -186,7 +177,7 @@ the nearest three setups each side, each timeframe's last break, and the next
 high-impact releases. **Market then** under an entry shows it. It never changes
 afterwards, so a review a week later sees what you saw, not today's scan.
 Editing an entry changes its text, tags and mood only. Entries go with the
-journal when it's removed, and the sample portfolio has none.
+journal when it's removed.
 
 ## Notes
 
@@ -205,7 +196,6 @@ outside it; removing the picture or the journal deletes the files.
 ## Storage
 
 `journals`, `journal_trades`, `journal_cash` and `journal_notes` in Wednesday's
-database, and the chart pictures in `data/snapshots/`. The sample portfolio's bars
-are in `m1_bars` under the source `sample`, and the setting `journal.sample`
-remembers that it was deleted. Times are unix seconds of the broker's server clock, as MT5 reports
+database, and the chart pictures in `data/snapshots/`. A sample portfolio from an
+older version keeps its bars in `m1_bars` under the source `sample`. Times are unix seconds of the broker's server clock, as MT5 reports
 them. Nothing leaves the machine.

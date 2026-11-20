@@ -14,7 +14,7 @@ WEB  := web
 UI_BUILD   := $(WEB)/dist/index.html
 UI_SOURCES := $(shell find $(WEB)/src -type f 2>/dev/null) $(WEB)/index.html $(WEB)/vite.config.ts $(WEB)/package.json
 
-.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui scan check test test-ui typecheck telegram-chats telegram-test clean release tauri test-tauri serve-rs
+.PHONY: help doctor setup install ui serve dev dev-api dev-ui scan check test test-ui typecheck telegram-chats telegram-test clean release tauri test-tauri serve-rs
 
 help: ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -49,10 +49,7 @@ $(UI_BUILD): $(WEB)/node_modules $(UI_SOURCES)
 serve: $(UI_BUILD) ## Scan loop + dashboard on http://HOST:PORT (source from Settings or .env)
 	$(UV) run wednesday --serve --host $(HOST) --port $(PORT) $(ARGS)
 
-demo: $(UI_BUILD) ## Dashboard on demo data, no market data needed
-	$(UV) run wednesday --serve --source synthetic --host $(HOST) --port $(PORT) $(ARGS)
-
-dev: $(WEB)/node_modules ## Demo API + Vite dev server with hot reload on http://localhost:5173
+dev: $(WEB)/node_modules ## Synthetic-data API + Vite dev server with hot reload on http://localhost:5173
 	$(MAKE) -j2 dev-api dev-ui
 
 dev-api:

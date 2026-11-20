@@ -7,7 +7,6 @@ version no longer has (MetaTrader 5, since removed) falls back to the default.
 
 from __future__ import annotations
 
-import importlib.util
 import logging
 import os
 from dataclasses import asdict, dataclass, fields
@@ -19,16 +18,8 @@ log = logging.getLogger(__name__)
 
 SETTINGS_KEY = "data_source"
 
+# The data sources the dashboard offers.
 SOURCES = {
-    "yfinance": {
-        "title": "Yahoo Finance",
-        "description": "Free, no account. COMEX gold futures (GC=F), not spot, and only the last ~7 days of 1-minute bars; "
-        "history grows as the screener keeps storing bars.",
-        "default_symbol": "GC=F",
-        "default_clock": "UTC",
-        "default_tick": 60,
-        "min_tick": 15,  # every tick is a request to Yahoo; faster risks being rate limited
-    },
     "tradingview": {
         "title": "TradingView",
         "description": "Free, no account. Spot gold from TradingView's feeds: FX:XAUUSD is FXCM, or any symbol with its "
@@ -39,25 +30,22 @@ SOURCES = {
         "default_tick": 1,  # read from a quote stream the helper keeps open, so polling is cheap
         "min_tick": 0.5,
     },
-    "csv": {
-        "title": "CSV file",
-        "description": "M1 bars from a CSV (time, open, high, low, close[, volume]) that another process keeps appending to.",
-        "default_symbol": "XAUUSD",
-        "default_clock": "UTC",
-        "default_tick": 0,  # a CSV has closed bars only, no live price
-        "min_tick": 0,
-    },
+}
+# Sources for development and tests only (``--source synthetic``, ``make dev``): not offered in
+# the dashboard, and not real market data.
+DEV_SOURCES = {
     "synthetic": {
-        "title": "Demo data",
-        "description": "Random-walk prices for trying the dashboard. Not real market data.",
+        "title": "Synthetic data",
+        "description": "Random-walk prices for development and tests. Not real market data.",
         "default_symbol": "XAUUSD",
         "default_clock": "UTC",
         "default_tick": 2,
         "min_tick": 0.5,
     },
 }
+ALL_SOURCES = {**SOURCES, **DEV_SOURCES}
 
-DEFAULT_SOURCE = "yfinance"
+DEFAULT_SOURCE = "tradingview"
 # Live price between the minute scans, in seconds. 0 (or a full minute) means none: the
 # price then moves with each scan only.
 MAX_TICK = 60
@@ -67,37 +55,34 @@ MAX_TICK = 60
 class DataSettings:
     source: str = DEFAULT_SOURCE
     symbol: str | None = None  # None = the source's default symbol
-    csv_path: str | None = None
     clock: str | None = None  # the feed's clock; None = the source's default (see quarters.py)
     tick_seconds: float | None = None  # live price interval; None = the source's default, 0 = off
 
     @property
     def resolved_symbol(self) -> str:
-        return self.symbol or SOURCES[self.source]["default_symbol"]
+        return self.symbol or ALL_SOURCES[self.source]["default_symbol"]
 
     @property
     def resolved_clock(self) -> str:
-        return self.clock or SOURCES.get(self.source, SOURCES[DEFAULT_SOURCE])["default_clock"]
+        return self.clock or ALL_SOURCES.get(self.source, SOURCES[DEFAULT_SOURCE])["default_clock"]
 
     @property
     def resolved_tick(self) -> float:
-        info = SOURCES.get(self.source, SOURCES[DEFAULT_SOURCE])
+        info = ALL_SOURCES.get(self.source, SOURCES[DEFAULT_SOURCE])
         return info["default_tick"] if self.tick_seconds is None else self.tick_seconds
 
     def validate(self) -> list[str]:
         errors = []
-        if self.source not in SOURCES:
+        if self.source not in ALL_SOURCES:
             errors.append(f"Unknown source {self.source!r}")
-        if self.source == "csv" and not self.csv_path:
-            errors.append("A CSV file path is required for the CSV source")
         if self.symbol is not None and not self.symbol.strip():
             errors.append("Symbol can't be blank")
         if self.clock is not None and (err := clock_error(self.clock)):
             errors.append(err)
-        if self.tick_seconds is not None and self.source in SOURCES:
-            t, low = self.tick_seconds, SOURCES[self.source]["min_tick"]
+        if self.tick_seconds is not None and self.source in ALL_SOURCES:
+            t, low = self.tick_seconds, ALL_SOURCES[self.source]["min_tick"]
             if not (t == 0 or (low and low <= t <= MAX_TICK)):
-                title = SOURCES[self.source]["title"]
+                title = ALL_SOURCES[self.source]["title"]
                 errors.append(f"Live price interval for {title}: 0 (off) or {low:g} to {MAX_TICK} seconds"
                               if low else f"{title} has no live price; leave the interval at 0")
         return errors
@@ -107,7 +92,7 @@ class DataSettings:
 
     @classmethod
     def from_dict(cls, d: dict) -> DataSettings:
-        known = {f.name for f in fields(cls)}  # drops keys of removed sources (mt5_login, mt5_path, ...)
+        known = {f.name for f in fields(cls)}  # drops keys of removed sources (mt5_login, csv_path, ...)
         clean = {k: (v if v not in ("",) else None) for k, v in d.items() if k in known}
         if clean.get("tick_seconds") is not None:
             clean["tick_seconds"] = float(clean["tick_seconds"])
@@ -116,8 +101,6 @@ class DataSettings:
 
 def source_availability(source: str) -> tuple[bool, str | None]:
     """Whether a source can run on this machine, and why not."""
-    if source == "yfinance" and importlib.util.find_spec("yfinance") is None:
-        return False, "Install it with: uv sync"
     if source == "tradingview":
         from .feeds import tradingview_command
 
@@ -141,8 +124,9 @@ def _env(name: str) -> str | None:
 
 
 def _known_source(source: str | None, where: str) -> str | None:
-    """``source``, or None when this version doesn't have it (MetaTrader 5, from older versions): the default is used."""
-    if source and source not in SOURCES:
+    """``source``, or None when this version doesn't have it (MetaTrader 5, Yahoo Finance or a CSV file,
+    from older versions): the default is used."""
+    if source and source not in ALL_SOURCES:
         log.warning("data source %r from %s isn't available any more; using %s", source, where, DEFAULT_SOURCE)
         return None
     return source
@@ -153,7 +137,6 @@ def from_env() -> DataSettings:
     return DataSettings(
         source=source or DEFAULT_SOURCE,
         symbol=_env("XAU_SYMBOL") if source else None,
-        csv_path=_env("XAU_CSV"),
         clock=_env("XAU_CLOCK") if source else None,
         tick_seconds=float(tick) if (tick := _env("XAU_TICK")) else None,
     )
@@ -164,7 +147,7 @@ def resolve(cli: dict, store: Store | None) -> DataSettings:
     base = from_env()
     saved = store.get_setting(SETTINGS_KEY) if store else None
     if saved and saved.get("source") and not _known_source(saved["source"], "the saved settings"):
-        saved = None  # e.g. MT5 with its symbol and clock: start over on the default source
+        saved = None  # e.g. Yahoo with GC=F: start over on the default source
     if saved:
         base = DataSettings.from_dict({**base.to_dict(), **{k: v for k, v in saved.items() if v is not None}})
         # A saved source switch also resets the symbol and clock unless they were saved with it.
@@ -176,10 +159,10 @@ def resolve(cli: dict, store: Store | None) -> DataSettings:
             base.tick_seconds = None
     explicit = {k: v for k, v in cli.items() if v is not None}
     if explicit.get("source") and explicit["source"] != base.source and "symbol" not in explicit:
-        base.symbol = None  # don't carry e.g. GC=F over to TradingView
+        base.symbol = None  # don't carry one source's symbol over to another
         if "clock" not in explicit:
-            base.clock = None  # nor Yahoo's UTC clock
+            base.clock = None  # nor its clock
         if "tick_seconds" not in explicit:
-            base.tick_seconds = None  # nor TradingView's one-second ticks to Yahoo
+            base.tick_seconds = None  # nor its live price interval
     return DataSettings.from_dict({**base.to_dict(), **explicit})
 

@@ -16,7 +16,7 @@ from .brief import BRIEF_KEY, BriefRunner, BriefSettings
 from .journal.service import Journals
 from .news import CALENDAR_KEY, Calendar, CalendarSettings
 from .engine import Runtime
-from .settings import SETTINGS_KEY, SOURCES, resolve
+from .settings import ALL_SOURCES, SETTINGS_KEY, resolve
 from .storage import DEFAULT_DB_URL, Store
 from .report import format_scan
 from .scanner import ScanConfig
@@ -59,10 +59,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     load_env_file(known.env_file)
 
     p = argparse.ArgumentParser(prog="wednesday", description=__doc__, parents=[pre])
-    p.add_argument("--source", choices=list(SOURCES),
-                   help="data source (default: saved in the dashboard, else XAU_SOURCE, else yfinance)")
-    p.add_argument("--symbol", help="default per source: GC=F for yfinance, FX:XAUUSD for tradingview, XAUUSD for csv")
-    p.add_argument("--csv", help="M1 CSV path for --source csv (XAU_CSV)")
+    p.add_argument("--source", choices=list(ALL_SOURCES),
+                   help="data source (default: saved in the dashboard, else XAU_SOURCE, else tradingview); "
+                        "synthetic is random-walk data for development and tests")
+    p.add_argument("--symbol", help="TradingView symbol with its exchange prefix (default FX:XAUUSD)")
     p.add_argument("--clock", help="the feed's clock for the quarterly view: UTC, NY+7, UTC+3 or a "
                                    "time zone like Europe/London (XAU_CLOCK; default UTC)")
     p.add_argument("--db", default=_env("XAU_DB_URL") or DEFAULT_DB_URL,
@@ -182,7 +182,7 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
     if store and args.reset_settings:
         store.delete_setting(SETTINGS_KEY)
     data = resolve({
-        "source": args.source, "symbol": args.symbol, "csv_path": args.csv,
+        "source": args.source, "symbol": args.symbol,
         "clock": args.clock,
     }, store)
     if errors := data.validate():
@@ -210,7 +210,7 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
                  ",".join(alert_settings.timeframes), "/".join(alert_settings.priorities))
     brief = BriefRunner(store, BriefSettings.from_dict(store.get_setting(BRIEF_KEY) if store else None))
     calendar = Calendar(store, CalendarSettings.from_dict(store.get_setting(CALENDAR_KEY) if store else None))
-    journals = Journals(store, sample=True) if store else None
+    journals = Journals(store) if store else None
     runtime = Runtime(cfg, data, store, args.delay, publish, alerts, brief, calendar, journals=journals,
                       poll=args.poll)
     engine = runtime.engine

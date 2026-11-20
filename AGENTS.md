@@ -12,8 +12,7 @@ make install     # uv sync --extra llm, plus npm install in web/
 make test        # uv run pytest -q
 make typecheck   # tsc -b in web/
 make test-ui     # node --test on web/src/*.test.ts (Node 22.18+)
-make demo        # dashboard on synthetic data, no market data or keys needed
-make dev         # synthetic API + Vite hot reload on http://localhost:5173
+make dev         # synthetic API + Vite hot reload on http://localhost:5173 (no market data needed)
 make scan ARGS="--source synthetic"   # one scan in the console
 make tauri       # the Tauri desktop shell (src-tauri) with the server as a sidecar
 make test-tauri  # its Rust tests (cargo test)
@@ -22,10 +21,12 @@ make release v0.3.2   # tag main and push: CI builds and publishes the Windows i
 
 Python is managed by uv (3.11 locally, `>=3.10` supported); use `uv run`, not a bare
 `python`. Run `make test` after Python changes, and `make typecheck` and `make test-ui`
-after changes in `web/`. Tests and local runs should use `--source synthetic`: the other sources hit
-Yahoo Finance or TradingView (through the Node helper in `tradingview/`). MetaTrader 5 was
-removed (the app opened the terminal on start and froze); don't bring it back as a
-live dependency. The journal reads MT5 only through an uploaded HTML report.
+after changes in `web/`. Tests and local runs should use `--source synthetic` (random walk,
+development and tests only, not offered in the dashboard): the real source, TradingView,
+goes through the Node helper in `tradingview/` and the network. TradingView is the only
+market data source; Yahoo Finance, CSV files, M1 file imports and MetaTrader 5 were removed
+(MT5 opened the terminal on start and froze): don't bring them back. The journal reads MT5
+only through an uploaded HTML report.
 
 ## Where things are
 
@@ -84,7 +85,7 @@ both `make test` and `make test-tauri` check them against the same `tests/golden
   another web page can't drive the dashboard. Don't add endpoints that expose
   secrets or files outside `data/`.
 - **Time zones are explicit.** Bar times come in the feed's clock (`XAU_CLOCK`; UTC for
-  Yahoo and TradingView, a broker clock such as NY+7 for some CSV exports); the quarterly
+  TradingView, a broker clock such as NY+7 for MT5 report times); the quarterly
   view works in New York time. Convert with `quarters.to_new_york` / `utc_to_feed` rather
   than assuming UTC.
 - **Storage runs on SQLite and PostgreSQL.** Go through `storage.py` (SQLAlchemy); no

@@ -341,7 +341,6 @@ export interface SourceInfo {
 export interface DataSettings {
   source: string;
   symbol: string | null;
-  csv_path: string | null;
   clock: string | null; // null = the source default
   tick_seconds: number | null; // null = the source default, 0 = off
 }
@@ -740,53 +739,6 @@ export interface RiskResponse {
 export const fetchRisk = () => getJson<RiskResponse>("/api/risk");
 export const saveRisk = (s: RiskSettings) => send<RiskResponse>("PUT", "/api/risk", s);
 
-// ---- History: M1 files imported into the stored bars ----
-
-export interface HistoryStatus {
-  source: string;
-  symbol: string;
-  clock: string; // the feed's clock; imported bars are moved to it
-  can_import: boolean;
-  stored: { bars: number; first_unix: number | null; last_unix: number | null };
-  days: [number, number][]; // [day (unix midnight), M1 bars]
-}
-
-export interface HistoryPreview {
-  token: string;
-  format: "mt5" | "dukascopy" | "histdata" | "csv";
-  suggested_clock: string | null;
-  bars: number;
-  first: string;
-  last: string;
-  sample: { time: string; open: number; high: number; low: number; close: number; volume: number }[];
-}
-
-export interface HistoryImported {
-  read: number;
-  added: number;
-  first: string;
-  last: string;
-  stored: number;
-}
-
-export const fetchHistory = () => getJson<HistoryStatus>("/api/history");
-/** Uploads an M1 file and returns a preview; nothing is stored until confirmHistoryImport. */
-export async function stageHistoryImport(file: File): Promise<HistoryPreview> {
-  const res = await apiFetch("/api/history/import", { method: "POST", body: file });
-  if (!res.ok) {
-    let detail = `${res.status} ${res.statusText}`;
-    try {
-      detail = (await res.json()).detail ?? detail;
-    } catch {
-      /* not JSON */
-    }
-    throw new Error(detail);
-  }
-  return res.json();
-}
-export const confirmHistoryImport = (token: string, clock: string) =>
-  send<HistoryStatus & { imported: HistoryImported }>("POST", `/api/history/import/${token}`, { clock });
-
 // ---- Plugins (e.g. the paid wednesday-ee package) ----
 
 export interface PluginInfo {
@@ -953,7 +905,6 @@ export type JournalPatch = { name?: string; time_offset?: number | null; show_we
 export const updateJournal = (id: string, patch: JournalPatch) =>
   send<Journal>("PATCH", `/api/journals/${encodeURIComponent(id)}`, patch);
 /** Bring the sample portfolio back after it was deleted. */
-export const restoreSample = () => send<Journal>("POST", "/api/journals/sample");
 export const deleteJournal = (id: string) => send<{ deleted: boolean }>("DELETE", `/api/journals/${encodeURIComponent(id)}`);
 export const saveTradeNote = (id: string, tradeId: string, note: string, tags: string[]) =>
   send<{ note: string; tags: string[] }>("PUT", `/api/journals/${encodeURIComponent(id)}/trades/${encodeURIComponent(tradeId)}/note`, { note, tags });

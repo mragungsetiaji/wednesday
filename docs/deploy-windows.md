@@ -16,11 +16,11 @@ Python or Node to set up.
    copy .env.example .env
    ```
 
-   The default source is Yahoo Finance (COMEX futures, `GC=F`). For spot gold
-   from TradingView, install Node 20+ and the helper (`npm install --prefix
-   tradingview`), then set `XAU_SOURCE=tradingview` in `.env`. You can also
-   switch later in the dashboard under **Settings**; the choice is saved in the
-   database and survives restarts. See [Data sources](data-sources.md).
+   The data source is TradingView (spot gold, `FX:XAUUSD`), which needs Node 20+
+   and its helper: `npm install --prefix tradingview`. Change the symbol in
+   `.env` (`XAU_SYMBOL`, with `XAU_SOURCE=tradingview`) or later in the dashboard
+   under **Settings**; the choice is saved in the database and survives restarts.
+   See [Data sources](data-sources.md).
 
 2. Test the connection. It prints the feed details, the last price and how many M1
    bars were loaded:
@@ -110,6 +110,6 @@ Start-ScheduledTask -TaskName "Wednesday"
 
 ## Timezone note
 
-Yahoo Finance and TradingView bar times are UTC, and the screener keeps the
+TradingView bar times are UTC, and the screener keeps the
 feed's clock (see [Feed clock](data-sources.md#feed-clock)); the quarterly view
 converts to New York time. Log timestamps use the VPS clock.
