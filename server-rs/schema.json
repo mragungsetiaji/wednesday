@@ -617,8 +617,8 @@
   {
    "name": "journals",
    "create": {
-    "sqlite": "CREATE TABLE IF NOT EXISTS journals ( id VARCHAR(36) NOT NULL, name VARCHAR(120) NOT NULL, login VARCHAR(32), server VARCHAR(120), company VARCHAR(120), currency VARCHAR(8), source VARCHAR(16), account TEXT, time_offset INTEGER, created_at VARCHAR(40) NOT NULL, synced_at VARCHAR(40), sample BOOLEAN, settings TEXT, PRIMARY KEY (id) )",
-    "postgresql": "CREATE TABLE IF NOT EXISTS journals ( id VARCHAR(36) NOT NULL, name VARCHAR(120) NOT NULL, login VARCHAR(32), server VARCHAR(120), company VARCHAR(120), currency VARCHAR(8), source VARCHAR(16), account TEXT, time_offset INTEGER, created_at VARCHAR(40) NOT NULL, synced_at VARCHAR(40), sample BOOLEAN, settings TEXT, PRIMARY KEY (id) )"
+    "sqlite": "CREATE TABLE IF NOT EXISTS journals ( id VARCHAR(36) NOT NULL, name VARCHAR(120) NOT NULL, login VARCHAR(32), server VARCHAR(120), company VARCHAR(120), currency VARCHAR(8), time_offset INTEGER, created_at VARCHAR(40) NOT NULL, synced_at VARCHAR(40), sample BOOLEAN, settings TEXT, PRIMARY KEY (id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS journals ( id VARCHAR(36) NOT NULL, name VARCHAR(120) NOT NULL, login VARCHAR(32), server VARCHAR(120), company VARCHAR(120), currency VARCHAR(8), time_offset INTEGER, created_at VARCHAR(40) NOT NULL, synced_at VARCHAR(40), sample BOOLEAN, settings TEXT, PRIMARY KEY (id) )"
    },
    "indexes": {
     "sqlite": [],
@@ -660,18 +660,6 @@
      "nullable": true,
      "sqlite": "VARCHAR(8)",
      "postgresql": "VARCHAR(8)"
-    },
-    {
-     "name": "source",
-     "nullable": true,
-     "sqlite": "VARCHAR(16)",
-     "postgresql": "VARCHAR(16)"
-    },
-    {
-     "name": "account",
-     "nullable": true,
-     "sqlite": "TEXT",
-     "postgresql": "TEXT"
     },
     {
      "name": "time_offset",

@@ -293,13 +293,11 @@ function Summary({ stats }: { stats: JournalStats }) {
 }
 
 /** One neutral line on how the numbers were worked out, with the detail behind a disclosure.
- * Only real problems (deal prices outside their bars, a balance that doesn't match) get the
- * warning look. */
+ * Only a real problem (deal prices outside their bars) gets the warning look. */
 function Verification({ stats }: { stats: JournalStats }) {
   const v = stats.verification;
   const from = Object.entries(v.prices_from);
   const mismatched = v.mismatched.length > 0;
-  const balanceOff = v.balance_reported !== undefined && v.balance_matches === false;
   const rebuilt = v.basis === "ohlc";
   return (
     <div className="journal-verify">
@@ -310,7 +308,7 @@ function Verification({ stats }: { stats: JournalStats }) {
           <span className="num">{v.verified}</span> of <span className="num">{v.trades}</span> trades.
         </span>
       </p>
-      {(mismatched || balanceOff) && (
+      {mismatched && (
         <ul className="journal-verify-problems">
           {mismatched && (
             <li>
@@ -319,15 +317,6 @@ function Verification({ stats }: { stats: JournalStats }) {
                 <span className="num">{v.mismatched.length}</span> deal price{v.mismatched.length > 1 ? "s aren't" : " isn't"} inside
                 its 1-minute bar: <span className="num">{v.mismatched.slice(0, 5).join(", ")}{v.mismatched.length > 5 ? "…" : ""}</span>.
                 Those trades are left out of the drawdown. Check the report wasn't edited and the prices come from the same broker.
-              </span>
-            </li>
-          )}
-          {balanceOff && (
-            <li>
-              <CrossIcon />
-              <span>
-                The balance doesn't match the terminal's (<span className="num">{fmtPrice(v.balance_reported as number)}</span>).
-                Export the report again with all history selected, then import it again.
               </span>
             </li>
           )}
@@ -352,12 +341,6 @@ function Verification({ stats }: { stats: JournalStats }) {
                 : "No deal prices could be checked: there are no stored prices for these trades."}
             </span>
           </li>
-          {v.balance_reported !== undefined && (
-            <li>
-              {v.balance_matches ? <CheckIcon /> : <CrossIcon />}
-              <span>Balance {v.balance_matches ? "matches" : "doesn't match"} the terminal.</span>
-            </li>
-          )}
         </ul>
         <p className="field-note">
           {v.offset_hours !== null

@@ -58,9 +58,7 @@ def test_the_sample_journal_is_free_and_deletable(tmp_path):
     own = js.create("Main", [])
     with pytest.raises(PermissionError):
         js.create("Second", [])
-    # The sample can't be synced or imported into.
-    with pytest.raises(ValueError, match="made-up"):
-        js.sync(SAMPLE_ID, {"account": {"login": "1"}, "deals": [], "positions": []})
+    # The sample can't be imported into.
     with pytest.raises(ValueError, match="made-up"):
         js.import_report(SAMPLE_ID, b"<html></html>")
 
@@ -90,9 +88,8 @@ def test_sample_api(tmp_path, monkeypatch):
     api = TestClient(server.create_app(runtime, ui_dir=tmp_path))
     [j] = api.get("/api/journals").json()["journals"]
     assert j["sample"] is True
-    for path in ("sync", "import"):
-        r = api.post(f"/api/journals/{SAMPLE_ID}/{path}", content=b"x")
-        assert r.status_code == 409 and "made-up" in r.json()["detail"]
+    r = api.post(f"/api/journals/{SAMPLE_ID}/import", content=b"x")
+    assert r.status_code == 409 and "made-up" in r.json()["detail"]
     assert api.post("/api/journals", json={"name": "Main"}).status_code == 200
     assert api.delete(f"/api/journals/{SAMPLE_ID}").json() == {"deleted": True}
     assert [x["name"] for x in api.get("/api/journals").json()["journals"]] == ["Main"]

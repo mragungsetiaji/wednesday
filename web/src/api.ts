@@ -656,11 +656,9 @@ export interface Journal {
   server: string | null;
   company: string | null;
   currency: string | null;
-  source: "mt5" | "report" | null; // how it was last filled ("mt5": synced by an older version)
-  account: { balance: number | null; equity: number | null; at: string } | null; // from an old MT5 sync
   time_offset: number | null; // hours from the deal clock to the price clock; null = detected
   created_at: string;
-  synced_at: string | null;
+  synced_at: string | null; // when the last MT5 report was imported
   sample: boolean; // the made-up sample portfolio: free, can't be imported into
   show_weekends: boolean; // Saturday and Sunday columns in the calendar
 }
@@ -747,8 +745,6 @@ export interface JournalStats {
     no_prices: string[];
     mismatched: string[];
     prices_from: Record<string, string>;
-    balance_reported?: number;
-    balance_matches?: boolean;
   };
   series: { growth: Point[]; balance: Point[]; equity: Point[]; drawdown: Point[] };
   monthly: { month: string; gain: number | null; profit: number; pips: number; trades: number }[]; // "2026-03"

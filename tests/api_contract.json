@@ -377,7 +377,6 @@
    "available": "bool",
    "journals": [
     {
-     "account": "null",
      "company": "null",
      "created_at": "string",
      "currency": "string",
@@ -388,7 +387,6 @@
      "server": "null",
      "settings": "null",
      "show_weekends": "bool",
-     "source": "null",
      "synced_at": "null",
      "time_offset": "null"
     }
@@ -415,7 +413,6 @@
     }
    ],
    "journal": {
-    "account": "null",
     "company": "null",
     "created_at": "string",
     "currency": "string",
@@ -426,7 +423,6 @@
     "server": "null",
     "settings": "null",
     "show_weekends": "bool",
-    "source": "null",
     "synced_at": "null",
     "time_offset": "null"
    },

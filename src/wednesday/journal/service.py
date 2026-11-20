@@ -75,7 +75,7 @@ class Journals:
             if have:
                 return None
             row = {"id": SAMPLE_ID, "name": SAMPLE_NAME, "login": None, "server": None, "company": None,
-                   "currency": "USD", "source": None, "account": None, "time_offset": None, "created_at": _now(),
+                   "currency": "USD", "time_offset": None, "created_at": _now(),
                    "synced_at": None, "sample": True, "settings": None}
             self.store.journal_put(row)
             self.store.journal_fill(SAMPLE_ID, data["trades"], data["cash"], replace=True)
@@ -123,7 +123,7 @@ class Journals:
         if taken:
             raise JournalError(f"{taken['name']} already follows account {login}. Open it instead, or use another account")
         row = {"id": uuid.uuid4().hex[:12], "name": name, "login": login, "server": None, "company": None,
-               "currency": None, "source": None, "account": None, "time_offset": None, "created_at": _now(),
+               "currency": None, "time_offset": None, "created_at": _now(),
                "synced_at": None, "settings": {}}
         self.store.journal_put(row)
         return self._public(row)
@@ -186,7 +186,7 @@ class Journals:
         self.store.journal_fill(journal_id, parsed["trades"], parsed["cash"], replace=True)
         j.update(login=acc.get("login") or j.get("login"), server=acc.get("server") or j.get("server"),
                  company=acc.get("company") or j.get("company"), currency=acc.get("currency") or j.get("currency"),
-                 source="report", synced_at=_now(), account=None)
+                 synced_at=_now())
         self.store.journal_put(j)
         self._changed(journal_id)
         return {"trades": len(parsed["trades"]), "cash": len(parsed["cash"]), "journal": self._public(j)}
@@ -318,10 +318,6 @@ class Journals:
             t["note"], t["tags"], t["images"] = (n["note"], n["tags"], n["images"]) if n else ("", [], [])
             t.pop("journal_id", None)
         result["verification"]["prices_from"] = used
-        acc = j.get("account") or {}
-        if acc.get("balance") is not None:
-            result["verification"]["balance_reported"] = acc["balance"]
-            result["verification"]["balance_matches"] = abs(acc["balance"] - result["summary"]["balance"]) < 0.01
         result["journal"] = self._public(j)
         result["cash"] = cash
         for c in cash:

@@ -89,13 +89,11 @@ journals_table = Table(
     Column("server", String(120), nullable=True),
     Column("company", String(120), nullable=True),
     Column("currency", String(8), nullable=True),
-    Column("source", String(16), nullable=True),  # how it was last filled: "mt5" or "report"
-    Column("account", Text, nullable=True),  # JSON: balance/equity the terminal reported at the last sync
     Column("time_offset", Integer, nullable=True),  # seconds from deal clock to price clock; null = detect
     Column("created_at", String(40), nullable=False),
-    Column("synced_at", String(40), nullable=True),
+    Column("synced_at", String(40), nullable=True),  # when the last MT5 report was imported
     Column("sample", Boolean, nullable=True),  # the made-up sample portfolio (journal/sample.py)
-    Column("settings", Text, nullable=True),  # JSON: auto_sync, show_weekends (journal/service.py)
+    Column("settings", Text, nullable=True),  # JSON: show_weekends (journal/service.py)
 )
 
 calendar_events_table = Table(
@@ -476,13 +474,11 @@ class Store:
         with self.engine.connect() as conn:
             rows = [dict(r._mapping) for r in conn.execute(select(t).order_by(t.c.created_at))]
         for r in rows:
-            r["account"] = json.loads(r["account"]) if r["account"] else None
             r["settings"] = json.loads(r["settings"]) if r.get("settings") else {}
         return rows
 
     def journal_put(self, row: dict) -> None:
-        row = {**row, "account": json.dumps(row["account"]) if row.get("account") is not None else None,
-               "settings": json.dumps(row["settings"]) if row.get("settings") else None}
+        row = {**row, "settings": json.dumps(row["settings"]) if row.get("settings") else None}
         self._upsert(journals_table, [row], ["id"])
 
     def journal_delete(self, journal_id: str) -> bool:
