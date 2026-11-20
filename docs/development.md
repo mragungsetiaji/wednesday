@@ -62,6 +62,21 @@ docs/             these docs
 tests/
 ```
 
+## The API contract
+
+The dashboard and the Tauri shell only use the server through `/api`.
+`tests/test_api_contract.py` keeps that API in `tests/api_contract.json`: every
+route, every request body and query, and the shape (keys and types, not values)
+of every GET response, on synthetic data. A change to the API fails the test
+with a list of what changed. When the change is meant, update the dashboard to
+match, then rewrite the file and review its diff:
+
+```bash
+UPDATE_API_CONTRACT=1 uv run pytest tests/test_api_contract.py
+```
+
+It is also what a replacement server must answer the same way (#96).
+
 ## How a scan flows
 
 Two threads (`engine.py`). The **feed thread** owns the feed: a feed's connection

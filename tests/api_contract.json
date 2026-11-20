@@ -1,0 +1,2402 @@
+{
+ "requests": {
+  "GET /api/candles": {
+   "query": [
+    "before?",
+    "limit?",
+    "tf?"
+   ]
+  },
+  "GET /api/clock/feed": {
+   "query": [
+    "ny"
+   ]
+  },
+  "GET /api/distribution": {
+   "query": [
+    "bins?",
+    "lookback?",
+    "measure?",
+    "period?",
+    "session?",
+    "weekday?"
+   ]
+  },
+  "GET /api/lab/backtest": {
+   "query": [
+    "filter?",
+    "format?",
+    "from?",
+    "horizon?",
+    "min_win?",
+    "rr?",
+    "tf?",
+    "to?"
+   ]
+  },
+  "GET /api/lab/candles": {
+   "query": [
+    "end?",
+    "limit?",
+    "model?",
+    "tf?"
+   ]
+  },
+  "GET /api/lab/dataset": {
+   "query": [
+    "days?",
+    "format?"
+   ]
+  },
+  "GET /api/lab/predictions": {
+   "query": [
+    "limit?",
+    "tf?",
+    "threshold?"
+   ]
+  },
+  "GET /api/lab/queue": {
+   "query": [
+    "limit?",
+    "scope?",
+    "tag?",
+    "tf?"
+   ]
+  },
+  "GET /api/markets/candles": {
+   "query": [
+    "before?",
+    "limit?",
+    "symbol",
+    "tf?"
+   ]
+  },
+  "GET /api/markets/tick": {
+   "query": [
+    "symbol"
+   ]
+  },
+  "GET /api/replay": {
+   "query": [
+    "at",
+    "limit?",
+    "tf?"
+   ]
+  },
+  "GET /api/stream": {
+   "query": [
+    "limit?"
+   ]
+  },
+  "PATCH /api/journals/{journal_id}": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PATCH /api/journals/{journal_id}/entries/{entry_id}": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/auth/login": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/auth/tokens": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/brief/generate": {
+   "body": {
+    "application/json": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Body"
+    }
+   }
+  },
+  "POST /api/calendar/import": {
+   "query": [
+    "zone?"
+   ]
+  },
+  "POST /api/journals": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/journals/{journal_id}/entries": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/journals/{journal_id}/trades/{trade_id}/images": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/lab/batch": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/lab/compare": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/lab/data/import/{token}": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/lab/labels": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/lab/labels/import/{token}": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "default": {},
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/lab/models/import/{token}": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "default": {},
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/lab/reviewed": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/lab/reviews": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/lab/train": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/alerts": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/bias": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/brief": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/calendar": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/drawing-templates/{family}/{name}": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/drawings/{drawing_id}": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/drawings/{drawing_id}/alert": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/journals/{journal_id}/trades/{trade_id}/note": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/lab/active": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/lab/data": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/lab/trust": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/licence": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/llm/budget": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/llm/prices": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/risk": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/settings": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/workspaces/{name}": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  }
+ },
+ "responses": {
+  "GET /api/alerts": {
+   "chat_id_set": "bool",
+   "configured": "bool",
+   "editable": "bool",
+   "last_error": "null",
+   "recent": [],
+   "settings": {
+    "chat_id": "null",
+    "enabled": "bool",
+    "neutral_alerts": "bool",
+    "priorities": [
+     "string"
+    ],
+    "timeframes": [
+     "string"
+    ]
+   },
+   "token_set": "bool",
+   "token_source": "null"
+  },
+  "GET /api/auth/status": {
+   "enabled": "bool",
+   "logged_in": "bool"
+  },
+  "GET /api/auth/tokens": {
+   "tokens": []
+  },
+  "GET /api/bias": {
+   "bias": "null"
+  },
+  "GET /api/brief": {
+   "budget": {
+    "calls": "number",
+    "level": "string",
+    "limit": "null",
+    "share": "null",
+    "spent": "number",
+    "unpriced_calls": "number"
+   },
+   "default_prompt": "string",
+   "editable": "bool",
+   "error": "null",
+   "last": "null",
+   "providers": [
+    {
+     "default_model": "string",
+     "env": "string",
+     "id": "string",
+     "installed": "bool",
+     "key_set": "bool",
+     "key_source": "null",
+     "secret": "string",
+     "title": "string"
+    }
+   ],
+   "running": "bool",
+   "settings": {
+    "max_chars_per_source": "number",
+    "model": "null",
+    "prompt": "null",
+    "provider": "string",
+    "urls": []
+   }
+  },
+  "GET /api/calendar": {
+   "editable": "bool",
+   "error": "null",
+   "events": [],
+   "fetched_at": "null",
+   "history": {
+    "first": "null",
+    "last": "null",
+    "stored": "number"
+   },
+   "loading": "bool",
+   "settings": {
+    "currencies": [
+     "string"
+    ],
+    "enabled": "bool",
+    "impacts": [
+     "string"
+    ],
+    "url": "string"
+   },
+   "week": []
+  },
+  "GET /api/calendar/reactions": {
+   "available": "bool",
+   "history": {
+    "first": "null",
+    "last": "null",
+    "stored": "number"
+   },
+   "types": []
+  },
+  "GET /api/candles": {
+   "candles": [
+    {
+     "close": "number",
+     "high": "number",
+     "low": "number",
+     "open": "number",
+     "time": "number"
+    }
+   ],
+   "levels": [
+    {
+     "bottom": "number",
+     "confirmed_time": "string",
+     "detector": "string",
+     "ended_time": "null",
+     "ended_time_unix": "null",
+     "kind": "string",
+     "label": "string",
+     "meta": {
+      "body?": "number",
+      "entry?": "number",
+      "priority?": "string",
+      "risk?": "number",
+      "sl?": "number",
+      "sl_capped?": "bool",
+      "swing?": "string"
+     },
+     "time": "string",
+     "time_unix": "number",
+     "top": "number",
+     "touches": "number"
+    }
+   ],
+   "price": "number",
+   "swings": [
+    {
+     "kind": "string",
+     "label": "string",
+     "price": "number",
+     "time": "string",
+     "time_unix": "number"
+    }
+   ],
+   "timeframe": "string"
+  },
+  "GET /api/clock/feed": {
+   "feed": "string",
+   "feed_unix": "number",
+   "ny": "string"
+  },
+  "GET /api/distribution": {
+   "coverage": {
+    "from": "string",
+    "to": "string"
+   },
+   "current": {
+    "day": "string",
+    "forming": "bool",
+    "label": "string",
+    "start_unix": "number",
+    "value": "number"
+   },
+   "filters": {
+    "session": "null",
+    "weekday": "null"
+   },
+   "histogram": {
+    "counts": [
+     "number"
+    ],
+    "edges": [
+     "number"
+    ]
+   },
+   "like_this": [],
+   "lookback": "string",
+   "measure": "string",
+   "min_samples": "number",
+   "percentile": "null",
+   "period": "string",
+   "samples": "number",
+   "stats": {
+    "max": "number",
+    "mean": "number",
+    "median": "number",
+    "min": "number",
+    "std": "number"
+   },
+   "unit": "string",
+   "z": "null"
+  },
+  "GET /api/drawing-templates": {
+   "templates": []
+  },
+  "GET /api/drawings": {
+   "alerts": [],
+   "drawings": [
+    {
+     "hidden": "bool",
+     "id": "string",
+     "kind": "string",
+     "locked": "bool",
+     "points": [
+      {
+       "p": "number",
+       "t": "number"
+      }
+     ],
+     "props": "null",
+     "style": {
+      "color": "null",
+      "dash": "string",
+      "width": "number"
+     },
+     "timeframes": "null",
+     "updated_at": "string"
+    }
+   ],
+   "source": "string",
+   "symbol": "string"
+  },
+  "GET /api/drawings/alerts": {
+   "alerts": []
+  },
+  "GET /api/health": {
+   "ok": "bool",
+   "version": "string"
+  },
+  "GET /api/journals": {
+   "available": "bool",
+   "journals": [
+    {
+     "account": "null",
+     "company": "null",
+     "created_at": "string",
+     "currency": "string",
+     "id": "string",
+     "login": "null",
+     "name": "string",
+     "sample": "bool",
+     "server": "null",
+     "settings": "null",
+     "show_weekends": "bool",
+     "source": "null",
+     "synced_at": "null",
+     "time_offset": "null"
+    }
+   ],
+   "multi": "bool"
+  },
+  "GET /api/journals/{journal_id}": {
+   "cash": [
+    {
+     "amount": "number",
+     "comment": "string",
+     "id": "string",
+     "kind": "string",
+     "time": "number"
+    }
+   ],
+   "daily": [
+    {
+     "day": "string",
+     "pips": "number",
+     "profit": "number",
+     "trades": "number",
+     "won": "number"
+    }
+   ],
+   "journal": {
+    "account": "null",
+    "company": "null",
+    "created_at": "string",
+    "currency": "string",
+    "id": "string",
+    "login": "null",
+    "name": "string",
+    "sample": "bool",
+    "server": "null",
+    "settings": "null",
+    "show_weekends": "bool",
+    "source": "null",
+    "synced_at": "null",
+    "time_offset": "null"
+   },
+   "monthly": [
+    {
+     "gain": "number",
+     "month": "string",
+     "pips": "number",
+     "profit": "number",
+     "trades": "number"
+    }
+   ],
+   "series": {
+    "balance": [
+     [
+      "number"
+     ]
+    ],
+    "drawdown": [
+     [
+      "number"
+     ]
+    ],
+    "equity": [
+     [
+      "number"
+     ]
+    ],
+    "growth": [
+     [
+      "number"
+     ]
+    ]
+   },
+   "summary": {
+    "abs_gain": "number",
+    "balance": "number",
+    "credit": "number",
+    "daily": "number",
+    "deposits": "number",
+    "drawdown": "number",
+    "drawdown_at": "number",
+    "equity": "number",
+    "floating": "number",
+    "gain": "number",
+    "last": "number",
+    "max_floating_loss": "number",
+    "monthly": "number",
+    "other": "number",
+    "profit": "number",
+    "start": "number",
+    "withdrawals": "number"
+   },
+   "trades": [
+    {
+     "close_price": "number",
+     "close_time": "number",
+     "comment": "null",
+     "commission": "number",
+     "floating": "null",
+     "id": "string",
+     "images": [],
+     "mae": "number",
+     "mfe": "number",
+     "net": "number",
+     "note": "string",
+     "open_price": "number",
+     "open_time": "number",
+     "pips": "number",
+     "position": "string",
+     "price_ok": "bool",
+     "profit": "number",
+     "side": "string",
+     "sl": "number",
+     "swap": "number",
+     "symbol": "string",
+     "tags": [],
+     "tp": "number",
+     "verified": "bool",
+     "volume": "number"
+    }
+   ],
+   "trading": {
+    "avg_hold": "number",
+    "avg_loss": "number",
+    "avg_win": "number",
+    "best": "number",
+    "commission": "number",
+    "lost": "number",
+    "lots": "number",
+    "open": "number",
+    "profit_factor": "number",
+    "swap": "number",
+    "trades": "number",
+    "win_rate": "number",
+    "won": "number",
+    "worst": "number"
+   },
+   "verification": {
+    "basis": "string",
+    "coverage": "number",
+    "mismatched": [],
+    "no_prices": [],
+    "offset_detected": "bool",
+    "offset_hours": "number",
+    "prices_checked": "number",
+    "prices_from": {
+     "XAUUSD": "string"
+    },
+    "prices_ok": "number",
+    "trades": "number",
+    "verified": "number"
+   }
+  },
+  "GET /api/journals/{journal_id}/entries": {
+   "entries": []
+  },
+  "GET /api/journals/{journal_id}/trades.csv": {
+   "content-type": "text/csv",
+   "status": 200
+  },
+  "GET /api/lab": {
+   "active": "null",
+   "available": "bool",
+   "counts": {},
+   "editable": "bool",
+   "families": [
+    {
+     "id": "string",
+     "title": "string"
+    }
+   ],
+   "history": {
+    "bars": "number",
+    "first_unix": "number",
+    "last_unix": "number"
+   },
+   "models": [],
+   "reason": "null",
+   "runs": [],
+   "symbol": "string",
+   "tags": [
+    {
+     "id": "string",
+     "shape": "string",
+     "title": "string"
+    }
+   ],
+   "training": {
+    "cancelled": "bool",
+    "error": "null",
+    "last": "null",
+    "running": "bool",
+    "stage": "null",
+    "started_at": "null"
+   }
+  },
+  "GET /api/lab/backtest": {
+   "equity": [
+    [
+     "number"
+    ]
+   ],
+   "params": {
+    "clock": "string",
+    "filter": "string",
+    "from_unix": "null",
+    "history": {
+     "first_unix": "number",
+     "last_unix": "number"
+    },
+    "horizon_hours": "number",
+    "max_sl": "number",
+    "min_win": "null",
+    "model_id": "null",
+    "rr": "number",
+    "timeframe": "string",
+    "to_unix": "null"
+   },
+   "splits": {
+    "direction": [
+     {
+      "avg_r": "number",
+      "fill_rate": "number",
+      "filled": "number",
+      "finished": "number",
+      "key": "string",
+      "max_dd_r": "number",
+      "total_r": "number",
+      "trades": "number",
+      "win_rate": "number",
+      "wins": "number"
+     }
+    ],
+    "priority": [
+     {
+      "avg_r": "number",
+      "fill_rate": "number",
+      "filled": "number",
+      "finished": "number",
+      "key": "string",
+      "max_dd_r": "number",
+      "total_r": "number",
+      "trades": "number",
+      "win_rate": "number",
+      "wins": "number"
+     }
+    ],
+    "session": [
+     {
+      "avg_r": "number",
+      "fill_rate": "number",
+      "filled": "number",
+      "finished": "number",
+      "key": "string",
+      "max_dd_r": "number",
+      "total_r": "number",
+      "trades": "number",
+      "win_rate": "number",
+      "wins": "number"
+     }
+    ],
+    "swing": [
+     {
+      "avg_r": "number",
+      "fill_rate": "number",
+      "filled": "number",
+      "finished": "number",
+      "key": "string",
+      "max_dd_r": "number",
+      "total_r": "number",
+      "trades": "number",
+      "win_rate": "number",
+      "wins": "number"
+     }
+    ],
+    "weekday": [
+     {
+      "avg_r": "number",
+      "fill_rate": "number",
+      "filled": "number",
+      "finished": "number",
+      "key": "string",
+      "max_dd_r": "number",
+      "total_r": "number",
+      "trades": "number",
+      "win_rate": "number",
+      "wins": "number"
+     }
+    ]
+   },
+   "summary": {
+    "avg_r": "number",
+    "fill_rate": "number",
+    "filled": "number",
+    "finished": "number",
+    "max_dd_r": "number",
+    "total_r": "number",
+    "trades": "number",
+    "win_rate": "number",
+    "wins": "number"
+   },
+   "trades": [
+    {
+     "bottom": "number",
+     "direction": "string",
+     "entry": "number",
+     "equity_r?": "number",
+     "exit_unix": "number",
+     "id": "string",
+     "outcome": "string",
+     "priority": "string",
+     "r": "number",
+     "session": "string",
+     "start_unix": "number",
+     "stop": "number",
+     "swing": "string",
+     "target": "number",
+     "time_unix": "number",
+     "top": "number",
+     "weekday": "string",
+     "win_prob": "null"
+    }
+   ]
+  },
+  "GET /api/lab/candles": {
+   "candles": [
+    {
+     "close": "number",
+     "high": "number",
+     "low": "number",
+     "open": "number",
+     "time": "number"
+    }
+   ],
+   "has_more": "bool",
+   "history": {
+    "bars": "number",
+    "first_unix": "number",
+    "last_unix": "number"
+   },
+   "is_latest": "bool",
+   "labels": [],
+   "predictions": [],
+   "reviewed": [],
+   "suggestions": [
+    {
+     "bottom": "number",
+     "id": "string",
+     "label": "string",
+     "priority": "string",
+     "tag": "string",
+     "time_unix": "number",
+     "top": "number"
+    }
+   ],
+   "timeframe": "string"
+  },
+  "GET /api/lab/data": {
+   "can_import": "bool",
+   "clock": "string",
+   "days": [],
+   "history_bars": "number",
+   "history_bars_max": "number",
+   "source": "string",
+   "stored": {
+    "bars": "number",
+    "first_unix": "null",
+    "last_unix": "null"
+   },
+   "symbol": "string"
+  },
+  "GET /api/lab/dataset": {
+   "content-type": "application/vnd.apache.parquet",
+   "status": 200
+  },
+  "GET /api/lab/feedback": {
+   "content-type": "text/csv",
+   "status": 200
+  },
+  "GET /api/lab/labels/export": {
+   "exported_at": "string",
+   "format": "string",
+   "labels": [],
+   "reviewed": [],
+   "symbol": "string",
+   "version": "number"
+  },
+  "GET /api/lab/predictions": {
+   "blocks": [],
+   "model": "null"
+  },
+  "GET /api/lab/queue": {
+   "body": {
+    "detail": "string"
+   },
+   "status": 409
+  },
+  "GET /api/lab/scorecard": {
+   "scorecard": "null"
+  },
+  "GET /api/lab/trust": {
+   "keys": [
+    {
+     "builtin": "bool",
+     "key_id": "string",
+     "name": "string",
+     "public_key": "string"
+    }
+   ],
+   "only_signed": "bool"
+  },
+  "GET /api/licence": {
+   "available": "bool"
+  },
+  "GET /api/llm/usage": {
+   "budget": {
+    "calls": "number",
+    "level": "string",
+    "limit": "null",
+    "share": "null",
+    "spent": "number",
+    "unpriced_calls": "number"
+   },
+   "by_feature": [],
+   "by_model": [],
+   "daily": [
+    [
+     "number|string"
+    ]
+   ],
+   "month": "string",
+   "prices": {
+    "claude-haiku-4-5": {
+     "cache_read": "number",
+     "cache_write": "number",
+     "input": "number",
+     "output": "number"
+    },
+    "claude-opus-4-5": {
+     "cache_read": "number",
+     "cache_write": "number",
+     "input": "number",
+     "output": "number"
+    },
+    "claude-sonnet-4-5": {
+     "cache_read": "number",
+     "cache_write": "number",
+     "input": "number",
+     "output": "number"
+    },
+    "gpt-5": {
+     "cache_read": "number",
+     "cache_write": "number",
+     "input": "number",
+     "output": "number"
+    },
+    "gpt-5-mini": {
+     "cache_read": "number",
+     "cache_write": "number",
+     "input": "number",
+     "output": "number"
+    }
+   },
+   "top": [],
+   "warn_at": "number"
+  },
+  "GET /api/plugins": {
+   "api": "number",
+   "catalog": [
+    {
+     "description": "string",
+     "enabled": "bool",
+     "id": "string",
+     "issue": "number",
+     "title": "string"
+    }
+   ],
+   "features": [],
+   "plugins": []
+  },
+  "GET /api/quarters": {
+   "clock": "string",
+   "rows": {
+    "q90": [
+     {
+      "change": "number",
+      "close": "number",
+      "day": "string",
+      "end_unix": "number",
+      "high": "number",
+      "label": "string",
+      "live": "bool",
+      "low": "number",
+      "open": "number",
+      "row": "string",
+      "start_unix": "number"
+     }
+    ],
+    "session": [
+     {
+      "change": "number",
+      "close": "number",
+      "day": "string",
+      "end_unix": "number",
+      "high": "number",
+      "label": "string",
+      "live": "bool",
+      "low": "number",
+      "open": "number",
+      "row": "string",
+      "start_unix": "number"
+     }
+    ],
+    "week": [
+     {
+      "change": "number",
+      "close": "number",
+      "day": "string",
+      "end_unix": "number",
+      "high": "number",
+      "label": "string",
+      "live": "bool",
+      "low": "number",
+      "open": "number",
+      "row": "string",
+      "start_unix": "number"
+     }
+    ]
+   },
+   "stats": {
+    "q90": [
+     {
+      "avg_change": "number",
+      "count": "number",
+      "green": "number",
+      "label": "string"
+     }
+    ],
+    "session": [
+     {
+      "avg_change": "number",
+      "count": "number",
+      "green": "number",
+      "label": "string"
+     }
+    ],
+    "week": [
+     {
+      "avg_change": "number",
+      "count": "number",
+      "green": "number",
+      "label": "string"
+     }
+    ]
+   }
+  },
+  "GET /api/replay": {
+   "at": "number",
+   "bar_time": "number",
+   "candles": [
+    {
+     "close": "number",
+     "high": "number",
+     "low": "number",
+     "open": "number",
+     "time": "number"
+    }
+   ],
+   "levels": [
+    {
+     "bottom": "number",
+     "confirmed_time": "string",
+     "detector": "string",
+     "ended_time": "null",
+     "ended_time_unix": "null",
+     "kind": "string",
+     "label": "string",
+     "meta": {
+      "body?": "number",
+      "entry?": "number",
+      "priority?": "string",
+      "risk?": "number",
+      "sl?": "number",
+      "sl_capped?": "bool",
+      "swing?": "string"
+     },
+     "time": "string",
+     "time_unix": "number",
+     "top": "number",
+     "touches": "number"
+    }
+   ],
+   "price": "number",
+   "scan": {
+    "detectors": [
+     "string"
+    ],
+    "nearest": {
+     "idm": {
+      "above": {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {
+        "bos_time": "string"
+       },
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      },
+      "below": "null"
+     },
+     "liquidity": {
+      "above": {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {},
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      },
+      "below": {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {},
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      }
+     },
+     "ob": {
+      "above": {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {
+        "body": "number",
+        "entry": "number",
+        "priority": "string",
+        "risk": "number",
+        "sl": "number",
+        "sl_capped": "bool",
+        "swing": "string"
+       },
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      },
+      "below": {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {
+        "body": "number",
+        "entry": "number",
+        "priority": "string",
+        "risk": "number",
+        "sl": "number",
+        "sl_capped": "bool",
+        "swing": "string"
+       },
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      }
+     }
+    },
+    "price": "number",
+    "setups": {
+     "buy": [
+      {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "distance": "number",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {
+        "body": "number",
+        "entry": "number",
+        "priority": "string",
+        "risk": "number",
+        "sl": "number",
+        "sl_capped": "bool",
+        "swing": "string"
+       },
+       "risk": "null",
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      }
+     ],
+     "sell": [
+      {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "distance": "number",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {
+        "body": "number",
+        "entry": "number",
+        "priority": "string",
+        "risk": "number",
+        "sl": "number",
+        "sl_capped": "bool",
+        "swing": "string"
+       },
+       "risk": "null",
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      }
+     ]
+    },
+    "time": "string",
+    "timeframes": [
+     {
+      "bias": {
+       "bars_ago": "number",
+       "break_close_time": "string",
+       "break_time": "string",
+       "break_time_unix": "number",
+       "direction": "string",
+       "event": "string",
+       "level": "number",
+       "streak": "number",
+       "swing_time": "string",
+       "swing_time_unix": "number"
+      },
+      "candles": "number",
+      "detectors": {
+       "idm": {
+        "above": {
+         "bottom": "number",
+         "confirmed_time": "string",
+         "detector": "string",
+         "ended_time": "null",
+         "ended_time_unix": "null",
+         "kind": "string",
+         "label": "string",
+         "meta": {
+          "bos_time": "string"
+         },
+         "time": "string",
+         "time_unix": "number",
+         "top": "number",
+         "touches": "number"
+        },
+        "active": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "null",
+          "ended_time_unix": "null",
+          "kind": "string",
+          "label": "string",
+          "meta": {
+           "bos_time": "string"
+          },
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ],
+        "active_count": "number",
+        "below": "null",
+        "inside": [],
+        "recent": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "string",
+          "ended_time_unix": "number",
+          "kind": "string",
+          "label": "string",
+          "meta": {
+           "bos_time": "string",
+           "grab": "bool"
+          },
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ]
+       },
+       "liquidity": {
+        "above": {
+         "bottom": "number",
+         "confirmed_time": "string",
+         "detector": "string",
+         "ended_time": "null",
+         "ended_time_unix": "null",
+         "kind": "string",
+         "label": "string",
+         "meta": {},
+         "time": "string",
+         "time_unix": "number",
+         "top": "number",
+         "touches": "number"
+        },
+        "active": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "null",
+          "ended_time_unix": "null",
+          "kind": "string",
+          "label": "string",
+          "meta": {},
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ],
+        "active_count": "number",
+        "below": {
+         "bottom": "number",
+         "confirmed_time": "string",
+         "detector": "string",
+         "ended_time": "null",
+         "ended_time_unix": "null",
+         "kind": "string",
+         "label": "string",
+         "meta": {},
+         "time": "string",
+         "time_unix": "number",
+         "top": "number",
+         "touches": "number"
+        },
+        "inside": [],
+        "recent": []
+       },
+       "ob": {
+        "above": {
+         "bottom": "number",
+         "confirmed_time": "string",
+         "detector": "string",
+         "ended_time": "null",
+         "ended_time_unix": "null",
+         "kind": "string",
+         "label": "string",
+         "meta": {
+          "body": "number",
+          "entry": "number",
+          "priority": "string",
+          "risk": "number",
+          "sl": "number",
+          "sl_capped": "bool",
+          "swing": "string"
+         },
+         "time": "string",
+         "time_unix": "number",
+         "top": "number",
+         "touches": "number"
+        },
+        "active": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "null",
+          "ended_time_unix": "null",
+          "kind": "string",
+          "label": "string",
+          "meta": {
+           "body": "number",
+           "entry": "number",
+           "priority": "string",
+           "risk": "number",
+           "sl": "number",
+           "sl_capped": "bool",
+           "swing": "string"
+          },
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ],
+        "active_count": "number",
+        "below": {
+         "bottom": "number",
+         "confirmed_time": "string",
+         "detector": "string",
+         "ended_time": "null",
+         "ended_time_unix": "null",
+         "kind": "string",
+         "label": "string",
+         "meta": {
+          "body": "number",
+          "entry": "number",
+          "priority": "string",
+          "risk": "number",
+          "sl": "number",
+          "sl_capped": "bool",
+          "swing": "string"
+         },
+         "time": "string",
+         "time_unix": "number",
+         "top": "number",
+         "touches": "number"
+        },
+        "inside": [],
+        "recent": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "string",
+          "ended_time_unix": "number",
+          "kind": "string",
+          "label": "string",
+          "meta": {
+           "body": "number",
+           "entry": "number",
+           "priority": "string",
+           "risk": "number",
+           "sl": "number",
+           "sl_capped": "bool",
+           "swing": "string"
+          },
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ]
+       }
+      },
+      "timeframe": "string"
+     }
+    ]
+   },
+   "swings": [
+    {
+     "kind": "string",
+     "label": "string",
+     "price": "number",
+     "time": "string",
+     "time_unix": "number"
+    }
+   ],
+   "timeframe": "string"
+  },
+  "GET /api/replay/range": {
+   "first": "number",
+   "last": "number"
+  },
+  "GET /api/risk": {
+   "editable": "bool",
+   "settings": {
+    "balance": "null",
+    "contract_size": "number",
+    "currency": "string",
+    "enabled": "bool",
+    "lot_step": "number",
+    "min_lot": "number",
+    "mode": "string",
+    "risk_off_multiplier": "number",
+    "value": "number"
+   },
+   "sizer": "null"
+  },
+  "GET /api/scan": {
+   "app_version": "string",
+   "clock": "string",
+   "clock_offset": "number",
+   "config": {
+    "detectors": [
+     {
+      "name": "string",
+      "title": "string"
+     }
+    ],
+    "eq_tolerance": "number",
+    "idm_length": "number",
+    "lookback": "number",
+    "max_sl": "number",
+    "mitigation": "string",
+    "recent_bars": "number",
+    "swing_length": "number",
+    "timeframes": [
+     "string"
+    ],
+    "zone": "string"
+   },
+   "conn": "string",
+   "error": "null",
+   "error_at": "null",
+   "pip": "number",
+   "poll": "bool",
+   "scan": {
+    "detectors": [
+     "string"
+    ],
+    "nearest": {
+     "idm": {
+      "above": {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {
+        "bos_time": "string"
+       },
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      },
+      "below": "null"
+     },
+     "liquidity": {
+      "above": {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {},
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      },
+      "below": {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {},
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      }
+     },
+     "ob": {
+      "above": {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {
+        "body": "number",
+        "entry": "number",
+        "priority": "string",
+        "risk": "number",
+        "sl": "number",
+        "sl_capped": "bool",
+        "swing": "string"
+       },
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      },
+      "below": {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {
+        "body": "number",
+        "entry": "number",
+        "priority": "string",
+        "risk": "number",
+        "sl": "number",
+        "sl_capped": "bool",
+        "swing": "string"
+       },
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      }
+     }
+    },
+    "price": "number",
+    "setups": {
+     "buy": [
+      {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "distance": "number",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {
+        "body": "number",
+        "entry": "number",
+        "priority": "string",
+        "risk": "number",
+        "sl": "number",
+        "sl_capped": "bool",
+        "swing": "string"
+       },
+       "risk": "null",
+       "size": "null",
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      }
+     ],
+     "sell": [
+      {
+       "bottom": "number",
+       "confirmed_time": "string",
+       "detector": "string",
+       "distance": "number",
+       "ended_time": "null",
+       "ended_time_unix": "null",
+       "kind": "string",
+       "label": "string",
+       "meta": {
+        "body": "number",
+        "entry": "number",
+        "priority": "string",
+        "risk": "number",
+        "sl": "number",
+        "sl_capped": "bool",
+        "swing": "string"
+       },
+       "risk": "null",
+       "size": "null",
+       "time": "string",
+       "time_unix": "number",
+       "timeframe": "string",
+       "top": "number",
+       "touches": "number"
+      }
+     ]
+    },
+    "sizing": "null",
+    "time": "string",
+    "timeframes": [
+     {
+      "bias": {
+       "bars_ago": "number",
+       "break_close_time": "string",
+       "break_time": "string",
+       "break_time_unix": "number",
+       "direction": "string",
+       "event": "string",
+       "level": "number",
+       "streak": "number",
+       "swing_time": "string",
+       "swing_time_unix": "number"
+      },
+      "candles": "number",
+      "detectors": {
+       "idm": {
+        "above": {
+         "bottom": "number",
+         "confirmed_time": "string",
+         "detector": "string",
+         "ended_time": "null",
+         "ended_time_unix": "null",
+         "kind": "string",
+         "label": "string",
+         "meta": {
+          "bos_time": "string"
+         },
+         "time": "string",
+         "time_unix": "number",
+         "top": "number",
+         "touches": "number"
+        },
+        "active": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "null",
+          "ended_time_unix": "null",
+          "kind": "string",
+          "label": "string",
+          "meta": {
+           "bos_time": "string"
+          },
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ],
+        "active_count": "number",
+        "below": "null",
+        "inside": [],
+        "recent": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "string",
+          "ended_time_unix": "number",
+          "kind": "string",
+          "label": "string",
+          "meta": {
+           "bos_time": "string",
+           "grab": "bool"
+          },
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ]
+       },
+       "liquidity": {
+        "above": {
+         "bottom": "number",
+         "confirmed_time": "string",
+         "detector": "string",
+         "ended_time": "null",
+         "ended_time_unix": "null",
+         "kind": "string",
+         "label": "string",
+         "meta": {},
+         "time": "string",
+         "time_unix": "number",
+         "top": "number",
+         "touches": "number"
+        },
+        "active": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "null",
+          "ended_time_unix": "null",
+          "kind": "string",
+          "label": "string",
+          "meta": {},
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ],
+        "active_count": "number",
+        "below": {
+         "bottom": "number",
+         "confirmed_time": "string",
+         "detector": "string",
+         "ended_time": "null",
+         "ended_time_unix": "null",
+         "kind": "string",
+         "label": "string",
+         "meta": {},
+         "time": "string",
+         "time_unix": "number",
+         "top": "number",
+         "touches": "number"
+        },
+        "inside": [],
+        "recent": []
+       },
+       "ob": {
+        "above": {
+         "bottom": "number",
+         "confirmed_time": "string",
+         "detector": "string",
+         "ended_time": "null",
+         "ended_time_unix": "null",
+         "kind": "string",
+         "label": "string",
+         "meta": {
+          "body": "number",
+          "entry": "number",
+          "priority": "string",
+          "risk": "number",
+          "sl": "number",
+          "sl_capped": "bool",
+          "swing": "string"
+         },
+         "time": "string",
+         "time_unix": "number",
+         "top": "number",
+         "touches": "number"
+        },
+        "active": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "null",
+          "ended_time_unix": "null",
+          "kind": "string",
+          "label": "string",
+          "meta": {
+           "body": "number",
+           "entry": "number",
+           "priority": "string",
+           "risk": "number",
+           "sl": "number",
+           "sl_capped": "bool",
+           "swing": "string"
+          },
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ],
+        "active_count": "number",
+        "below": {
+         "bottom": "number",
+         "confirmed_time": "string",
+         "detector": "string",
+         "ended_time": "null",
+         "ended_time_unix": "null",
+         "kind": "string",
+         "label": "string",
+         "meta": {
+          "body": "number",
+          "entry": "number",
+          "priority": "string",
+          "risk": "number",
+          "sl": "number",
+          "sl_capped": "bool",
+          "swing": "string"
+         },
+         "time": "string",
+         "time_unix": "number",
+         "top": "number",
+         "touches": "number"
+        },
+        "inside": [],
+        "recent": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "string",
+          "ended_time_unix": "number",
+          "kind": "string",
+          "label": "string",
+          "meta": {
+           "body": "number",
+           "entry": "number",
+           "priority": "string",
+           "risk": "number",
+           "sl": "number",
+           "sl_capped": "bool",
+           "swing": "string"
+          },
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ]
+       }
+      },
+      "timeframe": "string"
+     }
+    ]
+   },
+   "scanned_at": "string",
+   "source": "string",
+   "symbol": "string",
+   "tick_seconds": "number",
+   "trade_bias": "null",
+   "version": "number"
+  },
+  "GET /api/sessions": {
+   "clock": "string",
+   "killzones": [
+    {
+     "day": "string",
+     "end_unix": "number",
+     "name": "string",
+     "start_unix": "number"
+    }
+   ],
+   "lines": [
+    {
+     "current": "bool",
+     "end_unix": "number",
+     "kind": "string",
+     "label": "string",
+     "price": "number",
+     "start_unix": "number",
+     "swept_unix": "number"
+    }
+   ]
+  },
+  "GET /api/settings": {
+   "editable": "bool",
+   "running": {
+    "attempt": "number",
+    "bars_loaded": "number",
+    "bars_needed": "number",
+    "conn": "string",
+    "error": "null",
+    "first_bar": "string",
+    "last_bar": "string",
+    "max_attempts": "null",
+    "scanned_at": "string",
+    "source": "string",
+    "symbol": "string",
+    "version": "number"
+   },
+   "settings": {
+    "clock": "null",
+    "csv_path": "null",
+    "source": "string",
+    "symbol": "null",
+    "tick_seconds": "null"
+   },
+   "sources": [
+    {
+     "available": "bool",
+     "default_clock": "string",
+     "default_symbol": "string",
+     "default_tick": "number",
+     "description": "string",
+     "id": "string",
+     "min_tick": "number",
+     "title": "string",
+     "unavailable_reason": "null"
+    }
+   ],
+   "storage": {
+    "backend": "string",
+    "series": [
+     {
+      "bars": "number",
+      "first": "string",
+      "last": "string",
+      "source": "string",
+      "symbol": "string"
+     }
+    ],
+    "url": "string"
+   }
+  },
+  "GET /api/status": {
+   "app_version": "string",
+   "clock": "string",
+   "clock_offset": "number",
+   "config": {
+    "detectors": [
+     {
+      "name": "string",
+      "title": "string"
+     }
+    ],
+    "eq_tolerance": "number",
+    "idm_length": "number",
+    "lookback": "number",
+    "max_sl": "number",
+    "mitigation": "string",
+    "recent_bars": "number",
+    "swing_length": "number",
+    "timeframes": [
+     "string"
+    ],
+    "zone": "string"
+   },
+   "conn": "string",
+   "error": "null",
+   "error_at": "null",
+   "pip": "number",
+   "poll": "bool",
+   "scanned_at": "string",
+   "source": "string",
+   "symbol": "string",
+   "tick_seconds": "number",
+   "trade_bias": "null",
+   "version": "number"
+  },
+  "GET /api/terms": {
+   "accepted": "bool",
+   "accepted_at": "null",
+   "text": "string",
+   "version": "string"
+  },
+  "GET /api/tick": {
+   "bar": "null",
+   "price": "null",
+   "tick": "number",
+   "time": "null",
+   "version": "number"
+  },
+  "GET /api/workspaces": {
+   "workspaces": [
+    {
+     "name": "string",
+     "saved_at": "string",
+     "windows": "number"
+    }
+   ]
+  },
+  "GET /api/workspaces/{name}": {
+   "layout": {
+    "xau.tf": "string"
+   },
+   "name": "string",
+   "saved_at": "string",
+   "windows": [
+    {
+     "height": "number",
+     "maximized": "bool",
+     "route": "string",
+     "width": "number",
+     "x": "number",
+     "y": "number"
+    }
+   ]
+  }
+ },
+ "routes": [
+  "GET /api/alerts",
+  "PUT /api/alerts",
+  "GET /api/alerts/chats",
+  "POST /api/alerts/test",
+  "POST /api/auth/login",
+  "POST /api/auth/logout",
+  "GET /api/auth/status",
+  "GET /api/auth/tokens",
+  "POST /api/auth/tokens",
+  "DELETE /api/auth/tokens/{token_id}",
+  "GET /api/bias",
+  "PUT /api/bias",
+  "GET /api/brief",
+  "PUT /api/brief",
+  "POST /api/brief/generate",
+  "GET /api/calendar",
+  "PUT /api/calendar",
+  "POST /api/calendar/import",
+  "GET /api/calendar/reactions",
+  "GET /api/candles",
+  "GET /api/clock/feed",
+  "GET /api/distribution",
+  "GET /api/drawing-templates",
+  "DELETE /api/drawing-templates/{family}/{name}",
+  "PUT /api/drawing-templates/{family}/{name}",
+  "GET /api/drawings",
+  "GET /api/drawings/alerts",
+  "DELETE /api/drawings/{drawing_id}",
+  "PUT /api/drawings/{drawing_id}",
+  "DELETE /api/drawings/{drawing_id}/alert",
+  "PUT /api/drawings/{drawing_id}/alert",
+  "GET /api/health",
+  "GET /api/journals",
+  "POST /api/journals",
+  "POST /api/journals/sample",
+  "DELETE /api/journals/{journal_id}",
+  "GET /api/journals/{journal_id}",
+  "PATCH /api/journals/{journal_id}",
+  "GET /api/journals/{journal_id}/entries",
+  "POST /api/journals/{journal_id}/entries",
+  "DELETE /api/journals/{journal_id}/entries/{entry_id}",
+  "PATCH /api/journals/{journal_id}/entries/{entry_id}",
+  "POST /api/journals/{journal_id}/import",
+  "GET /api/journals/{journal_id}/trades.csv",
+  "POST /api/journals/{journal_id}/trades/{trade_id}/images",
+  "DELETE /api/journals/{journal_id}/trades/{trade_id}/images/{snapshot_id}",
+  "PUT /api/journals/{journal_id}/trades/{trade_id}/note",
+  "GET /api/lab",
+  "PUT /api/lab/active",
+  "GET /api/lab/backtest",
+  "POST /api/lab/batch",
+  "GET /api/lab/candles",
+  "POST /api/lab/compare",
+  "GET /api/lab/data",
+  "PUT /api/lab/data",
+  "POST /api/lab/data/import",
+  "POST /api/lab/data/import/{token}",
+  "GET /api/lab/dataset",
+  "GET /api/lab/feedback",
+  "POST /api/lab/labels",
+  "GET /api/lab/labels/export",
+  "POST /api/lab/labels/import",
+  "POST /api/lab/labels/import/{token}",
+  "DELETE /api/lab/labels/{label_id}",
+  "POST /api/lab/models/import",
+  "POST /api/lab/models/import/{token}",
+  "DELETE /api/lab/models/{model_id}",
+  "GET /api/lab/models/{model_id}/file",
+  "GET /api/lab/predictions",
+  "GET /api/lab/queue",
+  "POST /api/lab/reviewed",
+  "DELETE /api/lab/reviewed/{row_id}",
+  "POST /api/lab/reviews",
+  "GET /api/lab/scorecard",
+  "DELETE /api/lab/train",
+  "POST /api/lab/train",
+  "GET /api/lab/trust",
+  "PUT /api/lab/trust",
+  "DELETE /api/licence",
+  "GET /api/licence",
+  "PUT /api/licence",
+  "PUT /api/llm/budget",
+  "PUT /api/llm/prices",
+  "GET /api/llm/usage",
+  "GET /api/markets/candles",
+  "GET /api/markets/tick",
+  "GET /api/plugins",
+  "GET /api/quarters",
+  "GET /api/replay",
+  "GET /api/replay/range",
+  "GET /api/risk",
+  "PUT /api/risk",
+  "GET /api/scan",
+  "GET /api/sessions",
+  "GET /api/settings",
+  "PUT /api/settings",
+  "POST /api/settings/reconnect",
+  "POST /api/snapshots",
+  "GET /api/snapshots/{snapshot_id}.png",
+  "GET /api/status",
+  "GET /api/stream",
+  "GET /api/terms",
+  "POST /api/terms/accept",
+  "GET /api/tick",
+  "GET /api/workspaces",
+  "DELETE /api/workspaces/{name}",
+  "GET /api/workspaces/{name}",
+  "PUT /api/workspaces/{name}"
+ ],
+ "schemas": {
+  "HTTPValidationError": {
+   "properties": {
+    "detail": {
+     "items": {
+      "$ref": "#/components/schemas/ValidationError"
+     },
+     "title": "Detail",
+     "type": "array"
+    }
+   },
+   "title": "HTTPValidationError",
+   "type": "object"
+  },
+  "ValidationError": {
+   "properties": {
+    "ctx": {
+     "title": "Context",
+     "type": "object"
+    },
+    "input": {
+     "title": "Input"
+    },
+    "loc": {
+     "items": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       }
+      ]
+     },
+     "title": "Location",
+     "type": "array"
+    },
+    "msg": {
+     "title": "Message",
+     "type": "string"
+    },
+    "type": {
+     "title": "Error Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "loc",
+    "msg",
+    "type"
+   ],
+   "title": "ValidationError",
+   "type": "object"
+  }
+ }
+}
