@@ -114,7 +114,29 @@ levels price is inside plus recent sweeps.
    and set `ended_time` on levels that were mitigated or swept.
 2. Register the class in `detectors/__init__.py` (`REGISTRY`).
 3. If it needs a new setting, add it to `DetectorParams` and a CLI flag.
+4. Rewrite the reference output (`UPDATE_GOLDEN=1 uv run pytest tests/test_golden.py`)
+   and check its diff shows only the new detector's levels.
 
 The scanner, console table, API and dashboard pick it up automatically. On the
 chart a new detector is drawn with the neutral dotted style until it gets its
 own role in `web/src/format.ts` (`roleOf`).
+
+## Reference output
+
+`tests/test_golden.py` runs the scan on fixed M1 candles in `tests/golden/<case>/`
+(`m1.csv.gz`: market hours only, rounded to cents) and compares everything it
+makes with `expected.json`: the closed candles per timeframe, swings and the
+latest break of structure, every level per detector (active or ended), the scan
+and its setups with no bias, bullish and bearish, the session levels and the
+quarterly blocks. The cases cover the UTC clock with the default settings, wick
+zones with close mitigation and shorter swings, and a broker clock (NY+7) ending
+on a Friday.
+
+A change to a detector that moves a level fails this test with the first
+differences. When it is meant, rewrite the output and review its diff:
+
+```bash
+UPDATE_GOLDEN=1 uv run pytest tests/test_golden.py
+```
+
+The same files are the reference for any other implementation of the scan (#96).

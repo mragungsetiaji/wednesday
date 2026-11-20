@@ -76,6 +76,8 @@ UPDATE_API_CONTRACT=1 uv run pytest tests/test_api_contract.py
 ```
 
 It is also what a replacement server must answer the same way (#96).
+The scan's own output is kept the same way in `tests/golden/` (see
+[Reference output](detectors.md#reference-output)).
 
 ## How a scan flows
 
