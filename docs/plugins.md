@@ -53,12 +53,46 @@ The entry point can name any object with `register(ctx)` and `api`; `name`,
 | `ctx.provide(*features)` | Add feature ids at runtime |
 | `ctx.snapshot()` | `(version, scan result, M1 bars)` of the running engine |
 | `ctx.store` | The database (`storage.Store`) |
-| `ctx.runtime` | The `engine.Runtime`: settings, bias, calendar, brief, journals |
+| `ctx.runtime` | The `engine.Runtime`: settings, bias, calendar, brief, journals. Avoid in new code: it has no HTTP equivalent (see below) |
 | `ctx.llm_usage` | The shared LLM usage log and budget: call `guard(feature, scheduled=True)` before an LLM request (raises `llm_usage.BudgetExceeded` over the monthly budget) and `record(feature, provider, model, usage, scheduled=True)` after it with the response's token counts ([bias.md](bias.md#cost-and-the-monthly-budget)) |
 
 Hooks and jobs are isolated: an exception is logged and never stops the scan
 loop or other plugins. A plugin that raises in `register` is skipped and its
 features are not offered.
+
+## Plugins and a server in another language (#96)
+
+If the server moves to Rust, a plugin can't be a Python package it imports. The
+plan is to run a plugin **as its own process that talks HTTP**, the way the
+dashboard talks to the server:
+
+- The server starts the plugin's executable with a port on `127.0.0.1`, the
+  server's address and a token for this run, and reads its manifest (`GET
+  /manifest`: name, version, plugin API, feature ids, whether it handles
+  licences).
+- Requests to `/api/ee/<name>/...` are forwarded to the plugin; so is
+  `/api/licence` when the plugin handles licences.
+- The server posts events to the plugin: after each scan (the `/api/scan`
+  payload) and after order block alerts (their keys).
+- The plugin calls the server's API back with the token: the scan and candles,
+  its own settings (namespaced to the plugin), its feature ids, and the LLM
+  usage guard and record.
+- Timers (the licence check) run inside the plugin.
+
+That keeps the plugin in any language (Wednesday EE can stay Python, built into
+its own executable and downloaded only with a licence), and a crash in it can't
+stop the scan. A dynamic library was ruled out: an unstable ABI, a build per OS,
+code signing on macOS, and a crash takes the server down. WebAssembly was ruled
+out for now: the plugin needs the network (the licence server, LLM providers)
+and the LLM SDKs, so it would need host functions for all of that and a rewrite.
+
+To keep that move small, the context stays small. Wednesday EE uses only
+`add_router`, `add_job`, `set_features`, `set_licence_provider` and settings
+through `ctx.store` (`get_setting`, `set_setting`, `delete_setting`). Every
+member of the context has to map onto an HTTP call or an event above: `ctx.app`
+and `ctx.runtime` don't, so new plugin code shouldn't use them, and
+`tests/test_plugins.py` fails if the context gains a member without this
+section being updated.
 
 ## Licences and paid features
 

@@ -106,3 +106,17 @@ def test_add_job_refuses_busy_loops():
     ctx = PluginContext(None, RT(), PluginInfo("x", None, 1, [], False))
     with pytest.raises(ValueError):
         ctx.add_job("fast", 0.1, lambda: None)
+
+
+def test_the_plugin_context_stays_small():
+    """Each member must map onto the out-of-process plugin protocol (docs/plugins.md, #96).
+    Adding one? Say how it maps there, then add it here."""
+    from wednesday.plugins import PluginContext, PluginInfo
+
+    ctx = PluginContext(None, object(), PluginInfo("x", None, 1, [], False))
+    members = {n for n in dir(ctx) if not n.startswith("_")}
+    assert members == {
+        "app", "runtime",  # API 1 only: no HTTP equivalent, kept for existing plugins
+        "api", "add_router", "on_after_scan", "on_alert", "add_job", "provide", "set_features",
+        "set_licence_provider", "snapshot", "store", "llm_usage",
+    }
