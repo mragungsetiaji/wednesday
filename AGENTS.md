@@ -48,7 +48,8 @@ The backend is moving to Rust route by route (#96). `server-rs/` is the Rust ser
 shell runs it on the dashboard's port, it answers the routes in `PORTED` and passes the rest
 to the Python sidecar on another local port (`WEDNESDAY_GATEWAY=0` turns it off). A ported
 route must answer as `tests/api_contract.json` says and match `tests/golden/` where it
-scans; routes behind the login stay in Python until the login is ported. The scan itself
+scans. The login is still Python's: a ported route behind it asks Python
+(`/api/auth/status`) and refuses cross-site writes as `auth.py` does. The scan itself
 (resampling, structure, detectors, setups, sessions, quarters) exists twice for now,
 `src/wednesday/` and `server-rs/src/scan/`: a change to one must go into the other, and
 both `make test` and `make test-tauri` check them against the same `tests/golden/`.
@@ -88,7 +89,9 @@ both `make test` and `make test-tauri` check them against the same `tests/golden
   view works in New York time. Convert with `quarters.to_new_york` / `utc_to_feed` rather
   than assuming UTC.
 - **Storage runs on SQLite and PostgreSQL.** Go through `storage.py` (SQLAlchemy); no
-  SQLite-only SQL.
+  SQLite-only SQL. The Rust server (`server-rs/src/store.rs`) makes the same tables from
+  `server-rs/schema.json`: after changing a table, run
+  `UPDATE_RUST_SCHEMA=1 uv run pytest tests/test_rust_schema.py` and `make test-tauri`.
 - **Optional extras stay optional.** `anthropic`/`openai` are extras; import them
   inside the function that needs them so the core runs without them, and report a missing one as an install hint
   (see `brief.py`).

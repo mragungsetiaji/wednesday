@@ -13,6 +13,7 @@ use http_body_util::BodyExt;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use tokio_stream::wrappers::ReceiverStream;
+use wednesday_rs::store::Store;
 
 async fn listen(app: Router) -> SocketAddr {
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -43,17 +44,49 @@ fn python() -> Router {
             .body(Body::from_stream(ReceiverStream::new(rx)))
             .unwrap()
     }
+    // The login: on, and logged in with the cookie wednesday_session=good or the token "good".
+    async fn auth_status(headers: HeaderMap) -> axum::Json<serde_json::Value> {
+        let get = |n: &str| headers.get(n).and_then(|v| v.to_str().ok()).unwrap_or("");
+        let logged_in = if get("authorization").is_empty() {
+            get("cookie").contains("wednesday_session=good")
+        } else {
+            get("authorization") == "Bearer good"
+        };
+        axum::Json(serde_json::json!({"enabled": true, "logged_in": logged_in}))
+    }
     Router::new()
+        .route("/api/auth/status", get(auth_status))
         .route("/api/health", get(|| async { "python answered" }))
         .route("/api/stream", get(stream))
         .fallback(any(echo))
 }
 
 async fn front(backend: SocketAddr) -> SocketAddr {
+    front_with(backend, None).await
+}
+
+async fn front_with(backend: SocketAddr, store: Option<Store>) -> SocketAddr {
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = l.local_addr().unwrap();
-    tokio::spawn(wednesday_rs::serve(l, backend));
+    tokio::spawn(wednesday_rs::serve(l, backend, store));
     addr
+}
+
+async fn temp_store(name: &str) -> Store {
+    let dir = std::env::temp_dir().join(format!("wed-gateway-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    Store::open("sqlite:///data/xau.db", &dir).await.unwrap()
+}
+
+fn req(method: &str, addr: SocketAddr, path: &str, cookie: &str, body: Option<serde_json::Value>) -> axum::http::Request<Body> {
+    let mut r = axum::http::Request::builder().method(method).uri(format!("http://{addr}{path}"));
+    if !cookie.is_empty() {
+        r = r.header("cookie", cookie);
+    }
+    match body {
+        Some(b) => r.header("content-type", "application/json").body(Body::from(b.to_string())).unwrap(),
+        None => r.body(Body::empty()).unwrap(),
+    }
 }
 
 async fn send(req: axum::http::Request<Body>) -> axum::http::Response<hyper::body::Incoming> {
@@ -69,6 +102,7 @@ async fn a_ported_route_is_answered_in_rust() {
     let addr = front(listen(python()).await).await;
     let res = send(axum::http::Request::get(format!("http://{addr}/api/health")).body(Body::empty()).unwrap()).await;
     assert_eq!(res.status(), 200);
+    assert_eq!(res.headers()["x-wednesday-server"], "rust");
     let body: serde_json::Value = serde_json::from_str(&text(res).await).unwrap();
     assert_eq!(body, serde_json::json!({"ok": true, "version": wednesday_rs::VERSION}));
 }
@@ -113,6 +147,50 @@ async fn python_not_answering_is_a_502_saying_what_to_do() {
     assert!(text(res).await.contains("Restart Wednesday"));
 }
 
+// ---- routes behind the login, which is still Python's ----
+
+#[tokio::test]
+async fn ported_routes_ask_python_about_the_login() {
+    let addr = front_with(listen(python()).await, Some(temp_store("login").await)).await;
+    for route in wednesday_rs::PORTED {
+        let (method, path) = route.split_once(' ').unwrap();
+        if wednesday_rs::PUBLIC.contains(&path) {
+            continue;
+        }
+        let path = path.replace("{name}", "x").replace("{family}", "line");
+        let body = (method == "PUT").then(|| serde_json::json!({"style": {}}));
+        let res = send(req(method, addr, &path, "", body.clone())).await;
+        assert_eq!(res.status(), 401, "{route} without a login");
+        assert_eq!(res.headers()["www-authenticate"], "Bearer");
+        let res = send(req(method, addr, &path, "wednesday_session=good", body)).await;
+        assert!(res.status() != 401 && res.status() != 403, "{route} logged in: {}", res.status());
+    }
+}
+
+#[tokio::test]
+async fn cross_site_writes_are_refused_unless_an_api_token_sends_them() {
+    let addr = front_with(listen(python()).await, Some(temp_store("xsite").await)).await;
+    let mut r = req("DELETE", addr, "/api/workspaces/x", "wednesday_session=good", None);
+    r.headers_mut().insert("origin", "http://evil.example".parse().unwrap());
+    assert_eq!(send(r).await.status(), 403);
+    let mut r = req("DELETE", addr, "/api/workspaces/x", "", None);
+    r.headers_mut().insert("sec-fetch-site", "cross-site".parse().unwrap());
+    r.headers_mut().insert("authorization", "Bearer good".parse().unwrap());
+    assert_eq!(send(r).await.status(), 200, "an API token isn't a browser");
+    let mut r = req("DELETE", addr, "/api/workspaces/x", "wednesday_session=good", None);
+    r.headers_mut().insert("origin", format!("http://{addr}").parse().unwrap());
+    assert_eq!(send(r).await.status(), 200, "same origin");
+}
+
+#[tokio::test]
+async fn without_a_database_python_serves_them() {
+    let addr = front(listen(python()).await).await;
+    let res = send(req("GET", addr, "/api/workspaces", "", None)).await;
+    assert_eq!(res.headers()["x-wednesday-server"], "python");
+    let got: serde_json::Value = serde_json::from_str(&text(res).await).unwrap();
+    assert_eq!(got["line"], "GET /api/workspaces", "the stand-in Python echoed it");
+}
+
 // ---- the contract (tests/api_contract.json, src/wednesday/auth.py) ----
 
 fn repo(path: &str) -> String {
@@ -120,32 +198,52 @@ fn repo(path: &str) -> String {
 }
 
 #[test]
-fn ported_routes_are_in_the_contract_and_open_without_the_login() {
+fn ported_routes_are_in_the_contract() {
     let contract: serde_json::Value = serde_json::from_str(&repo("tests/api_contract.json")).unwrap();
     let routes: Vec<&str> = contract["routes"].as_array().unwrap().iter().map(|r| r.as_str().unwrap()).collect();
-    let auth = repo("src/wednesday/auth.py");
-    let public = auth.lines().find(|l| l.starts_with("PUBLIC = ")).expect("auth.PUBLIC");
     for route in wednesday_rs::PORTED {
         assert!(routes.contains(route), "{route} isn't in tests/api_contract.json");
-        let path = route.split_once(' ').unwrap().1;
-        // The login is still Python's: a route behind it can't move until the login does.
-        assert!(public.contains(&format!("\"{path}\"")), "{route} needs the login, which isn't ported yet");
+    }
+    let auth = repo("src/wednesday/auth.py");
+    let public = auth.lines().find(|l| l.starts_with("PUBLIC = ")).expect("auth.PUBLIC");
+    for path in wednesday_rs::PUBLIC {
+        assert!(public.contains(&format!("\"{path}\"")), "{path}: auth.PUBLIC changed");
     }
 }
 
 #[tokio::test]
 async fn ported_answers_have_the_contract_shape() {
     let contract: serde_json::Value = serde_json::from_str(&repo("tests/api_contract.json")).unwrap();
-    let addr = front(listen(python()).await).await;
+    let addr = front_with(listen(python()).await, Some(temp_store("contract").await)).await;
+    // What the Python contract test puts in the lists: a workspace "Contract", and a template.
+    let window = serde_json::json!({"route": "#", "x": 0, "y": 0, "width": 1440, "height": 900, "maximized": true});
+    let ws = serde_json::json!({"layout": {"xau.tf": "15M"}, "windows": [window]});
+    assert_eq!(send(req("PUT", addr, "/api/workspaces/Contract", "wednesday_session=good", Some(ws))).await.status(), 200);
+    let tpl = serde_json::json!({"style": {"color": "#3b82f6", "width": 1, "dash": "dotted"}, "text": "H1 OB"});
+    assert_eq!(send(req("PUT", addr, "/api/drawing-templates/line/H1", "wednesday_session=good", Some(tpl))).await.status(), 200);
     for route in wednesday_rs::PORTED.iter().filter(|r| r.starts_with("GET ")) {
-        let path = &route[4..];
-        let res = send(axum::http::Request::get(format!("http://{addr}{path}")).body(Body::empty()).unwrap()).await;
+        let path = route[4..].replace("{name}", "Contract");
+        let res = send(req("GET", addr, &path, "wednesday_session=good", None)).await;
+        assert_eq!(res.status(), 200, "{route}");
         let body: serde_json::Value = serde_json::from_str(&text(res).await).unwrap();
-        assert_eq!(shape(&body), contract["responses"][*route], "{route}");
+        let want = &contract["responses"][*route];
+        assert!(!want.is_null(), "{route} has no response in the contract");
+        let mut problems = Vec::new();
+        differences(want, &shape(&body), "", &mut problems);
+        assert!(problems.is_empty(), "{route}: {problems:?}");
     }
 }
 
-/// The contract's shape of a value (see `shape` in tests/test_api_contract.py), for flat answers.
+// ---- shapes, as tests/test_api_contract.py makes and compares them ----
+
+fn data_key(k: &str) -> bool {
+    let b = k.as_bytes();
+    let number = !k.is_empty() && k.trim_start_matches('-').split('.').all(|p| !p.is_empty() && p.bytes().all(|c| c.is_ascii_digit()))
+        && k.matches('.').count() <= 1;
+    let date = b.len() >= 10 && b[..4].iter().all(u8::is_ascii_digit) && b[4] == b'-' && b[7] == b'-';
+    number || date
+}
+
 fn shape(v: &serde_json::Value) -> serde_json::Value {
     use serde_json::Value::*;
     match v {
@@ -153,7 +251,101 @@ fn shape(v: &serde_json::Value) -> serde_json::Value {
         Bool(_) => "bool".into(),
         Number(_) => "number".into(),
         String(_) => "string".into(),
-        Array(items) => Array(items.first().map(shape).into_iter().collect()),
-        Object(m) => Object(m.iter().map(|(k, v)| (k.clone(), shape(v))).collect()),
+        Array(items) => {
+            let mut it = items.iter().map(shape);
+            match it.next() {
+                None => Array(vec![]),
+                Some(first) => Array(vec![it.fold(first, |a, b| merge(&a, &b))]),
+            }
+        }
+        Object(m) if !m.is_empty() && m.keys().all(|k| data_key(k)) => {
+            let merged = m.values().map(shape).reduce(|a, b| merge(&a, &b)).unwrap();
+            serde_json::json!({"*": merged})
+        }
+        Object(m) => {
+            let mut keys: Vec<&std::string::String> = m.keys().collect();
+            keys.sort();
+            Object(keys.into_iter().map(|k| (k.clone(), shape(&m[k]))).collect())
+        }
+    }
+}
+
+fn types(s: &str) -> std::collections::BTreeSet<&str> {
+    s.split('|').collect()
+}
+
+fn merge(a: &serde_json::Value, b: &serde_json::Value) -> serde_json::Value {
+    use serde_json::Value::*;
+    if a == b {
+        return a.clone();
+    }
+    match (a, b) {
+        (Object(x), Object(y)) => {
+            let names: std::collections::BTreeSet<std::string::String> =
+                x.keys().chain(y.keys()).map(|k| k.trim_end_matches('?').to_string()).collect();
+            fn find<'a>(m: &'a serde_json::Map<std::string::String, serde_json::Value>, n: &str) -> Option<(bool, &'a serde_json::Value)> {
+                m.get(n).map(|v| (false, v)).or_else(|| m.get(&format!("{n}?")).map(|v| (true, v)))
+            }
+            Object(names.into_iter().map(|n| match (find(x, &n), find(y, &n)) {
+                (Some((oa, va)), Some((ob, vb))) => (if oa || ob { format!("{n}?") } else { n.clone() }, merge(va, vb)),
+                (Some((_, v)), None) | (None, Some((_, v))) => (format!("{n}?"), v.clone()),
+                (None, None) => unreachable!(),
+            }).collect())
+        }
+        (Array(x), Array(y)) => match (x.first(), y.first()) {
+            (Some(p), Some(q)) => Array(vec![merge(p, q)]),
+            _ => if x.is_empty() { b.clone() } else { a.clone() },
+        },
+        (String(x), _) if x == "null" => b.clone(),
+        (_, String(y)) if y == "null" => a.clone(),
+        (String(x), String(y)) => {
+            let all: std::collections::BTreeSet<&str> = types(x).union(&types(y)).copied().collect();
+            all.into_iter().collect::<Vec<_>>().join("|").into()
+        }
+        _ => "any".into(),
+    }
+}
+
+/// What differs, ignoring what the clock decides (nulls, empty lists), as the Python test does.
+fn differences(e: &serde_json::Value, a: &serde_json::Value, path: &str, out: &mut Vec<String>) {
+    use serde_json::Value::*;
+    let is = |v: &serde_json::Value, s: &str| v.as_str() == Some(s);
+    if e == a || is(e, "null") || is(a, "null") || is(e, "any") || is(a, "any") {
+        return;
+    }
+    match (e, a) {
+        (Array(x), Array(y)) => {
+            if let (Some(p), Some(q)) = (x.first(), y.first()) {
+                differences(p, q, &format!("{path}[]"), out);
+            }
+        }
+        (Object(x), Object(y)) => {
+            let strip = |m: &serde_json::Map<std::string::String, serde_json::Value>| -> std::collections::BTreeMap<std::string::String, (bool, serde_json::Value)> {
+                m.iter().map(|(k, v)| (k.trim_end_matches('?').to_string(), (k.ends_with('?'), v.clone()))).collect()
+            };
+            let (ex, ac) = (strip(x), strip(y));
+            if let (Some(p), Some(q)) = (ex.get("*"), ac.get("*")) {
+                return differences(&p.1, &q.1, &format!("{path}.*"), out);
+            }
+            let names: std::collections::BTreeSet<&std::string::String> = ex.keys().chain(ac.keys()).collect();
+            for n in names {
+                match (ex.get(n), ac.get(n)) {
+                    (Some((optional, _)), None) => if !optional { out.push(format!("{path}.{n}: missing")) },
+                    (None, Some(_)) => out.push(format!("{path}.{n}: new")),
+                    (Some(p), Some(q)) => differences(&p.1, &q.1, &format!("{path}.{n}"), out),
+                    (None, None) => {}
+                }
+            }
+        }
+        (String(x), String(y)) => {
+            let mut tx = types(x);
+            let mut ty = types(y);
+            tx.insert("null");
+            ty.insert("null");
+            if tx != ty {
+                out.push(format!("{path}: {x} became {y}"));
+            }
+        }
+        _ => out.push(format!("{path}: {e} became {a}")),
     }
 }

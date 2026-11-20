@@ -87,7 +87,23 @@ The backend moves to Rust a route at a time. `server-rs/` is a small
 [axum](https://github.com/tokio-rs/axum) server that sits on the dashboard's address,
 answers the routes listed in `PORTED` (`server-rs/src/lib.rs`) and passes every other
 request to the Python server, streaming the answer back. The Tauri shell runs it in
-front of the sidecar, so the app works the same at every step.
+front of the sidecar, so the app works the same at every step. Each answer carries
+`x-wednesday-server: rust` or `python`, to see which one served it.
+
+Ported so far: `/api/health`, workspaces and drawing templates.
+
+- **The database.** `server-rs/src/store.rs` opens the same database as Python
+  (`XAU_DB_URL` from the environment or the home folder's `.env`, else
+  `sqlite:///data/xau.db` in the home folder), on SQLite or PostgreSQL. It makes the
+  tables from `server-rs/schema.json`, which `tests/test_rust_schema.py` generates from
+  `storage.py`, and stores JSON as Python's `json.dumps` writes it. When Rust can't open
+  the database (or `XAU_DB_URL=none`), Python serves those routes.
+- **The login** is still Python's. A ported route behind it asks Python
+  (`/api/auth/status`, with the request's cookie and token) and refuses cross-site writes
+  as `auth.py` does, so there is one set of rules until the login moves.
+- **Drawings** stay in Python until the drawing alerts move (step 9): saving a drawing
+  resets the alert checker's cache in the Python process, and drawings are filed under
+  the engine's current source and symbol. Their storage is ported already.
 
 To port a route:
 
@@ -95,8 +111,8 @@ To port a route:
 2. Its answer must have the shape `tests/api_contract.json` gives it; the Rust tests
    check every ported GET route against that file. A route that scans must also
    match `tests/golden/`.
-3. Routes behind the login stay in Python until the login itself is ported: the Rust
-   tests refuse a ported route that isn't in `auth.PUBLIC`.
+3. Add its requests to `server-rs/tests/conformance.rs`, which sends each one to the
+   real Python server and to Rust and compares the answers (status and JSON).
 
 ```bash
 make test-tauri                 # the shell's and the Rust server's tests
@@ -104,10 +120,16 @@ make serve PORT=8001            # the Python server ...
 make serve-rs PORT=8000         # ... and the Rust one in front, on http://127.0.0.1:8000
 ```
 
+`server-rs/tests/storage.rs` checks the store against `storage.py`: the same tables,
+and what one writes the other reads. It runs on SQLite, and on PostgreSQL when
+`initdb` works or `WEDNESDAY_TEST_POSTGRES` names a server where it may create
+databases (`postgresql://postgres@127.0.0.1:5432/postgres`); otherwise it says
+PostgreSQL was skipped.
+
 The scan is ported (`server-rs/src/scan/`: resampling, structure, the detectors,
 setups, session levels and quarters) and gives the same output as Python's on
 `tests/golden/`, but no route serves it yet: the scan routes need the engine's
-state (the live M1 buffer, settings, the store), which come with step 8.
+state (the live M1 buffer and the feed), which move with the engine.
 
 The Rust server only listens on `127.0.0.1` for now: the login, and the address it
 counts failed logins by, are still Python's.

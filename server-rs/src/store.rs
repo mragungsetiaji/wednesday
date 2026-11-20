@@ -1,0 +1,403 @@
+//! The database, as `storage.py` keeps it (#96): SQLite by default, PostgreSQL with `XAU_DB_URL`.
+//!
+//! The tables are made from `schema.json`, which `tests/test_rust_schema.py` generates from
+//! `storage.metadata`, so both servers create and read the same schema; a column a newer version
+//! added is added to an older database, as Python does. Rows come back as JSON objects typed by
+//! that schema (booleans as booleans, whatever the database stores).
+//!
+//! Python and Rust share the database while routes move over: SQLite runs in WAL mode with a busy
+//! timeout, so one can read while the other writes.
+
+use std::path::Path;
+use std::str::FromStr;
+use std::time::Duration;
+
+use serde_json::{Map, Value};
+use sqlx::postgres::{PgPoolOptions, PgRow};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteRow, SqliteSynchronous};
+use sqlx::{PgPool, Row, SqlitePool};
+
+const SCHEMA: &str = include_str!("../schema.json");
+
+#[derive(Clone, Debug)]
+pub enum Arg {
+    Str(Option<String>),
+    Int(Option<i64>),
+    Float(Option<f64>),
+    Bool(bool),
+}
+
+#[derive(Clone)]
+enum Pool {
+    Sqlite(SqlitePool),
+    Postgres(PgPool),
+}
+
+#[derive(Clone)]
+pub struct Store {
+    pool: Pool,
+    schema: Value,
+}
+
+/// `postgresql+psycopg://u:p@host/db` -> `postgres://u:p@host/db`; Some for a PostgreSQL URL.
+fn postgres_url(url: &str) -> Option<String> {
+    let (scheme, rest) = url.split_once("://")?;
+    let base = scheme.split('+').next()?;
+    matches!(base, "postgresql" | "postgres").then(|| format!("postgres://{rest}"))
+}
+
+/// The SQLite file of a SQLAlchemy URL (`sqlite:///data/xau.db` relative to `home`,
+/// `sqlite:////abs/x.db` absolute); None for an in-memory database.
+fn sqlite_path(url: &str, home: &Path) -> Option<std::path::PathBuf> {
+    let rest = url.strip_prefix("sqlite://")?;
+    let file = rest.strip_prefix('/').unwrap_or(rest);
+    let file = file.split('?').next().unwrap_or("");
+    if file.is_empty() || file == ":memory:" {
+        return None;
+    }
+    let p = Path::new(file);
+    Some(if p.is_absolute() { p.to_path_buf() } else { home.join(p) })
+}
+
+impl Store {
+    /// Open the database at a SQLAlchemy URL, relative paths from `home`, and make missing tables.
+    pub async fn open(url: &str, home: &Path) -> Result<Store, String> {
+        let store = Store::connect(url, home).await?;
+        store.create_tables().await?;
+        Ok(store)
+    }
+
+    /// Connect without touching the tables (to administer a server, say).
+    pub async fn connect(url: &str, home: &Path) -> Result<Store, String> {
+        let schema: Value = serde_json::from_str(SCHEMA).expect("schema.json");
+        let pool = if let Some(pg) = postgres_url(url) {
+            let pool = PgPoolOptions::new()
+                .max_connections(4)
+                .acquire_timeout(Duration::from_secs(10))
+                .connect(&pg)
+                .await
+                .map_err(|e| format!("couldn't open the PostgreSQL database: {e}"))?;
+            Pool::Postgres(pool)
+        } else if url.starts_with("sqlite:") {
+            let options = match sqlite_path(url, home) {
+                Some(path) => {
+                    if let Some(dir) = path.parent() {
+                        let _ = std::fs::create_dir_all(dir);
+                    }
+                    SqliteConnectOptions::new().filename(path).create_if_missing(true)
+                }
+                None => SqliteConnectOptions::from_str("sqlite::memory:").map_err(|e| e.to_string())?,
+            }
+            .journal_mode(SqliteJournalMode::Wal) // the API reads while the scan writes
+            .synchronous(SqliteSynchronous::Normal)
+            .busy_timeout(Duration::from_secs(5));
+            // One connection for an in-memory database, which is per connection.
+            let max = if sqlite_path(url, home).is_some() { 4 } else { 1 };
+            let pool = SqlitePoolOptions::new()
+                .max_connections(max)
+                .connect_with(options)
+                .await
+                .map_err(|e| format!("couldn't open the SQLite database: {e}"))?;
+            Pool::Sqlite(pool)
+        } else {
+            return Err(format!("unsupported database URL scheme: {}", url.split(':').next().unwrap_or("")));
+        };
+        Ok(Store { pool, schema })
+    }
+
+    pub fn backend(&self) -> &'static str {
+        match self.pool {
+            Pool::Sqlite(_) => "sqlite",
+            Pool::Postgres(_) => "postgresql",
+        }
+    }
+
+    fn tables(&self) -> &Vec<Value> {
+        self.schema["tables"].as_array().unwrap()
+    }
+
+    fn table(&self, name: &str) -> &Value {
+        self.tables().iter().find(|t| t["name"] == name).unwrap_or_else(|| panic!("no table {name} in schema.json"))
+    }
+
+    async fn create_tables(&self) -> Result<(), String> {
+        let d = self.backend();
+        for t in self.tables().clone() {
+            self.execute(t["create"][d].as_str().unwrap(), vec![]).await?;
+            for ix in t["indexes"][d].as_array().unwrap() {
+                self.execute(ix.as_str().unwrap(), vec![]).await?;
+            }
+            // Nullable columns a newer version added: add them to an older table.
+            let have = self.columns(t["name"].as_str().unwrap()).await?;
+            for c in t["columns"].as_array().unwrap() {
+                let name = c["name"].as_str().unwrap();
+                if c["nullable"] == true && !have.iter().any(|h| h == name) {
+                    let sql = format!("ALTER TABLE {} ADD COLUMN \"{name}\" {}", t["name"].as_str().unwrap(),
+                                      c[d].as_str().unwrap());
+                    self.execute(&sql, vec![]).await?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn columns(&self, table: &str) -> Result<Vec<String>, String> {
+        let err = |e: sqlx::Error| e.to_string();
+        Ok(match &self.pool {
+            Pool::Sqlite(p) => sqlx::query(&format!("PRAGMA table_info(\"{table}\")"))
+                .fetch_all(p)
+                .await
+                .map_err(err)?
+                .iter()
+                .map(|r| r.get::<String, _>("name"))
+                .collect(),
+            Pool::Postgres(p) => sqlx::query(
+                "SELECT column_name::text FROM information_schema.columns WHERE table_name = $1 AND table_schema = current_schema()",
+            )
+            .bind(table)
+            .fetch_all(p)
+            .await
+            .map_err(err)?
+            .iter()
+            .map(|r| r.get::<String, _>(0))
+            .collect(),
+        })
+    }
+
+    /// `?` placeholders, as PostgreSQL's `$1, $2, ...` there.
+    fn sql(&self, sql: &str) -> String {
+        match self.pool {
+            Pool::Sqlite(_) => sql.to_string(),
+            Pool::Postgres(_) => {
+                let mut out = String::with_capacity(sql.len() + 8);
+                let mut n = 0;
+                for ch in sql.chars() {
+                    if ch == '?' {
+                        n += 1;
+                        out.push_str(&format!("${n}"));
+                    } else {
+                        out.push(ch);
+                    }
+                }
+                out
+            }
+        }
+    }
+
+    /// Run a statement; the number of rows it changed.
+    pub async fn execute(&self, sql: &str, args: Vec<Arg>) -> Result<u64, String> {
+        let sql = self.sql(sql);
+        macro_rules! run {
+            ($pool:expr) => {{
+                let mut q = sqlx::query(&sql);
+                for a in args {
+                    q = match a {
+                        Arg::Str(v) => q.bind(v),
+                        Arg::Int(v) => q.bind(v),
+                        Arg::Float(v) => q.bind(v),
+                        Arg::Bool(v) => q.bind(v),
+                    };
+                }
+                q.execute($pool).await.map(|r| r.rows_affected()).map_err(|e| e.to_string())
+            }};
+        }
+        match &self.pool {
+            Pool::Sqlite(p) => run!(p),
+            Pool::Postgres(p) => run!(p),
+        }
+    }
+
+    /// Rows of `table` as JSON objects, typed by its schema.
+    pub async fn rows(&self, table: &str, sql: &str, args: Vec<Arg>) -> Result<Vec<Map<String, Value>>, String> {
+        let sql = self.sql(sql);
+        let cols: Vec<(String, String)> = self.table(table)["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| (c["name"].as_str().unwrap().to_string(), c["sqlite"].as_str().unwrap().to_uppercase()))
+            .collect();
+        macro_rules! fetch {
+            ($pool:expr, $row:ty) => {{
+                let mut q = sqlx::query(&sql);
+                for a in args {
+                    q = match a {
+                        Arg::Str(v) => q.bind(v),
+                        Arg::Int(v) => q.bind(v),
+                        Arg::Float(v) => q.bind(v),
+                        Arg::Bool(v) => q.bind(v),
+                    };
+                }
+                let rows: Vec<$row> = q.fetch_all($pool).await.map_err(|e| e.to_string())?;
+                rows.iter()
+                    .map(|r| {
+                        let mut m = Map::new();
+                        for (name, kind) in &cols {
+                            let Ok(_) = r.try_column(name.as_str()) else { continue };
+                            let v: Value = if kind.starts_with("BOOL") {
+                                r.try_get::<Option<bool>, _>(name.as_str()).map_err(|e| e.to_string())?.into()
+                            } else if kind.contains("INT") {
+                                r.try_get::<Option<i64>, _>(name.as_str()).map_err(|e| e.to_string())?.into()
+                            } else if kind.starts_with("FLOAT") || kind.starts_with("REAL") || kind.starts_with("DOUBLE") {
+                                r.try_get::<Option<f64>, _>(name.as_str()).map_err(|e| e.to_string())?.into()
+                            } else {
+                                r.try_get::<Option<String>, _>(name.as_str()).map_err(|e| e.to_string())?.into()
+                            };
+                            m.insert(name.clone(), v);
+                        }
+                        Ok(m)
+                    })
+                    .collect::<Result<Vec<_>, String>>()
+            }};
+        }
+        match &self.pool {
+            Pool::Sqlite(p) => fetch!(p, SqliteRow),
+            Pool::Postgres(p) => fetch!(p, PgRow),
+        }
+    }
+
+    /// Insert or update by `keys` (`_upsert` in storage.py).
+    pub async fn upsert(&self, table: &str, row: Vec<(&str, Arg)>, keys: &[&str]) -> Result<(), String> {
+        let names: Vec<&str> = row.iter().map(|(k, _)| *k).collect();
+        let quoted = |n: &str| format!("\"{n}\"");
+        let updates: Vec<String> = names
+            .iter()
+            .filter(|n| !keys.contains(n))
+            .map(|n| format!("{} = excluded.{}", quoted(n), quoted(n)))
+            .collect();
+        let sql = format!(
+            "INSERT INTO {table} ({}) VALUES ({}) ON CONFLICT ({}) DO {}",
+            names.iter().map(|n| quoted(n)).collect::<Vec<_>>().join(", "),
+            vec!["?"; names.len()].join(", "),
+            keys.iter().map(|n| quoted(n)).collect::<Vec<_>>().join(", "),
+            if updates.is_empty() { "NOTHING".to_string() } else { format!("UPDATE SET {}", updates.join(", ")) },
+        );
+        self.execute(&sql, row.into_iter().map(|(_, a)| a).collect()).await.map(|_| ())
+    }
+
+    /// The tables as the database has them (columns with type, nullability and key; indexes),
+    /// to compare a database Python made with one Rust made.
+    pub async fn describe_schema(&self) -> Result<Value, String> {
+        let mut out = Map::new();
+        let err = |e: sqlx::Error| e.to_string();
+        for t in self.tables() {
+            let name = t["name"].as_str().unwrap();
+            let (columns, indexes): (Vec<Value>, Vec<Value>) = match &self.pool {
+                Pool::Sqlite(p) => {
+                    let cols = sqlx::query(&format!("PRAGMA table_info(\"{name}\")")).fetch_all(p).await.map_err(err)?;
+                    let columns = cols.iter().map(|r| serde_json::json!([
+                        r.get::<String, _>("name"), r.get::<String, _>("type"), r.get::<i64, _>("notnull"), r.get::<i64, _>("pk")
+                    ])).collect();
+                    let mut indexes = Vec::new();
+                    for ix in sqlx::query(&format!("PRAGMA index_list(\"{name}\")")).fetch_all(p).await.map_err(err)? {
+                        let ix_name: String = ix.get("name");
+                        let cols: Vec<String> = sqlx::query(&format!("PRAGMA index_info(\"{ix_name}\")"))
+                            .fetch_all(p).await.map_err(err)?.iter().map(|r| r.get::<String, _>("name")).collect();
+                        indexes.push(serde_json::json!([ix_name, ix.get::<i64, _>("unique"), cols]));
+                    }
+                    indexes.sort_by_key(|v| v.to_string());
+                    (columns, indexes)
+                }
+                Pool::Postgres(p) => {
+                    let cols = sqlx::query(
+                        "SELECT column_name::text, data_type::text, character_maximum_length, is_nullable::text \
+                         FROM information_schema.columns WHERE table_name = $1 AND table_schema = current_schema() \
+                         ORDER BY ordinal_position")
+                        .bind(name).fetch_all(p).await.map_err(err)?;
+                    let columns = cols.iter().map(|r| serde_json::json!([
+                        r.get::<String, _>(0), r.get::<String, _>(1), r.get::<Option<i32>, _>(2), r.get::<String, _>(3)
+                    ])).collect();
+                    let mut indexes: Vec<Value> = sqlx::query(
+                        "SELECT indexname::text, indexdef::text FROM pg_indexes WHERE tablename = $1 AND schemaname = current_schema()")
+                        .bind(name).fetch_all(p).await.map_err(err)?
+                        .iter().map(|r| serde_json::json!([r.get::<String, _>(0), r.get::<String, _>(1)])).collect();
+                    indexes.sort_by_key(|v| v.to_string());
+                    (columns, indexes)
+                }
+            };
+            out.insert(name.into(), serde_json::json!({"columns": columns, "indexes": indexes}));
+        }
+        Ok(Value::Object(out))
+    }
+
+    // ---- settings ----
+
+    pub async fn get_setting(&self, key: &str) -> Result<Option<Value>, String> {
+        let rows = self.rows("settings", "SELECT value FROM settings WHERE key = ?", vec![Arg::Str(Some(key.into()))]).await?;
+        Ok(rows.first().and_then(|r| r["value"].as_str()).and_then(|s| serde_json::from_str(s).ok()))
+    }
+
+    pub async fn set_setting(&self, key: &str, value: &Value) -> Result<(), String> {
+        self.upsert("settings", vec![("key", Arg::Str(Some(key.into()))), ("value", Arg::Str(Some(crate::pyjson::dumps(value))))],
+                    &["key"])
+            .await
+    }
+
+    pub async fn delete_setting(&self, key: &str) -> Result<(), String> {
+        self.execute("DELETE FROM settings WHERE key = ?", vec![Arg::Str(Some(key.into()))]).await.map(|_| ())
+    }
+
+    // ---- drawings (per source and symbol) ----
+
+    const DRAWING_JSON: [&'static str; 4] = ["points", "style", "props", "timeframes"];
+
+    pub async fn drawings(&self, source: &str, symbol: &str) -> Result<Vec<Map<String, Value>>, String> {
+        let mut rows = self
+            .rows("drawings", "SELECT * FROM drawings WHERE source = ? AND symbol = ? ORDER BY updated_at",
+                  vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))])
+            .await?;
+        for r in &mut rows {
+            for k in Self::DRAWING_JSON {
+                if let Some(Value::String(s)) = r.get(k) {
+                    let parsed = serde_json::from_str(s).map_err(|e| format!("drawing {k}: {e}"))?;
+                    r.insert(k.into(), parsed);
+                }
+            }
+        }
+        Ok(rows)
+    }
+
+    /// A drawing row as `drawings.clean_drawing` makes it, plus source and symbol.
+    pub async fn drawing_put(&self, row: &Map<String, Value>) -> Result<(), String> {
+        let s = |k: &str| Arg::Str(row.get(k).and_then(Value::as_str).map(String::from));
+        let j = |k: &str| Arg::Str(row.get(k).filter(|v| !v.is_null()).map(crate::pyjson::dumps));
+        let b = |k: &str| Arg::Bool(row.get(k).and_then(Value::as_bool).unwrap_or(false));
+        self.upsert("drawings", vec![("id", s("id")), ("source", s("source")), ("symbol", s("symbol")), ("kind", s("kind")),
+                                     ("points", j("points")), ("style", j("style")), ("props", j("props")),
+                                     ("timeframes", j("timeframes")), ("locked", b("locked")), ("hidden", b("hidden")),
+                                     ("updated_at", s("updated_at"))], &["id"])
+            .await
+    }
+
+    pub async fn drawing_delete(&self, id: &str, source: &str, symbol: &str) -> Result<bool, String> {
+        let args = vec![Arg::Str(Some(id.into())), Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))];
+        Ok(self.execute("DELETE FROM drawings WHERE id = ? AND source = ? AND symbol = ?", args).await? > 0)
+    }
+
+    pub async fn drawing_alerts(&self, source: &str, symbol: &str) -> Result<Vec<Map<String, Value>>, String> {
+        self.rows("drawing_alerts", "SELECT * FROM drawing_alerts WHERE source = ? AND symbol = ?",
+                  vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))])
+            .await
+    }
+
+    pub async fn drawing_alert_delete(&self, id: &str, source: &str, symbol: &str) -> Result<bool, String> {
+        let args = vec![Arg::Str(Some(id.into())), Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))];
+        Ok(self.execute("DELETE FROM drawing_alerts WHERE drawing_id = ? AND source = ? AND symbol = ?", args).await? > 0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn urls_as_sqlalchemy_writes_them() {
+        let home = Path::new("/home/me/.wednesday");
+        assert_eq!(sqlite_path("sqlite:///data/xau.db", home), Some(home.join("data/xau.db")));
+        assert_eq!(sqlite_path("sqlite:////tmp/x.db", home), Some("/tmp/x.db".into()));
+        assert_eq!(sqlite_path("sqlite://", home), None);
+        assert_eq!(sqlite_path("sqlite:///:memory:", home), None);
+        assert_eq!(postgres_url("postgresql+psycopg://u:p@h:5432/db?sslmode=require").as_deref(),
+                   Some("postgres://u:p@h:5432/db?sslmode=require"));
+        assert_eq!(postgres_url("sqlite:///x.db"), None);
+    }
+}

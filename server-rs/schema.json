@@ -1,0 +1,939 @@
+{
+ "tables": [
+  {
+   "name": "alert_log",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS alert_log ( \"key\" VARCHAR(255) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, timeframe VARCHAR(8) NOT NULL, kind VARCHAR(16) NOT NULL, priority VARCHAR(16) NOT NULL, entry FLOAT NOT NULL, price FLOAT NOT NULL, sent_at VARCHAR(40) NOT NULL, status VARCHAR(16) NOT NULL, error TEXT, summary TEXT, PRIMARY KEY (\"key\") )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS alert_log ( key VARCHAR(255) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, timeframe VARCHAR(8) NOT NULL, kind VARCHAR(16) NOT NULL, priority VARCHAR(16) NOT NULL, entry FLOAT NOT NULL, price FLOAT NOT NULL, sent_at VARCHAR(40) NOT NULL, status VARCHAR(16) NOT NULL, error TEXT, summary TEXT, PRIMARY KEY (key) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "key",
+     "nullable": false,
+     "sqlite": "VARCHAR(255)",
+     "postgresql": "VARCHAR(255)"
+    },
+    {
+     "name": "source",
+     "nullable": false,
+     "sqlite": "VARCHAR(32)",
+     "postgresql": "VARCHAR(32)"
+    },
+    {
+     "name": "symbol",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "timeframe",
+     "nullable": false,
+     "sqlite": "VARCHAR(8)",
+     "postgresql": "VARCHAR(8)"
+    },
+    {
+     "name": "kind",
+     "nullable": false,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "priority",
+     "nullable": false,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "entry",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "price",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "sent_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "status",
+     "nullable": false,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "error",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "summary",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    }
+   ]
+  },
+  {
+   "name": "auth_tokens",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS auth_tokens ( id VARCHAR(36) NOT NULL, kind VARCHAR(16) NOT NULL, name VARCHAR(120), hash VARCHAR(64) NOT NULL, created_at VARCHAR(40) NOT NULL, last_used_at VARCHAR(40), expires_at VARCHAR(40), PRIMARY KEY (id), UNIQUE (hash) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS auth_tokens ( id VARCHAR(36) NOT NULL, kind VARCHAR(16) NOT NULL, name VARCHAR(120), hash VARCHAR(64) NOT NULL, created_at VARCHAR(40) NOT NULL, last_used_at VARCHAR(40), expires_at VARCHAR(40), PRIMARY KEY (id), UNIQUE (hash) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "kind",
+     "nullable": false,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "name",
+     "nullable": true,
+     "sqlite": "VARCHAR(120)",
+     "postgresql": "VARCHAR(120)"
+    },
+    {
+     "name": "hash",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "created_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "last_used_at",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "expires_at",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    }
+   ]
+  },
+  {
+   "name": "calendar_events",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS calendar_events ( time BIGINT NOT NULL, currency VARCHAR(8) NOT NULL, title VARCHAR(200) NOT NULL, impact VARCHAR(16), forecast VARCHAR(40), previous VARCHAR(40), actual VARCHAR(40), source VARCHAR(16), PRIMARY KEY (time, currency, title) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS calendar_events ( time BIGINT NOT NULL, currency VARCHAR(8) NOT NULL, title VARCHAR(200) NOT NULL, impact VARCHAR(16), forecast VARCHAR(40), previous VARCHAR(40), actual VARCHAR(40), source VARCHAR(16), PRIMARY KEY (time, currency, title) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "time",
+     "nullable": false,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "currency",
+     "nullable": false,
+     "sqlite": "VARCHAR(8)",
+     "postgresql": "VARCHAR(8)"
+    },
+    {
+     "name": "title",
+     "nullable": false,
+     "sqlite": "VARCHAR(200)",
+     "postgresql": "VARCHAR(200)"
+    },
+    {
+     "name": "impact",
+     "nullable": true,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "forecast",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "previous",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "actual",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "source",
+     "nullable": true,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    }
+   ]
+  },
+  {
+   "name": "drawing_alerts",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS drawing_alerts ( drawing_id VARCHAR(36) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, condition VARCHAR(16) NOT NULL, mode VARCHAR(8) NOT NULL, note TEXT, expires_at VARCHAR(40), intrabar BOOLEAN NOT NULL, armed BOOLEAN NOT NULL, armed_bar BIGINT, fired_at VARCHAR(40), fired_price FLOAT, fires INTEGER NOT NULL, created_at VARCHAR(40) NOT NULL, PRIMARY KEY (drawing_id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS drawing_alerts ( drawing_id VARCHAR(36) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, condition VARCHAR(16) NOT NULL, mode VARCHAR(8) NOT NULL, note TEXT, expires_at VARCHAR(40), intrabar BOOLEAN NOT NULL, armed BOOLEAN NOT NULL, armed_bar BIGINT, fired_at VARCHAR(40), fired_price FLOAT, fires INTEGER NOT NULL, created_at VARCHAR(40) NOT NULL, PRIMARY KEY (drawing_id) )"
+   },
+   "indexes": {
+    "sqlite": [
+     "CREATE INDEX IF NOT EXISTS ix_drawing_alerts_source_symbol ON drawing_alerts (source, symbol)"
+    ],
+    "postgresql": [
+     "CREATE INDEX IF NOT EXISTS ix_drawing_alerts_source_symbol ON drawing_alerts (source, symbol)"
+    ]
+   },
+   "columns": [
+    {
+     "name": "drawing_id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "source",
+     "nullable": false,
+     "sqlite": "VARCHAR(32)",
+     "postgresql": "VARCHAR(32)"
+    },
+    {
+     "name": "symbol",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "condition",
+     "nullable": false,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "mode",
+     "nullable": false,
+     "sqlite": "VARCHAR(8)",
+     "postgresql": "VARCHAR(8)"
+    },
+    {
+     "name": "note",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "expires_at",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "intrabar",
+     "nullable": false,
+     "sqlite": "BOOLEAN",
+     "postgresql": "BOOLEAN"
+    },
+    {
+     "name": "armed",
+     "nullable": false,
+     "sqlite": "BOOLEAN",
+     "postgresql": "BOOLEAN"
+    },
+    {
+     "name": "armed_bar",
+     "nullable": true,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "fired_at",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "fired_price",
+     "nullable": true,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "fires",
+     "nullable": false,
+     "sqlite": "INTEGER",
+     "postgresql": "INTEGER"
+    },
+    {
+     "name": "created_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    }
+   ]
+  },
+  {
+   "name": "drawings",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS drawings ( id VARCHAR(36) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, kind VARCHAR(16) NOT NULL, points TEXT NOT NULL, style TEXT NOT NULL, props TEXT, timeframes TEXT, locked BOOLEAN NOT NULL, hidden BOOLEAN NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY (id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS drawings ( id VARCHAR(36) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, kind VARCHAR(16) NOT NULL, points TEXT NOT NULL, style TEXT NOT NULL, props TEXT, timeframes TEXT, locked BOOLEAN NOT NULL, hidden BOOLEAN NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY (id) )"
+   },
+   "indexes": {
+    "sqlite": [
+     "CREATE INDEX IF NOT EXISTS ix_drawings_source_symbol ON drawings (source, symbol)"
+    ],
+    "postgresql": [
+     "CREATE INDEX IF NOT EXISTS ix_drawings_source_symbol ON drawings (source, symbol)"
+    ]
+   },
+   "columns": [
+    {
+     "name": "id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "source",
+     "nullable": false,
+     "sqlite": "VARCHAR(32)",
+     "postgresql": "VARCHAR(32)"
+    },
+    {
+     "name": "symbol",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "kind",
+     "nullable": false,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "points",
+     "nullable": false,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "style",
+     "nullable": false,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "props",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "timeframes",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "locked",
+     "nullable": false,
+     "sqlite": "BOOLEAN",
+     "postgresql": "BOOLEAN"
+    },
+    {
+     "name": "hidden",
+     "nullable": false,
+     "sqlite": "BOOLEAN",
+     "postgresql": "BOOLEAN"
+    },
+    {
+     "name": "updated_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    }
+   ]
+  },
+  {
+   "name": "journal_cash",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS journal_cash ( journal_id VARCHAR(36) NOT NULL, id VARCHAR(64) NOT NULL, time BIGINT NOT NULL, kind VARCHAR(16) NOT NULL, amount FLOAT NOT NULL, comment TEXT, PRIMARY KEY (journal_id, id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS journal_cash ( journal_id VARCHAR(36) NOT NULL, id VARCHAR(64) NOT NULL, time BIGINT NOT NULL, kind VARCHAR(16) NOT NULL, amount FLOAT NOT NULL, comment TEXT, PRIMARY KEY (journal_id, id) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "journal_id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "id",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "time",
+     "nullable": false,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "kind",
+     "nullable": false,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "amount",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "comment",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    }
+   ]
+  },
+  {
+   "name": "journal_entries",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS journal_entries ( id VARCHAR(36) NOT NULL, journal_id VARCHAR(36) NOT NULL, kind VARCHAR(16) NOT NULL, created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40), text TEXT NOT NULL, tags TEXT NOT NULL, mood INTEGER, setup TEXT, market TEXT, PRIMARY KEY (id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS journal_entries ( id VARCHAR(36) NOT NULL, journal_id VARCHAR(36) NOT NULL, kind VARCHAR(16) NOT NULL, created_at VARCHAR(40) NOT NULL, updated_at VARCHAR(40), text TEXT NOT NULL, tags TEXT NOT NULL, mood INTEGER, setup TEXT, market TEXT, PRIMARY KEY (id) )"
+   },
+   "indexes": {
+    "sqlite": [
+     "CREATE INDEX IF NOT EXISTS ix_journal_entries_journal_id ON journal_entries (journal_id)"
+    ],
+    "postgresql": [
+     "CREATE INDEX IF NOT EXISTS ix_journal_entries_journal_id ON journal_entries (journal_id)"
+    ]
+   },
+   "columns": [
+    {
+     "name": "id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "journal_id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "kind",
+     "nullable": false,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "created_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "updated_at",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "text",
+     "nullable": false,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "tags",
+     "nullable": false,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "mood",
+     "nullable": true,
+     "sqlite": "INTEGER",
+     "postgresql": "INTEGER"
+    },
+    {
+     "name": "setup",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "market",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    }
+   ]
+  },
+  {
+   "name": "journal_notes",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS journal_notes ( journal_id VARCHAR(36) NOT NULL, trade_id VARCHAR(64) NOT NULL, note TEXT NOT NULL, tags TEXT NOT NULL, updated_at VARCHAR(40) NOT NULL, images TEXT, PRIMARY KEY (journal_id, trade_id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS journal_notes ( journal_id VARCHAR(36) NOT NULL, trade_id VARCHAR(64) NOT NULL, note TEXT NOT NULL, tags TEXT NOT NULL, updated_at VARCHAR(40) NOT NULL, images TEXT, PRIMARY KEY (journal_id, trade_id) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "journal_id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "trade_id",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "note",
+     "nullable": false,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "tags",
+     "nullable": false,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "updated_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "images",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    }
+   ]
+  },
+  {
+   "name": "journal_trades",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS journal_trades ( journal_id VARCHAR(36) NOT NULL, id VARCHAR(64) NOT NULL, position VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, side VARCHAR(4) NOT NULL, volume FLOAT NOT NULL, open_time BIGINT NOT NULL, open_price FLOAT NOT NULL, close_time BIGINT, close_price FLOAT, profit FLOAT NOT NULL, commission FLOAT NOT NULL, swap FLOAT NOT NULL, sl FLOAT, tp FLOAT, comment TEXT, PRIMARY KEY (journal_id, id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS journal_trades ( journal_id VARCHAR(36) NOT NULL, id VARCHAR(64) NOT NULL, position VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, side VARCHAR(4) NOT NULL, volume FLOAT NOT NULL, open_time BIGINT NOT NULL, open_price FLOAT NOT NULL, close_time BIGINT, close_price FLOAT, profit FLOAT NOT NULL, commission FLOAT NOT NULL, swap FLOAT NOT NULL, sl FLOAT, tp FLOAT, comment TEXT, PRIMARY KEY (journal_id, id) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "journal_id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "id",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "position",
+     "nullable": false,
+     "sqlite": "VARCHAR(32)",
+     "postgresql": "VARCHAR(32)"
+    },
+    {
+     "name": "symbol",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "side",
+     "nullable": false,
+     "sqlite": "VARCHAR(4)",
+     "postgresql": "VARCHAR(4)"
+    },
+    {
+     "name": "volume",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "open_time",
+     "nullable": false,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "open_price",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "close_time",
+     "nullable": true,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "close_price",
+     "nullable": true,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "profit",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "commission",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "swap",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "sl",
+     "nullable": true,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "tp",
+     "nullable": true,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "comment",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    }
+   ]
+  },
+  {
+   "name": "journals",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS journals ( id VARCHAR(36) NOT NULL, name VARCHAR(120) NOT NULL, login VARCHAR(32), server VARCHAR(120), company VARCHAR(120), currency VARCHAR(8), source VARCHAR(16), account TEXT, time_offset INTEGER, created_at VARCHAR(40) NOT NULL, synced_at VARCHAR(40), sample BOOLEAN, settings TEXT, PRIMARY KEY (id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS journals ( id VARCHAR(36) NOT NULL, name VARCHAR(120) NOT NULL, login VARCHAR(32), server VARCHAR(120), company VARCHAR(120), currency VARCHAR(8), source VARCHAR(16), account TEXT, time_offset INTEGER, created_at VARCHAR(40) NOT NULL, synced_at VARCHAR(40), sample BOOLEAN, settings TEXT, PRIMARY KEY (id) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "name",
+     "nullable": false,
+     "sqlite": "VARCHAR(120)",
+     "postgresql": "VARCHAR(120)"
+    },
+    {
+     "name": "login",
+     "nullable": true,
+     "sqlite": "VARCHAR(32)",
+     "postgresql": "VARCHAR(32)"
+    },
+    {
+     "name": "server",
+     "nullable": true,
+     "sqlite": "VARCHAR(120)",
+     "postgresql": "VARCHAR(120)"
+    },
+    {
+     "name": "company",
+     "nullable": true,
+     "sqlite": "VARCHAR(120)",
+     "postgresql": "VARCHAR(120)"
+    },
+    {
+     "name": "currency",
+     "nullable": true,
+     "sqlite": "VARCHAR(8)",
+     "postgresql": "VARCHAR(8)"
+    },
+    {
+     "name": "source",
+     "nullable": true,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "account",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "time_offset",
+     "nullable": true,
+     "sqlite": "INTEGER",
+     "postgresql": "INTEGER"
+    },
+    {
+     "name": "created_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "synced_at",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "sample",
+     "nullable": true,
+     "sqlite": "BOOLEAN",
+     "postgresql": "BOOLEAN"
+    },
+    {
+     "name": "settings",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    }
+   ]
+  },
+  {
+   "name": "llm_usage",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS llm_usage ( id VARCHAR(36) NOT NULL, created_at VARCHAR(40) NOT NULL, feature VARCHAR(40) NOT NULL, provider VARCHAR(32) NOT NULL, model VARCHAR(120) NOT NULL, input_tokens BIGINT NOT NULL, output_tokens BIGINT NOT NULL, cache_read_tokens BIGINT NOT NULL, cache_write_tokens BIGINT NOT NULL, cost FLOAT, estimated BOOLEAN NOT NULL, scheduled BOOLEAN NOT NULL, PRIMARY KEY (id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS llm_usage ( id VARCHAR(36) NOT NULL, created_at VARCHAR(40) NOT NULL, feature VARCHAR(40) NOT NULL, provider VARCHAR(32) NOT NULL, model VARCHAR(120) NOT NULL, input_tokens BIGINT NOT NULL, output_tokens BIGINT NOT NULL, cache_read_tokens BIGINT NOT NULL, cache_write_tokens BIGINT NOT NULL, cost FLOAT, estimated BOOLEAN NOT NULL, scheduled BOOLEAN NOT NULL, PRIMARY KEY (id) )"
+   },
+   "indexes": {
+    "sqlite": [
+     "CREATE INDEX IF NOT EXISTS ix_llm_usage_created ON llm_usage (created_at)"
+    ],
+    "postgresql": [
+     "CREATE INDEX IF NOT EXISTS ix_llm_usage_created ON llm_usage (created_at)"
+    ]
+   },
+   "columns": [
+    {
+     "name": "id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "created_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "feature",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "provider",
+     "nullable": false,
+     "sqlite": "VARCHAR(32)",
+     "postgresql": "VARCHAR(32)"
+    },
+    {
+     "name": "model",
+     "nullable": false,
+     "sqlite": "VARCHAR(120)",
+     "postgresql": "VARCHAR(120)"
+    },
+    {
+     "name": "input_tokens",
+     "nullable": false,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "output_tokens",
+     "nullable": false,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "cache_read_tokens",
+     "nullable": false,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "cache_write_tokens",
+     "nullable": false,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "cost",
+     "nullable": true,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "estimated",
+     "nullable": false,
+     "sqlite": "BOOLEAN",
+     "postgresql": "BOOLEAN"
+    },
+    {
+     "name": "scheduled",
+     "nullable": false,
+     "sqlite": "BOOLEAN",
+     "postgresql": "BOOLEAN"
+    }
+   ]
+  },
+  {
+   "name": "m1_bars",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS m1_bars ( source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, time BIGINT NOT NULL, open FLOAT NOT NULL, high FLOAT NOT NULL, low FLOAT NOT NULL, close FLOAT NOT NULL, volume FLOAT NOT NULL, PRIMARY KEY (source, symbol, time) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS m1_bars ( source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, time BIGINT NOT NULL, open FLOAT NOT NULL, high FLOAT NOT NULL, low FLOAT NOT NULL, close FLOAT NOT NULL, volume FLOAT NOT NULL, PRIMARY KEY (source, symbol, time) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "source",
+     "nullable": false,
+     "sqlite": "VARCHAR(32)",
+     "postgresql": "VARCHAR(32)"
+    },
+    {
+     "name": "symbol",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "time",
+     "nullable": false,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "open",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "high",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "low",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "close",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "volume",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    }
+   ]
+  },
+  {
+   "name": "settings",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS settings ( \"key\" VARCHAR(64) NOT NULL, value TEXT NOT NULL, PRIMARY KEY (\"key\") )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS settings ( key VARCHAR(64) NOT NULL, value TEXT NOT NULL, PRIMARY KEY (key) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "key",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "value",
+     "nullable": false,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    }
+   ]
+  }
+ ]
+}

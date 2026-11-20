@@ -387,7 +387,10 @@ pub fn run() {
                     Some((listener, front_port)) => {
                         let backend = std::net::SocketAddr::from(([127, 0, 0, 1], port));
                         tauri::async_runtime::spawn(async move {
-                            if let Err(e) = wednesday_rs::serve_std(listener, backend).await {
+                            // The same database as the Python server (same home folder and .env);
+                            // without it, Python serves the routes that need it.
+                            let store = wednesday_rs::open_store(&wednesday_rs::config::home_dir()).await;
+                            if let Err(e) = wednesday_rs::serve_std(listener, backend, store).await {
                                 log::error!("the Rust server stopped: {e}");
                             }
                         });
