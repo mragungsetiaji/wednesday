@@ -1,0 +1,58 @@
+{
+ "summary": {
+  "gain": 0.0,
+  "abs_gain": null,
+  "daily": 0.0,
+  "monthly": 0.0,
+  "drawdown": 0.0,
+  "drawdown_at": null,
+  "balance": 0.0,
+  "equity": 0.0,
+  "floating": 0,
+  "profit": 0,
+  "deposits": 0,
+  "withdrawals": 0,
+  "credit": 0,
+  "other": 0,
+  "max_floating_loss": null,
+  "start": null,
+  "last": null
+ },
+ "trading": {
+  "trades": 0,
+  "open": 0,
+  "won": 0,
+  "lost": 0,
+  "win_rate": null,
+  "profit_factor": null,
+  "avg_win": null,
+  "avg_loss": null,
+  "best": null,
+  "worst": null,
+  "lots": 0,
+  "commission": 0,
+  "swap": 0,
+  "avg_hold": null
+ },
+ "verification": {
+  "basis": "closed",
+  "trades": 0,
+  "verified": 0,
+  "coverage": null,
+  "prices_checked": 0,
+  "prices_ok": 0,
+  "offset_hours": null,
+  "offset_detected": true,
+  "no_prices": [],
+  "mismatched": []
+ },
+ "series": {
+  "growth": [],
+  "balance": [],
+  "equity": [],
+  "drawdown": []
+ },
+ "monthly": [],
+ "daily": [],
+ "trades": []
+}

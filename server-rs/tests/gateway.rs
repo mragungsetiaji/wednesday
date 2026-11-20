@@ -213,7 +213,9 @@ async fn ported_answers_have_the_contract_shape() {
     assert_eq!(send(req("PUT", addr, "/api/workspaces/Contract", "", Some(ws))).await.status(), 200);
     let tpl = serde_json::json!({"style": {"color": "#3b82f6", "width": 1, "dash": "dotted"}, "text": "H1 OB"});
     assert_eq!(send(req("PUT", addr, "/api/drawing-templates/line/H1", "", Some(tpl))).await.status(), 200);
-    for route in wednesday_rs::PORTED.iter().filter(|r| r.starts_with("GET ")) {
+    // A journal's own routes need an imported report and its prices: conformance.rs checks those
+    // against the real Python server.
+    for route in wednesday_rs::PORTED.iter().filter(|r| r.starts_with("GET ") && !r.contains("{journal_id}")) {
         let path = route[4..].replace("{name}", "Contract");
         let res = send(req("GET", addr, &path, "", None)).await;
         assert_eq!(res.status(), 200, "{route}");

@@ -1,0 +1,125 @@
+{
+ "summary": {
+  "gain": 0.0,
+  "abs_gain": 0.0,
+  "daily": 0.0,
+  "monthly": 0.0,
+  "drawdown": 0.0,
+  "drawdown_at": 1772411400,
+  "balance": 1050.25,
+  "equity": 1050.25,
+  "floating": 0,
+  "profit": 0,
+  "deposits": 1000.0,
+  "withdrawals": 0,
+  "credit": 50.0,
+  "other": 0.25,
+  "max_floating_loss": null,
+  "start": 1772411400,
+  "last": 1775106000
+ },
+ "trading": {
+  "trades": 0,
+  "open": 0,
+  "won": 0,
+  "lost": 0,
+  "win_rate": null,
+  "profit_factor": null,
+  "avg_win": null,
+  "avg_loss": null,
+  "best": null,
+  "worst": null,
+  "lots": 0,
+  "commission": 0,
+  "swap": 0,
+  "avg_hold": null
+ },
+ "verification": {
+  "basis": "closed",
+  "trades": 0,
+  "verified": 0,
+  "coverage": null,
+  "prices_checked": 0,
+  "prices_ok": 0,
+  "offset_hours": null,
+  "offset_detected": true,
+  "no_prices": [],
+  "mismatched": []
+ },
+ "series": {
+  "growth": [
+   [
+    1772411400,
+    0.0
+   ],
+   [
+    1772427600,
+    0.0
+   ],
+   [
+    1775106000,
+    0.0
+   ]
+  ],
+  "balance": [
+   [
+    1772411400,
+    1000.0
+   ],
+   [
+    1772427600,
+    1050.0
+   ],
+   [
+    1775106000,
+    1050.25
+   ]
+  ],
+  "equity": [
+   [
+    1772409600,
+    1000.0
+   ],
+   [
+    1772427600,
+    1050.0
+   ],
+   [
+    1775106000,
+    1050.25
+   ]
+  ],
+  "drawdown": [
+   [
+    1772409600,
+    -0.0
+   ],
+   [
+    1772427600,
+    -0.0
+   ],
+   [
+    1775106000,
+    -0.0
+   ]
+  ]
+ },
+ "monthly": [
+  {
+   "month": "2026-03",
+   "gain": 0.0,
+   "profit": 0,
+   "pips": 0,
+   "trades": 0
+  },
+  {
+   "month": "2026-04",
+   "gain": 0.0,
+   "profit": 0,
+   "pips": 0,
+   "trades": 0
+  }
+ ],
+ "daily": [],
+ "trades": []
+}

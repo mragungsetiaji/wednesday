@@ -1,0 +1,69 @@
+{
+ "trades": [
+  {
+   "journal_id": "j-golden",
+   "id": "tie0",
+   "position": "0",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.1,
+   "open_time": 1778069113,
+   "open_price": 2000.0,
+   "close_time": 1778069381,
+   "close_price": 2000.2,
+   "profit": 2.0,
+   "commission": 0.0,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "tie1",
+   "position": "1",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.1,
+   "open_time": 1778069713,
+   "open_price": 2000.0,
+   "close_time": 1778069981,
+   "close_price": 2000.2,
+   "profit": 2.0,
+   "commission": 0.0,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "tie2",
+   "position": "2",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.1,
+   "open_time": 1778070313,
+   "open_price": 2000.0,
+   "close_time": 1778070581,
+   "close_price": 2000.2,
+   "profit": 2.0,
+   "commission": 0.0,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null
+  }
+ ],
+ "cash": [
+  {
+   "journal_id": "j-golden",
+   "id": "c1",
+   "time": 1778026200,
+   "kind": "deposit",
+   "amount": 1000.0,
+   "comment": null
+  }
+ ],
+ "offset": null
+}

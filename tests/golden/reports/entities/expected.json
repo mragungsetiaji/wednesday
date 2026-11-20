@@ -1,0 +1,39 @@
+{
+ "ok": {
+  "account": {
+   "name": "J\u00e9r\u00f4me & O'Neil \u00acit; \u20ac\u20ac\ufffdA",
+   "login": "51234567",
+   "currency": "USD",
+   "server": "Broker-Live",
+   "company": "<Broker> \u00a92026 \ufffd\ufffd"
+  },
+  "trades": [
+   {
+    "id": "p7",
+    "position": "7",
+    "symbol": "XAUUSD",
+    "side": "buy",
+    "volume": 1.5,
+    "open_time": 1772409660,
+    "open_price": 2000.0,
+    "close_time": 1772410200,
+    "close_price": 2010.0,
+    "profit": 1500.0,
+    "commission": 0.0,
+    "swap": 0.0,
+    "sl": null,
+    "tp": null,
+    "comment": null
+   }
+  ],
+  "cash": [
+   {
+    "id": "1",
+    "time": 1772395200,
+    "kind": "deposit",
+    "amount": 100.0,
+    "comment": "\"Deposit\" && more &unknown; &am"
+   }
+  ]
+ }
+}

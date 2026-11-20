@@ -22,6 +22,11 @@ class ReportError(ValueError):
     """A file that can't be read, with a message for the user."""
 
 
+# A file the parser chokes on in another way (cut short, broken markup, a missing column); the
+# Rust server (server-rs/src/journal/report.rs) answers these with the same message.
+UNREADABLE = "Couldn't read that report. Save it again in the terminal: History tab, right click, Report, HTML"
+
+
 def cash_kind(deal_type: int, amount: float) -> str:
     if deal_type == BALANCE:
         return "deposit" if amount >= 0 else "withdrawal"
@@ -114,6 +119,15 @@ def _header(row: list[str]) -> dict[str, int]:
 
 def parse_report(data: bytes) -> dict:
     """``{"account": {...}, "trades": [...], "cash": [...]}`` from an MT5 history report (HTML)."""
+    try:
+        return _parse_report(data)
+    except ReportError:
+        raise
+    except (UnicodeError, KeyError, IndexError, AssertionError, ValueError) as exc:
+        raise ReportError(UNREADABLE) from exc
+
+
+def _parse_report(data: bytes) -> dict:
     text = _decode(data)
     if "<table" not in text.lower():
         raise ReportError("That isn't an MT5 report. In the terminal: History tab, right click, Report, HTML")

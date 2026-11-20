@@ -1,0 +1,146 @@
+{
+ "ok": {
+  "account": {
+   "name": "Sample Trader",
+   "login": "51234567",
+   "currency": "USD",
+   "server": "Broker-Live",
+   "company": "Broker Ltd"
+  },
+  "trades": [
+   {
+    "id": "p70009",
+    "position": "70009",
+    "symbol": "XAUUSD.m",
+    "side": "sell",
+    "volume": 0.05,
+    "open_time": 1772414120,
+    "open_price": 2905.1,
+    "close_time": 1772416800,
+    "close_price": 2899.6,
+    "profit": 27.5,
+    "commission": -0.35,
+    "swap": -1.12,
+    "sl": null,
+    "tp": null,
+    "comment": null
+   },
+   {
+    "id": "p70011",
+    "position": "70011",
+    "symbol": "XAUUSD.m",
+    "side": "buy",
+    "volume": 0.1,
+    "open_time": 1772414120,
+    "open_price": 2905.12,
+    "close_time": 1772422801,
+    "close_price": 2925.0,
+    "profit": 198.8,
+    "commission": -0.7,
+    "swap": 0.0,
+    "sl": 2895.0,
+    "tp": 2925.0,
+    "comment": null
+   },
+   {
+    "id": "p70120",
+    "position": "70120",
+    "symbol": "XAUUSD.m",
+    "side": "sell",
+    "volume": 1.0,
+    "open_time": 1772548200,
+    "open_price": 2931.45,
+    "close_time": 1772615133,
+    "close_price": 2941.45,
+    "profit": -1000.0,
+    "commission": -7.0,
+    "swap": -24.36,
+    "sl": 2941.45,
+    "tp": null,
+    "comment": null
+   },
+   {
+    "id": "p70200",
+    "position": "70200",
+    "symbol": "EURUSD",
+    "side": "buy",
+    "volume": 0.01,
+    "open_time": 1772640000,
+    "open_price": 1.08512,
+    "close_time": 1772641200,
+    "close_price": 1.087,
+    "profit": 1.88,
+    "commission": 0.0,
+    "swap": 0.0,
+    "sl": 1.08,
+    "tp": 1.09,
+    "comment": null
+   }
+  ],
+  "cash": [
+   {
+    "id": "1001",
+    "time": 1772395200,
+    "kind": "deposit",
+    "amount": 10000.0,
+    "comment": "Deposit & welcome"
+   },
+   {
+    "id": "1003",
+    "time": 1772496000,
+    "kind": "credit",
+    "amount": 500.0,
+    "comment": "Credit in"
+   },
+   {
+    "id": "1004",
+    "time": 1772496000,
+    "kind": "credit",
+    "amount": 50.0,
+    "comment": "Bonus 5%"
+   },
+   {
+    "id": "1005",
+    "time": 1772625600,
+    "kind": "withdrawal",
+    "amount": -2500.0,
+    "comment": "Withdrawal"
+   },
+   {
+    "id": "1006",
+    "time": 1772668800,
+    "kind": "other",
+    "amount": -11.75,
+    "comment": "Platform fee"
+   },
+   {
+    "id": "2026.03.05 00:00:00:0.1",
+    "time": 1772668800,
+    "kind": "other",
+    "amount": 0.1,
+    "comment": null
+   },
+   {
+    "id": "2026.03.05 00:00:00:0.30000000000000004",
+    "time": 1772668800,
+    "kind": "other",
+    "amount": 0.30000000000000004,
+    "comment": "interest"
+   },
+   {
+    "id": "2026.03.06 00:00:00:-0.0",
+    "time": 1772755200,
+    "kind": "deposit",
+    "amount": -0.0,
+    "comment": null
+   },
+   {
+    "id": "2026.03.06 01:00:00:1.2345678901234568e+16",
+    "time": 1772758800,
+    "kind": "credit",
+    "amount": 1.2345678901234568e+16,
+    "comment": "big"
+   }
+  ]
+ }
+}

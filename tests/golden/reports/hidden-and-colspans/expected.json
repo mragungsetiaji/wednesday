@@ -1,0 +1,48 @@
+{
+ "ok": {
+  "account": {
+   "name": "Sample Trader",
+   "login": "51234567",
+   "currency": "USD",
+   "server": "Broker-Live",
+   "company": "Broker Ltd"
+  },
+  "trades": [
+   {
+    "id": "p7",
+    "position": "7",
+    "symbol": "XAUUSD",
+    "side": "buy",
+    "volume": 1.0,
+    "open_time": 1772409660,
+    "open_price": 2000.0,
+    "close_time": 1772410200,
+    "close_price": 2010.0,
+    "profit": 100.0,
+    "commission": -1.0,
+    "swap": -2.0,
+    "sl": 1990.0,
+    "tp": 2020.0,
+    "comment": null
+   },
+   {
+    "id": "p8",
+    "position": "8",
+    "symbol": "XAUUSD",
+    "side": "sell",
+    "volume": 0.5,
+    "open_time": 1772413260,
+    "open_price": 2000.0,
+    "close_time": 1772413800,
+    "close_price": 1990.0,
+    "profit": 50.0,
+    "commission": 0.0,
+    "swap": 0.0,
+    "sl": null,
+    "tp": null,
+    "comment": null
+   }
+  ],
+  "cash": []
+ }
+}

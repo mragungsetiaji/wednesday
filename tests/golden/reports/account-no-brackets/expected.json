@@ -1,0 +1,37 @@
+{
+ "ok": {
+  "account": {
+   "name": "Sample Trader",
+   "login": "51234567",
+   "company": "Broker Ltd"
+  },
+  "trades": [
+   {
+    "id": "p7",
+    "position": "7",
+    "symbol": "XAUUSD",
+    "side": "buy",
+    "volume": 1.0,
+    "open_time": 1772409660,
+    "open_price": 2000.0,
+    "close_time": 1772410200,
+    "close_price": 2010.0,
+    "profit": 1000.0,
+    "commission": -7.0,
+    "swap": 0.0,
+    "sl": null,
+    "tp": 2020.0,
+    "comment": null
+   }
+  ],
+  "cash": [
+   {
+    "id": "1",
+    "time": 1772395200,
+    "kind": "deposit",
+    "amount": 10000.0,
+    "comment": "Deposit"
+   }
+  ]
+ }
+}

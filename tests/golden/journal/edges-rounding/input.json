@@ -1,0 +1,87 @@
+{
+ "trades": [
+  {
+   "journal_id": "j-golden",
+   "id": "round1",
+   "position": "101",
+   "symbol": "EURUSD",
+   "side": "buy",
+   "volume": 0.01,
+   "open_time": 1777855800,
+   "open_price": 1.1,
+   "close_time": 1777856400,
+   "close_price": 1.1001,
+   "profit": 3.43,
+   "commission": 0.0,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "edge2",
+   "position": "2",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.1,
+   "open_time": 1777889030,
+   "open_price": 2000.25,
+   "close_time": 1777890610,
+   "close_price": 2000.4,
+   "profit": 1.5,
+   "commission": -0.7,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "edge3",
+   "position": "3",
+   "symbol": "XAUUSD",
+   "side": "sell",
+   "volume": 0.1,
+   "open_time": 1777889070,
+   "open_price": 2000.25,
+   "close_time": 1777891210,
+   "close_price": 2000.1,
+   "profit": 1.5,
+   "commission": -0.7,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "round4",
+   "position": "104",
+   "symbol": "EURUSD",
+   "side": "buy",
+   "volume": 0.01,
+   "open_time": 1777971000,
+   "open_price": 1.1,
+   "close_time": 1777971600,
+   "close_price": 1.1001,
+   "profit": 0.005,
+   "commission": 0.0,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null
+  }
+ ],
+ "cash": [
+  {
+   "journal_id": "j-golden",
+   "id": "c1",
+   "time": 1777854600,
+   "kind": "deposit",
+   "amount": 800.0,
+   "comment": null
+  }
+ ],
+ "offset": 0
+}

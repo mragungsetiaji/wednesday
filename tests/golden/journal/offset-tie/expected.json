@@ -1,0 +1,202 @@
+{
+ "summary": {
+  "gain": 0.6,
+  "abs_gain": 0.6,
+  "daily": 0.6,
+  "monthly": 19.97,
+  "drawdown": 0.0,
+  "drawdown_at": 1778026200,
+  "balance": 1006.0,
+  "equity": 1006.0,
+  "floating": 0,
+  "profit": 6.0,
+  "deposits": 1000.0,
+  "withdrawals": 0,
+  "credit": 0,
+  "other": 0,
+  "max_floating_loss": 0.0,
+  "start": 1778026200,
+  "last": 1778070581
+ },
+ "trading": {
+  "trades": 3,
+  "open": 0,
+  "won": 3,
+  "lost": 0,
+  "win_rate": 100.0,
+  "profit_factor": null,
+  "avg_win": 2.0,
+  "avg_loss": null,
+  "best": 2.0,
+  "worst": null,
+  "lots": 0.3,
+  "commission": 0.0,
+  "swap": 0.0,
+  "avg_hold": 268
+ },
+ "verification": {
+  "basis": "ohlc",
+  "trades": 3,
+  "verified": 3,
+  "coverage": 100.0,
+  "prices_checked": 6,
+  "prices_ok": 6,
+  "offset_hours": -1.0,
+  "offset_detected": true,
+  "no_prices": [],
+  "mismatched": []
+ },
+ "series": {
+  "growth": [
+   [
+    1778026200,
+    0.0
+   ],
+   [
+    1778069381,
+    0.2
+   ],
+   [
+    1778069981,
+    0.4
+   ],
+   [
+    1778070581,
+    0.6
+   ]
+  ],
+  "balance": [
+   [
+    1778026200,
+    1000.0
+   ],
+   [
+    1778069381,
+    1002.0
+   ],
+   [
+    1778069981,
+    1004.0
+   ],
+   [
+    1778070581,
+    1006.0
+   ]
+  ],
+  "equity": [
+   [
+    1778025600,
+    1000.0
+   ],
+   [
+    1778068800,
+    1000.0
+   ]
+  ],
+  "drawdown": [
+   [
+    1778025600,
+    -0.0
+   ],
+   [
+    1778068800,
+    -0.0
+   ]
+  ]
+ },
+ "monthly": [
+  {
+   "month": "2026-05",
+   "gain": 0.6,
+   "profit": 6.0,
+   "pips": 6.0,
+   "trades": 3
+  }
+ ],
+ "daily": [
+  {
+   "day": "2026-05-06",
+   "profit": 6.0,
+   "pips": 6.0,
+   "trades": 3,
+   "won": 3
+  }
+ ],
+ "trades": [
+  {
+   "journal_id": "j-golden",
+   "id": "tie0",
+   "position": "0",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.1,
+   "open_time": 1778069113,
+   "open_price": 2000.0,
+   "close_time": 1778069381,
+   "close_price": 2000.2,
+   "profit": 2.0,
+   "commission": 0.0,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null,
+   "net": 2.0,
+   "pips": 2.0,
+   "price_ok": true,
+   "verified": true,
+   "mae": 0.0,
+   "mfe": 2.0,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "tie1",
+   "position": "1",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.1,
+   "open_time": 1778069713,
+   "open_price": 2000.0,
+   "close_time": 1778069981,
+   "close_price": 2000.2,
+   "profit": 2.0,
+   "commission": 0.0,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null,
+   "net": 2.0,
+   "pips": 2.0,
+   "price_ok": true,
+   "verified": true,
+   "mae": 0.0,
+   "mfe": 2.0,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "tie2",
+   "position": "2",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.1,
+   "open_time": 1778070313,
+   "open_price": 2000.0,
+   "close_time": 1778070581,
+   "close_price": 2000.2,
+   "profit": 2.0,
+   "commission": 0.0,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null,
+   "net": 2.0,
+   "pips": 2.0,
+   "price_ok": true,
+   "verified": true,
+   "mae": 0.0,
+   "mfe": 2.0,
+   "floating": null
+  }
+ ]
+}

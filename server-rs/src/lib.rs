@@ -14,6 +14,7 @@
 
 pub mod calendar;
 pub mod config;
+pub mod journal;
 pub mod pyjson;
 pub mod scan;
 pub mod settings_routes;
@@ -46,6 +47,19 @@ pub const PORTED: &[&str] = &[
     "PUT /api/drawing-templates/{family}/{name}",
     "DELETE /api/drawing-templates/{family}/{name}",
     "PUT /api/calendar",
+    "GET /api/journals",
+    "POST /api/journals",
+    "GET /api/journals/{journal_id}",
+    "PATCH /api/journals/{journal_id}",
+    "DELETE /api/journals/{journal_id}",
+    "POST /api/journals/{journal_id}/import",
+    "PUT /api/journals/{journal_id}/trades/{trade_id}/note",
+    "POST /api/journals/{journal_id}/trades/{trade_id}/images",
+    "DELETE /api/journals/{journal_id}/trades/{trade_id}/images/{snapshot_id}",
+    "GET /api/journals/{journal_id}/entries",
+    "PATCH /api/journals/{journal_id}/entries/{entry_id}",
+    "DELETE /api/journals/{journal_id}/entries/{entry_id}",
+    "GET /api/journals/{journal_id}/trades.csv",
 ];
 
 /// The version the dashboard and `/api/health` report; `scripts/set_version.py` keeps it in step.
@@ -56,6 +70,7 @@ struct App {
     backend: SocketAddr,
     client: Client<HttpConnector, Body>,
     store: Option<Store>,
+    journals: journal::service::Cache,
 }
 
 /// The server: ported routes, then the Python server at `backend` for the rest. Without a
@@ -71,9 +86,19 @@ pub fn app(backend: SocketAddr, store: Option<Store>) -> Router {
         .route("/api/drawing-templates", get(templates_list))
         .route("/api/drawing-templates/{family}/{name}", axum::routing::put(template_put).delete(template_delete))
         .route("/api/calendar", axum::routing::put(calendar_put).fallback(forward))
+        .route("/api/journals", get(journals_list).post(journal_create))
+        .route("/api/journals/{id}", get(journal_stats).patch(journal_update).delete(journal_delete))
+        .route("/api/journals/{id}/import", axum::routing::post(journal_import))
+        .route("/api/journals/{id}/trades.csv", get(journal_csv))
+        .route("/api/journals/{id}/trades/{trade}/note", axum::routing::put(journal_note))
+        .route("/api/journals/{id}/trades/{trade}/images", axum::routing::post(journal_image_attach))
+        .route("/api/journals/{id}/trades/{trade}/images/{sid}", axum::routing::delete(journal_image_detach))
+        // Writing an entry freezes the market of the moment, which the Python engine still holds.
+        .route("/api/journals/{id}/entries", get(journal_entries).fallback(forward))
+        .route("/api/journals/{id}/entries/{entry}", axum::routing::patch(journal_entry_update).delete(journal_entry_delete))
         .route_layer(axum::middleware::map_response(served_here))
         .fallback(forward)
-        .with_state(App { backend, client, store })
+        .with_state(App { backend, client, store, journals: Default::default() })
 }
 
 /// Which server answered, for anyone debugging the move: `x-wednesday-server: rust` or `python`.
@@ -277,6 +302,184 @@ async fn calendar_put(State(app): State<App>, req: Request) -> Response {
         res.headers_mut().insert(SERVED_BY, HeaderValue::from_static("rust"));
     }
     res
+}
+
+// ---- the journal (journal/service.rs) ----
+
+/// A journal answer: the value, or Python's status and detail.
+fn journal_answer(result: Result<Value, journal::service::Fail>) -> Response {
+    match result {
+        Ok(v) => Json(v).into_response(),
+        Err(journal::service::Fail::Status(code, msg)) => {
+            detail(StatusCode::from_u16(code).unwrap_or(StatusCode::UNPROCESSABLE_ENTITY), msg)
+        }
+        Err(journal::service::Fail::Store(e)) => answer(Err(Refused::Store(e))),
+    }
+}
+
+/// The features the plugins provide, as Python reports them (a second journal needs one).
+async fn plugin_features(app: &App, headers: &HeaderMap) -> Result<Vec<String>, Response> {
+    let mut req = Request::new(Body::empty());
+    *req.uri_mut() = Uri::from_static("/api/plugins");
+    for name in [header::HOST, header::USER_AGENT] {
+        if let Some(v) = headers.get(&name) {
+            req.headers_mut().insert(name, v.clone());
+        }
+    }
+    let res = forward(State(app.clone()), req).await;
+    if !res.status().is_success() {
+        return Err(res);
+    }
+    let bytes = axum::body::to_bytes(res.into_body(), 4 * 1024 * 1024)
+        .await
+        .map_err(|_| detail(StatusCode::BAD_GATEWAY, "The screener isn't answering. Restart Wednesday if this stays."))?;
+    let v: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    Ok(v["features"].as_array().map(|a| a.iter().filter_map(|f| f.as_str().map(String::from)).collect()).unwrap_or_default())
+}
+
+async fn journals_list(State(app): State<App>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    let features = match plugin_features(&app, req.headers()).await {
+        Ok(f) => f,
+        Err(res) => return res,
+    };
+    journal_answer(journal::service::list(&store, &features).await)
+}
+
+async fn journal_create(State(app): State<App>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    let features = match plugin_features(&app, req.headers()).await {
+        Ok(f) => f,
+        Err(res) => return res,
+    };
+    match object_body(req).await {
+        Ok(body) => journal_answer(journal::service::create(&store, &body, &features).await),
+        Err(res) => res,
+    }
+}
+
+async fn journal_stats(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    match app.admit(req).await {
+        Ok((store, _)) => journal_answer(journal::service::stats(&store, &app.journals, &id).await),
+        Err(res) => res,
+    }
+}
+
+async fn journal_update(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    match object_body(req).await {
+        Ok(body) => journal_answer(journal::service::update(&store, &app.journals, &id, &body).await),
+        Err(res) => res,
+    }
+}
+
+async fn journal_delete(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    match app.admit(req).await {
+        Ok((store, _)) => journal_answer(journal::service::delete(&store, &app.journals, &id).await),
+        Err(res) => res,
+    }
+}
+
+async fn journal_import(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    // The journal and whether it takes a report, before reading a large body.
+    match journal::service::get(&store, &id).await {
+        Ok(j) => {
+            if let Err(e) = journal::service::check_writable(&j) {
+                return journal_answer(Err(e));
+            }
+        }
+        Err(e) => return journal_answer(Err(e)),
+    }
+    let data = match axum::body::to_bytes(req.into_body(), journal::service::MAX_REPORT_BYTES).await {
+        Ok(d) => d,
+        Err(_) => return detail(StatusCode::PAYLOAD_TOO_LARGE, "The report is larger than 50 MB"),
+    };
+    journal_answer(journal::service::import_report(&store, &app.journals, &id, &data).await)
+}
+
+async fn journal_note(State(app): State<App>, Path((id, trade)): Path<(String, String)>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    match object_body(req).await {
+        Ok(body) => journal_answer(journal::service::set_note(&store, &app.journals, &id, &trade, &body).await),
+        Err(res) => res,
+    }
+}
+
+async fn journal_image_attach(State(app): State<App>, Path((id, trade)): Path<(String, String)>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    match object_body(req).await {
+        Ok(body) => journal_answer(journal::service::attach_image(&store, &app.journals, &id, &trade, &body).await),
+        Err(res) => res,
+    }
+}
+
+async fn journal_image_detach(State(app): State<App>, Path((id, trade, sid)): Path<(String, String, String)>,
+                              req: Request) -> Response {
+    match app.admit(req).await {
+        Ok((store, _)) => journal_answer(journal::service::detach_image(&store, &app.journals, &id, &trade, &sid).await),
+        Err(res) => res,
+    }
+}
+
+async fn journal_entries(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    match app.admit(req).await {
+        Ok((store, _)) => journal_answer(journal::service::list_entries(&store, &id).await),
+        Err(res) => res,
+    }
+}
+
+async fn journal_entry_update(State(app): State<App>, Path((id, entry)): Path<(String, String)>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    match object_body(req).await {
+        Ok(body) => journal_answer(journal::service::update_entry(&store, &id, &entry, &body).await),
+        Err(res) => res,
+    }
+}
+
+async fn journal_entry_delete(State(app): State<App>, Path((id, entry)): Path<(String, String)>, req: Request) -> Response {
+    match app.admit(req).await {
+        Ok((store, _)) => journal_answer(journal::service::delete_entry(&store, &id, &entry).await),
+        Err(res) => res,
+    }
+}
+
+async fn journal_csv(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    match app.admit(req).await {
+        Ok((store, _)) => match journal::service::trades_csv(&store, &app.journals, &id).await {
+            Ok((csv, name)) => {
+                let mut res = csv.into_response();
+                res.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("text/csv; charset=utf-8"));
+                if let Ok(v) = HeaderValue::from_str(&format!("attachment; filename=\"{name}\"")) {
+                    res.headers_mut().insert(header::CONTENT_DISPOSITION, v);
+                }
+                res
+            }
+            Err(e) => journal_answer(Err(e)),
+        },
+        Err(res) => res,
+    }
 }
 
 async fn health() -> Json<serde_json::Value> {

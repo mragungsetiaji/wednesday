@@ -87,8 +87,8 @@ request to the Python server, streaming the answer back. The Tauri shell runs it
 front of the sidecar, so the app works the same at every step. Each answer carries
 `x-wednesday-server: rust` or `python`, to see which one served it.
 
-Ported so far: `/api/health`, workspaces, drawing templates and the calendar settings
-(`PUT /api/calendar`).
+Ported so far: `/api/health`, workspaces, drawing templates, the calendar settings
+(`PUT /api/calendar`) and the journal (`/api/journals...`, except writing an entry).
 
 - **The database.** `server-rs/src/store.rs` opens the same database as Python
   (`XAU_DB_URL` from the environment or the home folder's `.env`, else
@@ -101,6 +101,13 @@ Ported so far: `/api/health`, workspaces, drawing templates and the calendar set
 - **Drawings** stay in Python until the drawing alerts move (step 9): saving a drawing
   resets the alert checker's cache in the Python process, and drawings are filed under
   the engine's current source and symbol. Their storage is ported already.
+- **The journal** is in `server-rs/src/journal/`: the MT5 report import (`report.rs`, its own
+  HTML tokenizer copying Python's `HTMLParser`), the stats (`stats.rs`, numpy and pandas
+  arithmetic copied to the last bit) and the routes (`service.rs`). `tests/golden/reports/` and
+  `tests/golden/journal/` hold the reference output both must give (`tests/test_report_golden.py`,
+  `tests/test_journal_golden.py`; the stats files match Python 3.11's `sum()`). Writing an entry
+  (`POST .../entries`) stays in Python: it freezes the market of the moment, which the engine holds.
+  A second journal needs the `journal.multi` feature, which Rust asks Python's `/api/plugins` for.
 - **The calendar** is split: Rust checks and saves its settings (`server-rs/src/calendar.rs`),
   then answers with Python's `GET /api/calendar`. The weekly fetch and the past reactions
   stay in Python (they read the live M1 bars), and `news.Calendar` reads its settings from

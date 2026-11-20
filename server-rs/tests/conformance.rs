@@ -231,3 +231,187 @@ async fn the_ported_routes_answer_as_python_does() {
         assert_eq!(p.as_ref().map(without_saved_at), r.as_ref().map(without_saved_at), "{key}");
     }
 }
+
+// ---- the journal (#96, step 9c) ----
+
+const REPORT: &str = r#"<html><body><table>
+<tr><th colspan="14"><div><b>Trade History Report</b></div></th></tr>
+<tr><th colspan="3">Name:</th><th colspan="11"><b>Someone</b></th></tr>
+<tr><th colspan="3">Account:</th><th colspan="11"><b>51234567 (USD, Broker-Live, real, Hedge)</b></th></tr>
+<tr><th colspan="3">Company:</th><th colspan="11"><b>Broker Ltd</b></th></tr>
+<tr><th colspan="14"><div><b>Positions</b></div></th></tr>
+<tr><td>Time</td><td>Position</td><td>Symbol</td><td>Type</td><td class="hidden" colspan="8"></td><td>Volume</td><td>Price</td>
+<td>S / L</td><td>T / P</td><td>Time</td><td>Price</td><td>Commission</td><td>Swap</td><td>Profit</td></tr>
+<tr><td>2026.03.02 00:01:00</td><td>7</td><td>XAUUSD.m</td><td>buy</td><td class="hidden" colspan="8"></td><td>1</td><td>2 000.00</td>
+<td></td><td>2 020.00</td><td>2026.03.02 00:10:00</td><td>2 010.00</td><td>-7.00</td><td>0.00</td><td>1 000.00</td></tr>
+<tr><td>2026.03.02 00:12:30</td><td>9</td><td>XAUUSD.m</td><td>sell</td><td class="hidden" colspan="8"></td><td>0.5</td><td>2 009.50</td>
+<td>2 015.00</td><td></td><td>2026.03.02 00:20:10</td><td>2 004.00</td><td>-3.50</td><td>-1.20</td><td>275.00</td></tr>
+<tr><td>2026.03.02 00:21:00</td><td>11</td><td>EURUSD</td><td>buy</td><td class="hidden" colspan="8"></td><td>0.1</td><td>1.0850</td>
+<td></td><td></td><td>2026.03.02 00:25:00</td><td>1.0840</td><td>0.00</td><td>0.00</td><td>-10.00</td></tr>
+<tr><td colspan="10"></td><td>-10.50</td><td>-1.20</td><td>1 265.00</td></tr>
+<tr><th colspan="14"><div><b>Deals</b></div></th></tr>
+<tr><td>Time</td><td>Deal</td><td>Symbol</td><td>Type</td><td>Direction</td><td>Volume</td><td>Price</td><td>Order</td>
+<td>Commission</td><td>Fee</td><td>Swap</td><td>Profit</td><td>Balance</td><td>Comment</td></tr>
+<tr><td>2026.03.01 20:00:00</td><td>1</td><td></td><td>balance</td><td></td><td></td><td></td><td></td>
+<td>0.00</td><td>0.00</td><td>0.00</td><td>10 000.00</td><td>10 000.00</td><td>Deposit</td></tr>
+<tr><td>2026.03.02 00:30:00</td><td>3</td><td></td><td>credit</td><td></td><td></td><td></td><td></td>
+<td>0.00</td><td>0.00</td><td>0.00</td><td>50.00</td><td>11 315.00</td><td>Bonus</td></tr>
+<tr><th colspan="14"><div><b>Results</b></div></th></tr>
+</table></body></html>"#;
+
+/// The same M1 bars in a database: gold around the report's trades, on the price clock.
+async fn seed_bars(store: &Store) {
+    let start = 1_772_409_600; // 2026-03-02 00:00 UTC
+    for m in 0..40i64 {
+        let base = 2000.0 + (m as f64) * 0.5 - if m > 12 { (m - 12) as f64 * 0.9 } else { 0.0 };
+        let args = vec![
+            wednesday_rs::store::Arg::Str(Some("tradingview".into())), wednesday_rs::store::Arg::Str(Some("XAUUSD".into())),
+            wednesday_rs::store::Arg::Int(Some(start + m * 60)), wednesday_rs::store::Arg::Float(Some(base)),
+            wednesday_rs::store::Arg::Float(Some(base + 6.0)), wednesday_rs::store::Arg::Float(Some(base - 3.0)),
+            wednesday_rs::store::Arg::Float(Some(base + 0.25)), wednesday_rs::store::Arg::Float(Some(10.0)),
+        ];
+        store.execute("INSERT INTO m1_bars (source, symbol, time, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                      args).await.unwrap();
+    }
+}
+
+async fn call_raw(addr: SocketAddr, method: &str, path: &str, body: &[u8]) -> (u16, String) {
+    let r = axum::http::Request::builder().method(method).uri(format!("http://{addr}{}", encode(path)))
+        .body(Body::from(body.to_vec())).unwrap();
+    let res = Client::builder(TokioExecutor::new()).build_http().request(r).await.unwrap();
+    let status = res.status().as_u16();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (status, String::from_utf8_lossy(&bytes).into_owned())
+}
+
+/// A server's answer with its own journal id as `J`, and times (which differ by when each server
+/// wrote them) as `T`.
+fn normal(text: &str, jid: &str) -> Value {
+    fn times(v: Value) -> Value {
+        match v {
+            Value::String(s) if s.len() >= 25 && s.as_bytes().get(10) == Some(&b'T') && s.ends_with("+00:00") => json!("T"),
+            Value::Array(a) => Value::Array(a.into_iter().map(times).collect()),
+            Value::Object(m) => Value::Object(m.into_iter().map(|(k, v)| (k, times(v))).collect()),
+            other => other,
+        }
+    }
+    let text = if jid.is_empty() { text.to_string() } else { text.replace(jid, "J") };
+    serde_json::from_str(&text).map(times).unwrap_or(Value::String(text))
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_journal_answers_as_python_does() {
+    let dir = std::env::temp_dir().join(format!("wed-conformance-journal-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("data/snapshots")).unwrap();
+    let port = free_port();
+    let Some(_python) = start_python(&dir, port) else { return };
+    let python: SocketAddr = ([127, 0, 0, 1], port).into();
+    let python_store = Store::open(&format!("sqlite:///{}", dir.join("python.db").display()), &dir).await.unwrap();
+    let rust_store = Store::open(&format!("sqlite:///{}", dir.join("rust.db").display()), &dir).await.unwrap();
+    seed_bars(&python_store).await;
+    seed_bars(&rust_store).await;
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let rust = l.local_addr().unwrap();
+    tokio::spawn(wednesday_rs::serve(l, python, Some(rust_store.clone())));
+
+    let shot = "0123456789abcdef0123456789abcdef";
+    std::fs::write(dir.join(format!("data/snapshots/{shot}.png")), b"\x89PNG\r\n\x1a\n").unwrap();
+    let other_shot = "ffffffffffffffffffffffffffffffff";
+
+    // (method, path with {j} for the server's journal, body: JSON, raw bytes, or none)
+    enum B {
+        J(Value),
+        Raw(Vec<u8>),
+        None,
+    }
+    let report16: Vec<u8> = [0xFFu8, 0xFE].into_iter()
+        .chain(REPORT.encode_utf16().flat_map(|u| u.to_le_bytes())).collect();
+    let steps: Vec<(&str, String, B)> = vec![
+        ("GET", "/api/journals".into(), B::None),
+        ("POST", "/api/journals".into(), B::J(json!({"name": " "}))),
+        ("POST", "/api/journals".into(), B::J(json!({"name": "Main", "login": "12a"}))),
+        ("POST", "/api/journals".into(), B::J(json!([1]))),
+        ("POST", "/api/journals".into(), B::J(json!({"name": format!("  {}  ", "M".repeat(130)), "login": " 51234567 "}))),
+        ("POST", "/api/journals".into(), B::J(json!({"name": "Second"}))),
+        ("GET", "/api/journals".into(), B::None),
+        ("PATCH", "/api/journals/{j}".into(), B::J(json!({"time_offset": "3"}))),
+        ("PATCH", "/api/journals/{j}".into(), B::J(json!({"time_offset": 20}))),
+        ("PATCH", "/api/journals/{j}".into(), B::J(json!({"time_offset": "x"}))),
+        ("PATCH", "/api/journals/{j}".into(), B::J(json!({"show_weekends": "yes"}))),
+        ("PATCH", "/api/journals/{j}".into(), B::J(json!({"name": " "}))),
+        ("PATCH", "/api/journals/{j}".into(), B::J(json!({"name": "Gold", "show_weekends": true, "time_offset": 0.000625}))),
+        ("PATCH", "/api/journals/{j}".into(), B::J(json!({"time_offset": ""}))),
+        ("PATCH", "/api/journals/nope".into(), B::J(json!({}))),
+        ("PATCH", "/api/journals/nope".into(), B::J(json!([1]))),
+        ("GET", "/api/journals/nope".into(), B::None),
+        ("POST", "/api/journals/{j}/import".into(), B::Raw(b"<html>no table</html>".to_vec())),
+        ("POST", "/api/journals/{j}/import".into(), B::Raw(REPORT.replace("51234567 (USD", "7654321 (USD").into_bytes())),
+        ("POST", "/api/journals/nope/import".into(), B::Raw(REPORT.as_bytes().to_vec())),
+        ("POST", "/api/journals/{j}/import".into(), B::Raw(report16)),
+        ("GET", "/api/journals/{j}".into(), B::None),
+        ("PUT", "/api/journals/{j}/trades/p7/note".into(), B::J(json!({"note": "  Clean break  ", "tags": [" A+ ", "a+", "", "London"]}))),
+        ("PUT", "/api/journals/{j}/trades/p7/note".into(), B::J(json!({"note": "x", "tags": "a"}))),
+        ("PUT", "/api/journals/{j}/trades/p9/note".into(), B::J(json!({"note": "", "tags": []}))),
+        ("POST", "/api/journals/{j}/trades/p7/images".into(), B::J(json!({"snapshot_id": other_shot}))),
+        ("POST", "/api/journals/{j}/trades/p99/images".into(), B::J(json!({"snapshot_id": shot}))),
+        ("POST", "/api/journals/{j}/trades/p9/images".into(), B::J(json!({"snapshot_id": shot}))),
+        ("POST", "/api/journals/{j}/trades/p9/images".into(), B::J(json!({"snapshot_id": shot}))),
+        ("GET", "/api/journals/{j}".into(), B::None),
+        ("GET", "/api/journals/{j}/trades.csv".into(), B::None),
+        ("GET", "/api/journals/{j}/entries".into(), B::None),
+        ("PATCH", "/api/journals/{j}/entries/e1".into(), B::J(json!({"text": "  Asia was quiet ", "tags": "ab", "mood": "4"}))),
+        ("PATCH", "/api/journals/{j}/entries/e1".into(), B::J(json!({"mood": 9}))),
+        ("PATCH", "/api/journals/{j}/entries/e1".into(), B::J(json!({"mood": "x"}))),
+        ("PATCH", "/api/journals/{j}/entries/e9".into(), B::J(json!({}))),
+        ("GET", "/api/journals/{j}/entries".into(), B::None),
+        ("DELETE", "/api/journals/{j}/entries/e2".into(), B::None),
+        ("DELETE", "/api/journals/{j}/entries/e2".into(), B::None),
+        ("DELETE", format!("/api/journals/{{j}}/trades/p9/images/{other_shot}"), B::None),
+        ("DELETE", format!("/api/journals/{{j}}/trades/p9/images/{shot}"), B::None),
+        ("GET", "/api/journals/{j}".into(), B::None),
+        ("DELETE", "/api/journals/nope".into(), B::None),
+        ("DELETE", "/api/journals/{j}".into(), B::None),
+        ("GET", "/api/journals".into(), B::None),
+    ];
+
+    let (mut pj, mut rj) = (String::new(), String::new());
+    let mut failures = Vec::new();
+    for (method, path, body) in steps {
+        if path.contains("entries/e1") && method == "PATCH" && !pj.is_empty() {
+            // Entries are written with the market of the moment (still Python's): put the same two in each.
+            for (store, jid) in [(&python_store, &pj), (&rust_store, &rj)] {
+                for (id, at) in [("e1", "2026-03-02T09:00:00.000000+00:00"), ("e2", "2026-03-02T10:00:00.000000+00:00")] {
+                    let a = |s: &str| wednesday_rs::store::Arg::Str(Some(s.into()));
+                    store.upsert("journal_entries", vec![("id", a(id)), ("journal_id", a(jid)), ("kind", a("review")),
+                                                         ("created_at", a(at)), ("text", a("Asia")), ("tags", a("[]")),
+                                                         ("market", a("{\"price\": 2000.5}"))], &["id"]).await.unwrap();
+                }
+            }
+        }
+        let mut answers = Vec::new();
+        for (addr, jid) in [(python, &pj), (rust, &rj)] {
+            let p = path.replace("{j}", jid);
+            let (status, text) = match &body {
+                B::J(v) => {
+                    let a = call(addr, method, &p, "", Some(v)).await;
+                    (a.status, a.body.to_string())
+                }
+                B::Raw(b) => call_raw(addr, method, &p, b).await,
+                B::None => call_raw(addr, method, &p, b"").await,
+            };
+            answers.push((status, text));
+        }
+        // The new journal's id, per server.
+        if method == "POST" && path == "/api/journals" && answers[0].0 == 200 {
+            pj = normal(&answers[0].1, "")["id"].as_str().unwrap().to_string();
+            rj = normal(&answers[1].1, "")["id"].as_str().unwrap().to_string();
+        }
+        let (p, r) = (normal(&answers[0].1, &pj), normal(&answers[1].1, &rj));
+        let fastapi_list = p.get("detail").is_some_and(Value::is_array);
+        if answers[0].0 != answers[1].0 || (!fastapi_list && p != r) {
+            failures.push(format!("{method} {path}\n    python {} {}\n    rust   {} {}", answers[0].0, p, answers[1].0, r));
+        }
+    }
+    assert!(failures.is_empty(), "Rust answered differently:\n{}", failures.join("\n"));
+}

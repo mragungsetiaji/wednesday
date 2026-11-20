@@ -1,0 +1,268 @@
+{
+ "summary": {
+  "gain": 0.63,
+  "abs_gain": 0.63,
+  "daily": 0.46,
+  "monthly": 15.14,
+  "drawdown": 1.12,
+  "drawdown_at": 1777889520,
+  "balance": 805.03,
+  "equity": 805.03,
+  "floating": 0,
+  "profit": 5.04,
+  "deposits": 800.0,
+  "withdrawals": 0,
+  "credit": 0,
+  "other": 0,
+  "max_floating_loss": -5.5,
+  "start": 1777854600,
+  "last": 1777971600
+ },
+ "trading": {
+  "trades": 4,
+  "open": 0,
+  "won": 4,
+  "lost": 0,
+  "win_rate": 100.0,
+  "profit_factor": null,
+  "avg_win": 1.26,
+  "avg_loss": null,
+  "best": 3.43,
+  "worst": null,
+  "lots": 0.22,
+  "commission": -1.4,
+  "swap": 0.0,
+  "avg_hold": 1230
+ },
+ "verification": {
+  "basis": "ohlc",
+  "trades": 4,
+  "verified": 1,
+  "coverage": 32.11,
+  "prices_checked": 2,
+  "prices_ok": 2,
+  "offset_hours": 0.0,
+  "offset_detected": false,
+  "no_prices": [
+   "EURUSD"
+  ],
+  "mismatched": []
+ },
+ "series": {
+  "growth": [
+   [
+    1777854600,
+    0.0
+   ],
+   [
+    1777856400,
+    0.4288
+   ],
+   [
+    1777890610,
+    0.5287
+   ],
+   [
+    1777891210,
+    0.6287
+   ],
+   [
+    1777971600,
+    0.6294
+   ]
+  ],
+  "balance": [
+   [
+    1777854600,
+    800.0
+   ],
+   [
+    1777856400,
+    803.43
+   ],
+   [
+    1777890610,
+    804.23
+   ],
+   [
+    1777891210,
+    805.03
+   ],
+   [
+    1777971600,
+    805.03
+   ]
+  ],
+  "equity": [
+   [
+    1777852800,
+    800.0
+   ],
+   [
+    1777856400,
+    803.43
+   ],
+   [
+    1777885200,
+    803.43
+   ],
+   [
+    1777888800,
+    797.93
+   ],
+   [
+    1777971600,
+    805.035
+   ]
+  ],
+  "drawdown": [
+   [
+    1777852800,
+    -0.0
+   ],
+   [
+    1777856400,
+    -0.0
+   ],
+   [
+    1777885200,
+    -0.0
+   ],
+   [
+    1777888800,
+    -1.1153
+   ],
+   [
+    1777971600,
+    -0.2348
+   ]
+  ]
+ },
+ "monthly": [
+  {
+   "month": "2026-05",
+   "gain": 0.63,
+   "profit": 5.04,
+   "pips": 5.0,
+   "trades": 4
+  }
+ ],
+ "daily": [
+  {
+   "day": "2026-05-04",
+   "profit": 5.03,
+   "pips": 4.0,
+   "trades": 3,
+   "won": 3
+  },
+  {
+   "day": "2026-05-05",
+   "profit": 0.01,
+   "pips": 1.0,
+   "trades": 1,
+   "won": 1
+  }
+ ],
+ "trades": [
+  {
+   "journal_id": "j-golden",
+   "id": "round1",
+   "position": "101",
+   "symbol": "EURUSD",
+   "side": "buy",
+   "volume": 0.01,
+   "open_time": 1777855800,
+   "open_price": 1.1,
+   "close_time": 1777856400,
+   "close_price": 1.1001,
+   "profit": 3.43,
+   "commission": 0.0,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null,
+   "net": 3.43,
+   "pips": 1.0,
+   "price_ok": null,
+   "verified": false,
+   "mae": null,
+   "mfe": null,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "edge2",
+   "position": "2",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.1,
+   "open_time": 1777889030,
+   "open_price": 2000.25,
+   "close_time": 1777890610,
+   "close_price": 2000.4,
+   "profit": 1.5,
+   "commission": -0.7,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null,
+   "net": 0.8,
+   "pips": 1.5,
+   "price_ok": true,
+   "verified": true,
+   "mae": -5.5,
+   "mfe": 6.5,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "edge3",
+   "position": "3",
+   "symbol": "XAUUSD",
+   "side": "sell",
+   "volume": 0.1,
+   "open_time": 1777889070,
+   "open_price": 2000.25,
+   "close_time": 1777891210,
+   "close_price": 2000.1,
+   "profit": 1.5,
+   "commission": -0.7,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null,
+   "net": 0.8,
+   "pips": 1.5,
+   "price_ok": true,
+   "verified": false,
+   "mae": null,
+   "mfe": null,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "round4",
+   "position": "104",
+   "symbol": "EURUSD",
+   "side": "buy",
+   "volume": 0.01,
+   "open_time": 1777971000,
+   "open_price": 1.1,
+   "close_time": 1777971600,
+   "close_price": 1.1001,
+   "profit": 0.005,
+   "commission": 0.0,
+   "swap": 0.0,
+   "sl": null,
+   "tp": null,
+   "comment": null,
+   "net": 0.005,
+   "pips": 1.0,
+   "price_ok": null,
+   "verified": false,
+   "mae": null,
+   "mfe": null,
+   "floating": null
+  }
+ ]
+}

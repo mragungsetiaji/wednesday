@@ -1,0 +1,917 @@
+{
+ "summary": {
+  "gain": -1.44,
+  "abs_gain": -1.34,
+  "daily": -0.12,
+  "monthly": -3.68,
+  "drawdown": 6.52,
+  "drawdown_at": 1772549160,
+  "balance": 5182.96,
+  "equity": 5182.96,
+  "floating": 0,
+  "profit": -67.04,
+  "deposits": 5000.0,
+  "withdrawals": 0,
+  "credit": 250.0,
+  "other": 0,
+  "max_floating_loss": -247.54,
+  "start": 1772411400,
+  "last": 1773428359
+ },
+ "trading": {
+  "trades": 15,
+  "open": 0,
+  "won": 9,
+  "lost": 6,
+  "win_rate": 60.0,
+  "profit_factor": 0.68,
+  "avg_win": 15.68,
+  "avg_loss": -34.69,
+  "best": 52.24,
+  "worst": -72.5,
+  "lots": 1.24,
+  "commission": -8.68,
+  "swap": -0.36,
+  "avg_hold": 16685
+ },
+ "verification": {
+  "basis": "ohlc",
+  "trades": 15,
+  "verified": 12,
+  "coverage": 74.29,
+  "prices_checked": 30,
+  "prices_ok": 26,
+  "offset_hours": 0.0,
+  "offset_detected": true,
+  "no_prices": [],
+  "mismatched": [
+   "p40000017",
+   "p40000031",
+   "p40000052"
+  ]
+ },
+ "series": {
+  "growth": [
+   [
+    1772411400,
+    0.0
+   ],
+   [
+    1772528737,
+    -0.978
+   ],
+   [
+    1772556550,
+    -2.0116
+   ],
+   [
+    1772556550,
+    -2.6628
+   ],
+   [
+    1772563418,
+    -4.1128
+   ],
+   [
+    1772712276,
+    -3.8208
+   ],
+   [
+    1772712276,
+    -3.3288
+   ],
+   [
+    1772747241,
+    -3.3388
+   ],
+   [
+    1772798400,
+    -3.3388
+   ],
+   [
+    1772823954,
+    -3.2764
+   ],
+   [
+    1773029617,
+    -3.3141
+   ],
+   [
+    1773029617,
+    -3.2953
+   ],
+   [
+    1773336704,
+    -3.1945
+   ],
+   [
+    1773375923,
+    -3.1602
+   ],
+   [
+    1773406027,
+    -2.5471
+   ],
+   [
+    1773406027,
+    -1.5537
+   ],
+   [
+    1773428359,
+    -1.4391
+   ]
+  ],
+  "balance": [
+   [
+    1772411400,
+    5000.0
+   ],
+   [
+    1772528737,
+    4951.1
+   ],
+   [
+    1772556550,
+    4899.42
+   ],
+   [
+    1772556550,
+    4866.86
+   ],
+   [
+    1772563418,
+    4794.36
+   ],
+   [
+    1772712276,
+    4808.96
+   ],
+   [
+    1772712276,
+    4833.56
+   ],
+   [
+    1772747241,
+    4833.06
+   ],
+   [
+    1772798400,
+    5083.06
+   ],
+   [
+    1772823954,
+    5086.34
+   ],
+   [
+    1773029617,
+    5084.36
+   ],
+   [
+    1773029617,
+    5085.35
+   ],
+   [
+    1773336704,
+    5090.65
+   ],
+   [
+    1773375923,
+    5092.45
+   ],
+   [
+    1773406027,
+    5124.69
+   ],
+   [
+    1773406027,
+    5176.93
+   ],
+   [
+    1773428359,
+    5182.96
+   ]
+  ],
+  "equity": [
+   [
+    1772409600,
+    5000.0
+   ],
+   [
+    1772510400,
+    4982.72
+   ],
+   [
+    1772514000,
+    4970.08
+   ],
+   [
+    1772517600,
+    4975.46
+   ],
+   [
+    1772521200,
+    4967.38
+   ],
+   [
+    1772524800,
+    4920.08
+   ],
+   [
+    1772528400,
+    4848.92
+   ],
+   [
+    1772532000,
+    4843.22
+   ],
+   [
+    1772535600,
+    4847.44
+   ],
+   [
+    1772539200,
+    4797.04
+   ],
+   [
+    1772542800,
+    4767.42
+   ],
+   [
+    1772546400,
+    4703.56
+   ],
+   [
+    1772550000,
+    4706.12
+   ],
+   [
+    1772553600,
+    4773.66
+   ],
+   [
+    1772557200,
+    4797.26
+   ],
+   [
+    1772560800,
+    4790.56
+   ],
+   [
+    1772708400,
+    4794.36
+   ],
+   [
+    1772712000,
+    4808.96
+   ],
+   [
+    1772744400,
+    4833.06
+   ],
+   [
+    1772798400,
+    5083.06
+   ],
+   [
+    1772816400,
+    5081.3
+   ],
+   [
+    1772820000,
+    5079.54
+   ],
+   [
+    1772823600,
+    5086.1
+   ],
+   [
+    1773025200,
+    5084.51
+   ],
+   [
+    1773028800,
+    5080.61
+   ],
+   [
+    1773334800,
+    5090.65
+   ],
+   [
+    1773370800,
+    5089.91
+   ],
+   [
+    1773374400,
+    5089.55
+   ],
+   [
+    1773392400,
+    5092.45
+   ],
+   [
+    1773396000,
+    5172.45
+   ],
+   [
+    1773399600,
+    5187.49
+   ],
+   [
+    1773403200,
+    5124.69
+   ],
+   [
+    1773414000,
+    5165.32
+   ],
+   [
+    1773417600,
+    5167.75
+   ],
+   [
+    1773421200,
+    5174.77
+   ],
+   [
+    1773424800,
+    5181.07
+   ]
+  ],
+  "drawdown": [
+   [
+    1772409600,
+    -0.0
+   ],
+   [
+    1772510400,
+    -0.3727
+   ],
+   [
+    1772514000,
+    -0.6254
+   ],
+   [
+    1772517600,
+    -0.7342
+   ],
+   [
+    1772521200,
+    -1.2799
+   ],
+   [
+    1772524800,
+    -2.2199
+   ],
+   [
+    1772528400,
+    -3.6341
+   ],
+   [
+    1772532000,
+    -3.7474
+   ],
+   [
+    1772535600,
+    -3.6635
+   ],
+   [
+    1772539200,
+    -4.6651
+   ],
+   [
+    1772542800,
+    -5.2538
+   ],
+   [
+    1772546400,
+    -6.5229
+   ],
+   [
+    1772550000,
+    -6.4721
+   ],
+   [
+    1772553600,
+    -5.1298
+   ],
+   [
+    1772557200,
+    -4.6608
+   ],
+   [
+    1772560800,
+    -4.7939
+   ],
+   [
+    1772708400,
+    -4.7184
+   ],
+   [
+    1772712000,
+    -4.4283
+   ],
+   [
+    1772744400,
+    -3.9493
+   ],
+   [
+    1772798400,
+    -3.9493
+   ],
+   [
+    1772816400,
+    -3.9826
+   ],
+   [
+    1772820000,
+    -4.0158
+   ],
+   [
+    1772823600,
+    -3.8919
+   ],
+   [
+    1773025200,
+    -3.9219
+   ],
+   [
+    1773028800,
+    -3.9956
+   ],
+   [
+    1773334800,
+    -3.8059
+   ],
+   [
+    1773370800,
+    -3.8199
+   ],
+   [
+    1773374400,
+    -3.8267
+   ],
+   [
+    1773392400,
+    -3.7719
+   ],
+   [
+    1773396000,
+    -2.2602
+   ],
+   [
+    1773399600,
+    -1.976
+   ],
+   [
+    1773403200,
+    -3.1626
+   ],
+   [
+    1773414000,
+    -2.3949
+   ],
+   [
+    1773417600,
+    -2.349
+   ],
+   [
+    1773421200,
+    -2.2163
+   ],
+   [
+    1773424800,
+    -2.0973
+   ]
+  ]
+ },
+ "monthly": [
+  {
+   "month": "2026-03",
+   "gain": -1.44,
+   "profit": -67.04,
+   "pips": -76.6,
+   "trades": 15
+  }
+ ],
+ "daily": [
+  {
+   "day": "2026-03-03",
+   "profit": -205.64,
+   "pips": -111.9,
+   "trades": 4,
+   "won": 0
+  },
+  {
+   "day": "2026-03-05",
+   "profit": 38.7,
+   "pips": 14.6,
+   "trades": 3,
+   "won": 2
+  },
+  {
+   "day": "2026-03-06",
+   "profit": 3.28,
+   "pips": 4.8,
+   "trades": 1,
+   "won": 1
+  },
+  {
+   "day": "2026-03-09",
+   "profit": -0.99,
+   "pips": -6.7,
+   "trades": 2,
+   "won": 1
+  },
+  {
+   "day": "2026-03-12",
+   "profit": 5.3,
+   "pips": -68.7,
+   "trades": 1,
+   "won": 1
+  },
+  {
+   "day": "2026-03-13",
+   "profit": 92.31,
+   "pips": 91.3,
+   "trades": 4,
+   "won": 4
+  }
+ ],
+ "trades": [
+  {
+   "journal_id": "j-golden",
+   "id": "p40000003",
+   "position": "40000003",
+   "symbol": "XAUUSD",
+   "side": "sell",
+   "volume": 0.08,
+   "open_time": 1772511901,
+   "open_price": 2315.16,
+   "close_time": 1772556550,
+   "close_price": 2321.55,
+   "profit": -51.12,
+   "commission": -0.56,
+   "swap": -0.0,
+   "sl": 2340.93,
+   "tp": 2308.41,
+   "comment": null,
+   "net": -51.68,
+   "pips": -63.9,
+   "price_ok": true,
+   "verified": true,
+   "mae": -90.64,
+   "mfe": 7.6,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "ag0",
+   "position": "40000003",
+   "symbol": "XAGUSD",
+   "side": "sell",
+   "volume": 0.08,
+   "open_time": 1772511901,
+   "open_price": 28.939,
+   "close_time": 1772556550,
+   "close_price": 29.019,
+   "profit": -32.0,
+   "commission": -0.56,
+   "swap": -0.0,
+   "sl": 2340.93,
+   "tp": 2308.41,
+   "comment": null,
+   "net": -32.56,
+   "pips": -8.0,
+   "price_ok": true,
+   "verified": true,
+   "mae": -56.8,
+   "mfe": 4.4,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "p40000010",
+   "position": "40000010",
+   "symbol": "XAUUSD",
+   "side": "sell",
+   "volume": 0.1,
+   "open_time": 1772516270,
+   "open_price": 2316.48,
+   "close_time": 1772563418,
+   "close_price": 2323.66,
+   "profit": -71.8,
+   "commission": -0.7,
+   "swap": -0.0,
+   "sl": 2354.95,
+   "tp": 2310.91,
+   "comment": null,
+   "net": -72.5,
+   "pips": -71.8,
+   "price_ok": true,
+   "verified": true,
+   "mae": -100.1,
+   "mfe": 22.7,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "p40000017",
+   "position": "40000017",
+   "symbol": "XAUUSD",
+   "side": "sell",
+   "volume": 0.1,
+   "open_time": 1772522717,
+   "open_price": 2323.09,
+   "close_time": 1772528737,
+   "close_price": 2319.91,
+   "profit": -48.2,
+   "commission": -0.7,
+   "swap": -0.0,
+   "sl": 2319.91,
+   "tp": 2309.25,
+   "comment": null,
+   "net": -48.900000000000006,
+   "pips": 31.8,
+   "price_ok": false,
+   "verified": false,
+   "mae": null,
+   "mfe": null,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "p40000024",
+   "position": "40000024",
+   "symbol": "XAUUSD",
+   "side": "sell",
+   "volume": 0.2,
+   "open_time": 1772709872,
+   "open_price": 2318.19,
+   "close_time": 1772712276,
+   "close_price": 2316.89,
+   "profit": 26.0,
+   "commission": -1.4,
+   "swap": -0.0,
+   "sl": 2321.73,
+   "tp": 2314.51,
+   "comment": null,
+   "net": 24.6,
+   "pips": 13.0,
+   "price_ok": true,
+   "verified": true,
+   "mae": -0.0,
+   "mfe": 31.2,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "ag1",
+   "position": "40000024",
+   "symbol": "XAGUSD",
+   "side": "sell",
+   "volume": 0.2,
+   "open_time": 1772709872,
+   "open_price": 28.977,
+   "close_time": 1772712276,
+   "close_price": 28.961,
+   "profit": 16.0,
+   "commission": -1.4,
+   "swap": -0.0,
+   "sl": 2321.73,
+   "tp": 2314.51,
+   "comment": null,
+   "net": 14.6,
+   "pips": 1.6,
+   "price_ok": true,
+   "verified": true,
+   "mae": -0.0,
+   "mfe": 19.0,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "p40000031",
+   "position": "40000031",
+   "symbol": "XAUUSD",
+   "side": "sell",
+   "volume": 0.02,
+   "open_time": 1772719845,
+   "open_price": 2319.56,
+   "close_time": 1772747241,
+   "close_price": 2319.56,
+   "profit": 0.0,
+   "commission": -0.14,
+   "swap": -0.36,
+   "sl": 2344.36,
+   "tp": 2283.64,
+   "comment": null,
+   "net": -0.5,
+   "pips": -0.0,
+   "price_ok": false,
+   "verified": false,
+   "mae": null,
+   "mfe": null,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "p40000038",
+   "position": "40000038",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.08,
+   "open_time": 1772819112,
+   "open_price": 2314.71,
+   "close_time": 1772823954,
+   "close_price": 2315.19,
+   "profit": 3.84,
+   "commission": -0.56,
+   "swap": -0.0,
+   "sl": 2305.17,
+   "tp": 2322.08,
+   "comment": null,
+   "net": 3.28,
+   "pips": 4.8,
+   "price_ok": true,
+   "verified": true,
+   "mae": -3.52,
+   "mfe": 7.2,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "p40000045",
+   "position": "40000045",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.03,
+   "open_time": 1773028205,
+   "open_price": 2311.97,
+   "close_time": 1773029617,
+   "close_price": 2311.38,
+   "profit": -1.77,
+   "commission": -0.21,
+   "swap": -0.0,
+   "sl": 2287.87,
+   "tp": 2351.71,
+   "comment": null,
+   "net": -1.98,
+   "pips": -5.9,
+   "price_ok": true,
+   "verified": true,
+   "mae": -3.48,
+   "mfe": 0.27,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "ag2",
+   "position": "40000045",
+   "symbol": "XAGUSD",
+   "side": "buy",
+   "volume": 0.03,
+   "open_time": 1773028205,
+   "open_price": 28.9,
+   "close_time": 1773029617,
+   "close_price": 28.892,
+   "profit": 1.2,
+   "commission": -0.21,
+   "swap": -0.0,
+   "sl": 2287.87,
+   "tp": 2351.71,
+   "comment": null,
+   "net": 0.99,
+   "pips": -0.8,
+   "price_ok": true,
+   "verified": true,
+   "mae": -2.25,
+   "mfe": 0.15,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "p40000052",
+   "position": "40000052",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.05,
+   "open_time": 1773305772,
+   "open_price": 2342.59,
+   "close_time": 1773336704,
+   "close_price": 2335.72,
+   "profit": 5.65,
+   "commission": -0.35,
+   "swap": -0.0,
+   "sl": 2306.3,
+   "tp": 2341.64,
+   "comment": null,
+   "net": 5.300000000000001,
+   "pips": -68.7,
+   "price_ok": false,
+   "verified": false,
+   "mae": null,
+   "mfe": null,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "p40000059",
+   "position": "40000059",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.02,
+   "open_time": 1773373272,
+   "open_price": 2343.92,
+   "close_time": 1773375923,
+   "close_price": 2344.89,
+   "profit": 1.94,
+   "commission": -0.14,
+   "swap": -0.0,
+   "sl": 2330.8,
+   "tp": 2365.58,
+   "comment": null,
+   "net": 1.7999999999999998,
+   "pips": 9.7,
+   "price_ok": true,
+   "verified": true,
+   "mae": -1.1,
+   "mfe": 2.24,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "p40000066",
+   "position": "40000066",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.08,
+   "open_time": 1773394412,
+   "open_price": 2343.73,
+   "close_time": 1773406027,
+   "close_price": 2350.33,
+   "profit": 52.8,
+   "commission": -0.56,
+   "swap": -0.0,
+   "sl": 2334.62,
+   "tp": 2356.5,
+   "comment": null,
+   "net": 52.239999999999995,
+   "pips": 66.0,
+   "price_ok": true,
+   "verified": true,
+   "mae": 0.0,
+   "mfe": 92.24,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "ag3",
+   "position": "40000066",
+   "symbol": "XAGUSD",
+   "side": "buy",
+   "volume": 0.08,
+   "open_time": 1773394412,
+   "open_price": 29.297,
+   "close_time": 1773406027,
+   "close_price": 29.379,
+   "profit": 32.8,
+   "commission": -0.56,
+   "swap": -0.0,
+   "sl": 2334.62,
+   "tp": 2356.5,
+   "comment": null,
+   "net": 32.239999999999995,
+   "pips": 8.2,
+   "price_ok": true,
+   "verified": true,
+   "mae": 0.0,
+   "mfe": 57.6,
+   "floating": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "p40000073",
+   "position": "40000073",
+   "symbol": "XAUUSD",
+   "side": "buy",
+   "volume": 0.09,
+   "open_time": 1773417231,
+   "open_price": 2346.89,
+   "close_time": 1773428359,
+   "close_price": 2347.63,
+   "profit": 6.66,
+   "commission": -0.63,
+   "swap": -0.0,
+   "sl": 2343.48,
+   "tp": 2352.96,
+   "comment": null,
+   "net": 6.03,
+   "pips": 7.4,
+   "price_ok": true,
+   "verified": true,
+   "mae": -11.61,
+   "mfe": 17.91,
+   "floating": null
+  }
+ ]
+}

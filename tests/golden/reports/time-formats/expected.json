@@ -1,0 +1,97 @@
+{
+ "ok": {
+  "account": {
+   "name": "Sample Trader",
+   "login": "51234567",
+   "currency": "USD",
+   "server": "Broker-Live",
+   "company": "Broker Ltd"
+  },
+  "trades": [
+   {
+    "id": "p13",
+    "position": "13",
+    "symbol": "XAUUSD",
+    "side": "buy",
+    "volume": 1.0,
+    "open_time": 0,
+    "open_price": 2000.0,
+    "close_time": 1772409600,
+    "close_price": 2000.0,
+    "profit": 0.0,
+    "commission": 0.0,
+    "swap": 0.0,
+    "sl": null,
+    "tp": null,
+    "comment": null
+   },
+   {
+    "id": "p12",
+    "position": "12",
+    "symbol": "XAUUSD",
+    "side": "buy",
+    "volume": 1.0,
+    "open_time": 1709164800,
+    "open_price": 2000.0,
+    "close_time": 1772413320,
+    "close_price": 2000.0,
+    "profit": 0.0,
+    "commission": 0.0,
+    "swap": 0.0,
+    "sl": null,
+    "tp": null,
+    "comment": null
+   },
+   {
+    "id": "p11",
+    "position": "11",
+    "symbol": "XAUUSD",
+    "side": "buy",
+    "volume": 1.0,
+    "open_time": 1772413323,
+    "open_price": 2000.0,
+    "close_time": 1798761599,
+    "close_price": 2000.0,
+    "profit": 0.0,
+    "commission": 0.0,
+    "swap": 0.0,
+    "sl": null,
+    "tp": null,
+    "comment": null
+   },
+   {
+    "id": "p10",
+    "position": "10",
+    "symbol": "XAUUSD",
+    "side": "buy",
+    "volume": 1.0,
+    "open_time": 1772445600,
+    "open_price": 2000.0,
+    "close_time": 1772445905,
+    "close_price": 2000.0,
+    "profit": 0.0,
+    "commission": 0.0,
+    "swap": 0.0,
+    "sl": null,
+    "tp": null,
+    "comment": null
+   }
+  ],
+  "cash": [
+   {
+    "id": "1",
+    "time": 946684799,
+    "kind": "deposit",
+    "amount": 1.0,
+    "comment": null
+   },
+   {
+    "id": "2",
+    "time": 1772445600,
+    "kind": "deposit",
+    "amount": 1.0,
+    "comment": null
+   }
+  ]
+ }
+}

@@ -1,0 +1,30 @@
+{
+ "trades": [],
+ "cash": [
+  {
+   "journal_id": "j-golden",
+   "id": "c1",
+   "time": 1772411400,
+   "kind": "deposit",
+   "amount": 1000.0,
+   "comment": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "c2",
+   "time": 1772427600,
+   "kind": "credit",
+   "amount": 50.0,
+   "comment": null
+  },
+  {
+   "journal_id": "j-golden",
+   "id": "c3",
+   "time": 1775106000,
+   "kind": "other",
+   "amount": 0.25,
+   "comment": null
+  }
+ ],
+ "offset": null
+}

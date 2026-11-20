@@ -8,7 +8,7 @@
 //! Python and Rust share the database while routes move over: SQLite runs in WAL mode with a busy
 //! timeout, so one can read while the other writes.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -37,6 +37,7 @@ enum Pool {
 pub struct Store {
     pool: Pool,
     schema: Value,
+    home: PathBuf,
 }
 
 /// `postgresql+psycopg://u:p@host/db` -> `postgres://u:p@host/db`; Some for a PostgreSQL URL.
@@ -102,7 +103,12 @@ impl Store {
         } else {
             return Err(format!("unsupported database URL scheme: {}", url.split(':').next().unwrap_or("")));
         };
-        Ok(Store { pool, schema })
+        Ok(Store { pool, schema, home: home.to_path_buf() })
+    }
+
+    /// The home folder: relative paths (`data/snapshots`) resolve in it, as Python's working folder.
+    pub fn home(&self) -> &Path {
+        &self.home
     }
 
     pub fn backend(&self) -> &'static str {
@@ -207,6 +213,33 @@ impl Store {
         }
     }
 
+    /// Run statements in one transaction: all of them, or none.
+    pub async fn transaction(&self, stmts: Vec<(String, Vec<Arg>)>) -> Result<(), String> {
+        macro_rules! run {
+            ($pool:expr) => {{
+                let mut tx = $pool.begin().await.map_err(|e| e.to_string())?;
+                for (sql, args) in stmts {
+                    let sql = self.sql(&sql);
+                    let mut q = sqlx::query(&sql);
+                    for a in args {
+                        q = match a {
+                            Arg::Str(v) => q.bind(v),
+                            Arg::Int(v) => q.bind(v),
+                            Arg::Float(v) => q.bind(v),
+                            Arg::Bool(v) => q.bind(v),
+                        };
+                    }
+                    q.execute(&mut *tx).await.map_err(|e| e.to_string())?;
+                }
+                tx.commit().await.map_err(|e| e.to_string())
+            }};
+        }
+        match &self.pool {
+            Pool::Sqlite(p) => run!(p),
+            Pool::Postgres(p) => run!(p),
+        }
+    }
+
     /// Rows of `table` as JSON objects, typed by its schema.
     pub async fn rows(&self, table: &str, sql: &str, args: Vec<Arg>) -> Result<Vec<Map<String, Value>>, String> {
         let sql = self.sql(sql);
@@ -258,20 +291,35 @@ impl Store {
     /// Insert or update by `keys` (`_upsert` in storage.py).
     pub async fn upsert(&self, table: &str, row: Vec<(&str, Arg)>, keys: &[&str]) -> Result<(), String> {
         let names: Vec<&str> = row.iter().map(|(k, _)| *k).collect();
+        let sql = Self::upsert_sql(table, &names, 1, keys);
+        self.execute(&sql, row.into_iter().map(|(_, a)| a).collect()).await.map(|_| ())
+    }
+
+    /// `INSERT ... VALUES (...) x rows ... ON CONFLICT (keys) DO UPDATE` for `names` columns.
+    fn upsert_sql(table: &str, names: &[&str], rows: usize, keys: &[&str]) -> String {
         let quoted = |n: &str| format!("\"{n}\"");
         let updates: Vec<String> = names
             .iter()
             .filter(|n| !keys.contains(n))
             .map(|n| format!("{} = excluded.{}", quoted(n), quoted(n)))
             .collect();
-        let sql = format!(
-            "INSERT INTO {table} ({}) VALUES ({}) ON CONFLICT ({}) DO {}",
+        let one = format!("({})", vec!["?"; names.len()].join(", "));
+        format!(
+            "INSERT INTO {table} ({}) VALUES {} ON CONFLICT ({}) DO {}",
             names.iter().map(|n| quoted(n)).collect::<Vec<_>>().join(", "),
-            vec!["?"; names.len()].join(", "),
+            vec![one; rows].join(", "),
             keys.iter().map(|n| quoted(n)).collect::<Vec<_>>().join(", "),
             if updates.is_empty() { "NOTHING".to_string() } else { format!("UPDATE SET {}", updates.join(", ")) },
-        );
-        self.execute(&sql, row.into_iter().map(|(_, a)| a).collect()).await.map(|_| ())
+        )
+    }
+
+    /// Upserts of many rows with the same columns, as statements for [`Store::transaction`]
+    /// (a few dozen rows a statement, under SQLite's 999 parameters).
+    pub fn upsert_many(table: &str, names: &[&str], rows: Vec<Vec<Arg>>, keys: &[&str]) -> Vec<(String, Vec<Arg>)> {
+        let per = (900 / names.len().max(1)).max(1);
+        rows.chunks(per)
+            .map(|chunk| (Self::upsert_sql(table, names, chunk.len(), keys), chunk.iter().flatten().cloned().collect()))
+            .collect()
     }
 
     /// The tables as the database has them (columns with type, nullability and key; indexes),
@@ -317,6 +365,30 @@ impl Store {
             out.insert(name.into(), serde_json::json!({"columns": columns, "indexes": indexes}));
         }
         Ok(Value::Object(out))
+    }
+
+    // ---- M1 bars ----
+
+    /// (source, symbol, bars) per stored stream, by source and symbol (`bar_stats` in storage.py).
+    pub async fn bar_counts(&self) -> Result<Vec<(String, String, i64)>, String> {
+        let sql = "SELECT source, symbol, COUNT(*) FROM m1_bars GROUP BY source, symbol ORDER BY source, symbol";
+        let err = |e: sqlx::Error| e.to_string();
+        macro_rules! go {
+            ($pool:expr) => {
+                sqlx::query(sql)
+                    .fetch_all($pool)
+                    .await
+                    .map_err(err)?
+                    .iter()
+                    .map(|r| Ok((r.try_get::<String, _>(0).map_err(err)?, r.try_get::<String, _>(1).map_err(err)?,
+                                 r.try_get::<i64, _>(2).map_err(err)?)))
+                    .collect()
+            };
+        }
+        match &self.pool {
+            Pool::Sqlite(p) => go!(p),
+            Pool::Postgres(p) => go!(p),
+        }
     }
 
     // ---- settings ----
