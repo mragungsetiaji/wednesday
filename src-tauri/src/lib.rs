@@ -3,7 +3,7 @@
 //! The shell starts the Python server as a sidecar (`wednesday-server`), waits for it to
 //! answer, and shows the dashboard it serves in native windows: the main one, and a window per
 //! popped-out chart, so each can sit on its own monitor. The page calls the shell through four
-//! commands (the same ones the pywebview app exposed, see `web/src/desktop.ts`): open a chart
+//! commands (see `web/src/desktop.ts`): open a chart
 //! window, report and arrange the windows (workspaces), and save a chart snapshot.
 //!
 //! Where the windows were when the app last closed is kept in `windows.json` in the app's data

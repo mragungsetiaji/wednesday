@@ -80,26 +80,14 @@ starts on Yahoo Finance instead; pick the source you want in Settings. The
 [Lab > Data](lab.md#data) imports M1 bars exported from MT5.
 
 Only one copy runs at a time; starting a second one says it is already running.
-The dashboard uses port `XAU_PORT` (8000) on `127.0.0.1`, or a free port when that
-one is taken.
-
-## Run from source
-
-```bash
-uv sync --extra desktop --extra llm --extra ml
-make ui
-uv run wednesday-desktop
-```
 
 `WEDNESDAY_HOME` points the app at another settings folder (default
 `~/.wednesday` outside Windows).
 
-## Tauri shell
+## How it's built
 
-The Windows app is built with [Tauri v2](https://tauri.app) (#92); it replaced
-the pywebview build in 0.3.1. The shell lives in `src-tauri/`. The Python server
-still does the work:
-the shell starts it as a sidecar (`wednesday-server`, same settings folder, lock and
+The app is a [Tauri v2](https://tauri.app) shell (#92, `src-tauri/`) around the
+Python server; it replaced the pywebview app in 0.3.1. The shell starts it as a sidecar (`wednesday-server`, same settings folder, lock and
 `.env`), waits for it to answer, and shows the dashboard in native windows. Pop-out
 charts are Tauri windows that can sit on any monitor. Where the windows were when
 the app closed is kept in the shell's own data folder (`windows.json`) and restored
@@ -112,7 +100,7 @@ make test-tauri   # its Rust tests
 ```
 
 It needs Rust 1.77.2 or newer. `WEDNESDAY_HOME` and `XAU_SOURCE=synthetic` work as
-for the pywebview app. In a debug build, `WEDNESDAY_SELFTEST=1` makes the dashboard
+for the installed app. In a debug build, `WEDNESDAY_SELFTEST=1` makes the dashboard
 call the shell's commands (open a chart window, read and arrange the windows) and
 print the result; `WEDNESDAY_SELFTEST=channel` checks that `BroadcastChannel`, which
 link groups and drawings use, reaches another window.
@@ -128,7 +116,7 @@ Setup build before installing.
 2. the TradingView helper (`npm ci --omit=dev` in `tradingview/`) and `node.exe`
    with its license, copied into `packaging\node\`,
 3. the Python environment (`uv sync --frozen --extra desktop --extra llm --extra ml`),
-4. the server with PyInstaller (`WEDNESDAY_BUILD=server packaging/wednesday.spec`,
+4. the server with PyInstaller (`packaging/wednesday.spec`,
    output `dist\wednesday-server\`),
 5. the Tauri shell and its NSIS installer (`cargo tauri build --config
    tauri.release.conf.json` in `src-tauri/`, which bundles the server folder),
@@ -170,7 +158,6 @@ New-Item -ItemType Directory -Force packaging\node
 Copy-Item (Get-Command node).Source packaging\node\node.exe   # Node 22
 Copy-Item (Join-Path (Split-Path (Get-Command node).Source) LICENSE) packaging\node\LICENSE
 uv sync --frozen --extra desktop --extra llm --extra ml
-$env:WEDNESDAY_BUILD = "server"
 uv run --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 cargo install tauri-cli --version "^2" --locked
 cd src-tauri; cargo tauri build --config tauri.release.conf.json

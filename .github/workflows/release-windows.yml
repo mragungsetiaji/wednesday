@@ -3,7 +3,7 @@
 # (Actions > Release Windows > Run workflow) for a test build kept as a workflow artifact.
 #
 # The shell (src-tauri) starts the Python server as a sidecar: PyInstaller builds it as
-# dist/wednesday-server/ (packaging/wednesday.spec with WEDNESDAY_BUILD=server), and
+# dist/wednesday-server/ (packaging/wednesday.spec), and
 # tauri.release.conf.json bundles that folder into the NSIS installer's resources.
 #
 # After a tagged build, the bump-main job writes the tag's version into every file that carries
@@ -77,8 +77,6 @@ jobs:
         run: uv sync --frozen --no-dev --extra desktop --extra llm --extra ml
 
       - name: Build the server (PyInstaller)
-        env:
-          WEDNESDAY_BUILD: server
         run: uv run --frozen --no-dev --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 
       - uses: dtolnay/rust-toolchain@stable

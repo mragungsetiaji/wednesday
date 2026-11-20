@@ -14,7 +14,7 @@ WEB  := web
 UI_BUILD   := $(WEB)/dist/index.html
 UI_SOURCES := $(shell find $(WEB)/src -type f 2>/dev/null) $(WEB)/index.html $(WEB)/vite.config.ts $(WEB)/package.json
 
-.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui desktop scan check test test-ui typecheck telegram-chats telegram-test clean release
+.PHONY: help doctor setup install ui serve demo dev dev-api dev-ui scan check test test-ui typecheck telegram-chats telegram-test clean release
 
 help: ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -60,9 +60,6 @@ dev-api:
 
 dev-ui:
 	cd $(WEB) && XAU_API=http://127.0.0.1:$(PORT) $(NPM) run dev
-
-desktop: $(UI_BUILD) ## Dashboard in its own window, like the Windows app (settings in ~/.wednesday)
-	$(UV) run --extra desktop wednesday-desktop
 
 tauri: $(UI_BUILD) ## The Tauri desktop shell (src-tauri, #92) with the Python server as its sidecar
 	cd src-tauri && cargo run

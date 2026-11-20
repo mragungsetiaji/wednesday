@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 /**
- * Methods the desktop app exposes to the page: the Tauri shell's commands (src-tauri/src/lib.rs),
- * or the older pywebview app's (DesktopApi in desktop.py). Same names and arguments in both.
+ * Methods the desktop app exposes to the page: the Tauri shell's commands (src-tauri/src/lib.rs).
  */
 export interface DesktopApi {
   save_png(data: string, name: string): Promise<string | null>; // base64 PNG; the path saved to, or null (cancelled)
@@ -13,13 +12,12 @@ export interface DesktopApi {
 
 declare global {
   interface Window {
-    pywebview?: { api?: Partial<DesktopApi> };
     __TAURI__?: { core?: { invoke?: <T>(cmd: string, args?: Record<string, unknown>) => Promise<T> } };
   }
 }
 
 /** The Tauri shell's commands as a DesktopApi, or null outside it. Tauri injects them before the page runs. */
-function tauriApi(): DesktopApi | null {
+export function desktopApi(): DesktopApi | null {
   const invoke = window.__TAURI__?.core?.invoke;
   if (!invoke) return null;
   return {
@@ -30,15 +28,9 @@ function tauriApi(): DesktopApi | null {
   };
 }
 
-/** The desktop app's API, or null in a browser. pywebview injects its own shortly after load. */
+/** The desktop app's API, or null in a browser. */
 export function useDesktopApi(): Partial<DesktopApi> | null {
-  const [api, setApi] = useState<Partial<DesktopApi> | null>(() => tauriApi() ?? window.pywebview?.api ?? null);
-  useEffect(() => {
-    if (api) return;
-    const ready = () => setApi(window.pywebview?.api ?? null);
-    window.addEventListener("pywebviewready", ready);
-    return () => window.removeEventListener("pywebviewready", ready);
-  }, [api]);
+  const [api] = useState<Partial<DesktopApi> | null>(desktopApi);
   return api;
 }
 

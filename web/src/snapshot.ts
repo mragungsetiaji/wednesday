@@ -149,8 +149,9 @@ const base64 = async (blob: Blob) => {
 
 /** Save as a PNG file: the desktop app's save dialog, else a browser download. Resolves to where, or null. */
 export async function saveImage(blob: Blob, name: string): Promise<string | null> {
-  const api = window.pywebview?.api;
-  if (api?.save_png) return api.save_png(await base64(blob), name);
+  // The desktop app's save dialog (the Tauri shell's save_png; window.__TAURI__ is typed in desktop.ts).
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (invoke) return invoke<string | null>("save_png", { data: await base64(blob), name });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

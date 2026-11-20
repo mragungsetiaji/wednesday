@@ -1,10 +1,10 @@
-"""Window and layout memory (#27): where the desktop app's windows were, and named workspaces.
+"""Named workspaces (#27): a set of desktop windows plus the chart layout, saved and reopened.
 
 A **window** is a route (``#`` for the dashboard, ``#popout/5M/A`` for a popped-out chart) with its
-position, size, whether it was maximised and the screen it was on. The desktop app keeps the last
-session's windows (``LAST_KEY``) and restores them on start. A **workspace** is a named set of windows
-plus the chart layout (the dashboard's layout preferences), saved from the chart and reopened from it.
-Both are settings in the database, not WebView storage, so clearing ``webview\\`` doesn't lose them.
+position, size, whether it was maximised and the screen it was on. A **workspace** is a named set of
+windows plus the chart layout (the dashboard's layout preferences), saved from the chart and reopened
+from it. They are a setting in the database, not WebView storage, so they survive a new install.
+The Tauri shell keeps the last session's windows itself (``windows.json``).
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ import json
 import re
 from datetime import datetime, timezone
 
-LAST_KEY = "desktop.windows"  # the desktop app's windows when it last closed
 WORKSPACES_KEY = "workspaces"  # name -> {"layout", "windows", "saved_at"}
 MAX_WORKSPACES = 20
 MAX_WINDOWS = 12
@@ -66,21 +65,6 @@ def clean_layout(layout) -> dict:
     return out
 
 
-def fit_on_screen(w: dict, screens: list[dict]) -> dict:
-    """Keep a window reachable: if its middle isn't on any screen (a monitor was unplugged), move it
-    onto the first (primary) screen and shrink it to fit."""
-    if not screens:
-        return w
-    cx, cy = w["x"] + w["width"] // 2, w["y"] + w["height"] // 2
-    for s in screens:
-        if s["x"] <= cx < s["x"] + s["width"] and s["y"] <= cy < s["y"] + s["height"]:
-            return w
-    p = screens[0]
-    width, height = min(w["width"], p["width"]), min(w["height"], p["height"])
-    return {**w, "x": p["x"] + (p["width"] - width) // 2, "y": p["y"] + (p["height"] - height) // 2,
-            "width": width, "height": height}
-
-
 class Workspaces:
     def __init__(self, store):
         self.store = store
@@ -114,13 +98,3 @@ class Workspaces:
             return False
         self.store.set_setting(WORKSPACES_KEY, items)
         return True
-
-    # ---- the desktop app's last session ----
-    def last_windows(self) -> list[dict]:
-        try:
-            return clean_windows(self.store.get_setting(LAST_KEY) or [])
-        except WorkspaceError:
-            return []
-
-    def remember_windows(self, windows: list[dict]) -> None:
-        self.store.set_setting(LAST_KEY, clean_windows(windows))

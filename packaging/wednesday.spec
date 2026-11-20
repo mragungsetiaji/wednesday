@@ -1,14 +1,12 @@
-# PyInstaller spec for the Windows desktop app. Build on Windows from the repository root,
-# after `npm run build` in web/, `npm ci --omit=dev` in tradingview/, node.exe (Node 22) copied to
-# packaging/node/ with its LICENSE, and `uv sync --extra desktop --extra llm --extra ml`:
+# PyInstaller spec for the desktop app's server, the Tauri shell's sidecar (src-tauri, #92).
+# Build from the repository root, after `npm run build` in web/, `npm ci --omit=dev` in tradingview/,
+# node (Node 22) copied to packaging/node/ with its LICENSE, and
+# `uv sync --extra desktop --extra llm --extra ml`:
 #
 #   uv run --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 #
-# Output: dist/Wednesday/Wednesday.exe (one folder; packaging/wednesday.iss turns it into an installer).
-#
-# With WEDNESDAY_BUILD=server it builds the Tauri shell's server instead (src-tauri, #92):
-# dist/wednesday-server/wednesday-server.exe, no window of its own, bundled into the Tauri installer.
-import os
+# Output: dist/wednesday-server/ (one folder, no window of its own), which
+# src-tauri/tauri.release.conf.json bundles into the app.
 import sys
 from pathlib import Path
 
@@ -52,11 +50,10 @@ hiddenimports = (collect_submodules("wednesday") + collect_submodules("uvicorn")
 hiddenimports += (["argparse", "ast", "platform", "secrets", "tempfile", "hashlib", "urllib.request",
                    "urllib.error", "zipfile"] + collect_submodules("cryptography"))
 
-SERVER = os.environ.get("WEDNESDAY_BUILD") == "server"
-NAME = "wednesday-server" if SERVER else "Wednesday"
+NAME = "wednesday-server"
 
 a = Analysis(
-    [str(ROOT / "packaging" / ("server_launcher.py" if SERVER else "launcher.py"))],
+    [str(ROOT / "packaging" / "server_launcher.py")],
     pathex=[str(ROOT / "src")],
     datas=datas,
     binaries=binaries,

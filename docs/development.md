@@ -8,7 +8,7 @@ cd wednesday
 make setup       # checks uv + Node, creates .env, installs everything, builds the dashboard
 make serve       # dashboard on http://127.0.0.1:8000 (Yahoo Finance data)
 make demo        # the same on random demo data
-make desktop     # the dashboard in its own window, like the Windows app
+make tauri       # the desktop app from this checkout (needs Rust)
 make             # list every target
 ```
 
