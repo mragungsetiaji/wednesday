@@ -91,11 +91,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--serve", action="store_true", default=_env("XAU_SERVE") == "1",
                    help="run the web dashboard + API alongside the scan loop")
     p.add_argument("--host", default=_env("XAU_HOST") or "127.0.0.1",
-                   help="dashboard bind address; anything but loopback needs XAU_AUTH_PASSWORD or --insecure")
+                   help="dashboard bind address; anything but loopback needs --insecure")
     p.add_argument("--insecure", action="store_true",
-                   help="allow a non-loopback --host without a login (anyone who can reach the port controls it)")
-    p.add_argument("--hash-password", action="store_true",
-                   help="read a dashboard password and print the XAU_AUTH_PASSWORD_HASH line for .env, then exit")
+                   help="allow a non-loopback --host (the dashboard has no login: anyone who can reach the port controls it)")
     p.add_argument("--port", type=int, default=_env("XAU_PORT", int) or 8000)
     p.add_argument("--ui-dir", default=_env("XAU_UI_DIR"), help="built dashboard folder (default web/dist)")
     p.add_argument("--json-out", default=_env("XAU_JSON_OUT"), help="append each scan as a JSON line to this file")
@@ -135,22 +133,6 @@ def telegram_command(args: argparse.Namespace, client: TelegramClient | None, sy
         raise SystemExit(str(exc)) from exc
 
 
-def hash_password_command(read=None) -> None:
-    """--hash-password: the .env line for a dashboard password, without the password in .env."""
-    import getpass
-
-    from .auth import AuthError, hash_password
-
-    read = read or getpass.getpass
-    password = read("Dashboard password: ")
-    if password != read("Again: "):
-        raise SystemExit("The two passwords differ")
-    try:
-        print(f"XAU_AUTH_PASSWORD_HASH={hash_password(password)}")
-    except AuthError as exc:
-        raise SystemExit(str(exc)) from exc
-
-
 def is_loopback(host: str) -> bool:
     import ipaddress
 
@@ -162,23 +144,15 @@ def is_loopback(host: str) -> bool:
         return False
 
 
-def dashboard_auth(args: argparse.Namespace, store):
-    """The login from .env, refusing a network-reachable dashboard without one unless --insecure."""
-    from .auth import Auth, AuthError
-
-    try:
-        auth = Auth.from_env(_env, store)
-    except AuthError as exc:
-        raise SystemExit(str(exc)) from exc
-    if not auth.enabled and not is_loopback(args.host):
-        if not args.insecure:
-            raise SystemExit(f"Refusing to serve the dashboard on {args.host} without a login: anyone who can "
-                             "reach the port could change settings and delete models. Set XAU_AUTH_PASSWORD "
-                             "(see docs/deploy-windows.md), bind to 127.0.0.1, or pass --insecure.")
-        log.warning("dashboard on %s with no login (--insecure)", args.host)
-    elif auth.enabled:
-        log.info("dashboard login on")
-    return auth
+def check_host(args: argparse.Namespace) -> None:
+    """Refuse a network-reachable dashboard unless --insecure: it has no login."""
+    if is_loopback(args.host):
+        return
+    if not args.insecure:
+        raise SystemExit(f"Refusing to serve the dashboard on {args.host}: it has no login, so anyone who can "
+                         "reach the port could change settings and delete data. Bind to 127.0.0.1, reach it "
+                         "through an SSH tunnel or a VPN (see docs/deploy-windows.md), or pass --insecure.")
+    log.warning("dashboard on %s, reachable by anyone who can reach the port (--insecure)", args.host)
 
 
 def serve_forever(app, host: str, port: int) -> None:
@@ -190,9 +164,6 @@ def serve_forever(app, host: str, port: int) -> None:
 
 def run(args: argparse.Namespace, serve=serve_forever) -> None:
     """Run the scan loop. ``serve(app, host, port)`` hosts the dashboard with --serve (the desktop app swaps it)."""
-    if args.hash_password:
-        hash_password_command()
-        return
     cfg = ScanConfig(
         timeframes=tuple(parse_timeframes(args.timeframes)),
         lookback=args.lookback,
@@ -264,7 +235,8 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
     if args.serve:
         from .server import create_app
 
-        app = create_app(runtime, ui_dir=args.ui_dir, auth=dashboard_auth(args, store))
+        check_host(args)
+        app = create_app(runtime, ui_dir=args.ui_dir)
         runtime.start()
         log.info("dashboard on http://%s:%d", args.host, args.port)
         try:

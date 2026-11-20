@@ -5,7 +5,6 @@ import {
 } from "../api";
 import { fmtFeedTime } from "../format";
 import { usePlugins } from "../plugins";
-import { AccessSettings } from "./AccessSettings";
 import { AccountSettings } from "./AccountSettings";
 import { RiskSettingsForm } from "./RiskSettingsForm";
 import { AlertsSettings } from "./AlertsSettings";
@@ -32,7 +31,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const fmtTick = (s: number) => (s === 0 || s >= 60 ? "once a minute, with each scan" : `${s}s`);
 
-type Section = "data" | "history" | "risk" | "alerts" | "calendar" | "brief" | "llm" | "journal" | "access" | "plan" | "plugins";
+type Section = "data" | "history" | "risk" | "alerts" | "calendar" | "brief" | "llm" | "journal" | "plan" | "plugins";
 const SECTIONS: { id: Section; title: string }[] = [
   { id: "data", title: "Data source" },
   { id: "history", title: "History" },
@@ -42,7 +41,6 @@ const SECTIONS: { id: Section; title: string }[] = [
   { id: "brief", title: "News brief" },
   { id: "llm", title: "LLM usage" },
   { id: "journal", title: "Journal" },
-  { id: "access", title: "Access" },
   { id: "plan", title: "Plan" },
   { id: "plugins", title: "Plugins" },
 ];
@@ -90,7 +88,6 @@ export function SettingsPage() {
         <div hidden={section !== "brief"}><BriefSettingsForm /></div>
         <div hidden={section !== "llm"}><LlmUsageSettings /></div>
         <div hidden={section !== "journal"}><JournalSettings /></div>
-        <div hidden={section !== "access"}><AccessSettings /></div>
         <div hidden={section !== "plan"}><AccountSettings /></div>
         <div hidden={section !== "plugins"}><PluginsSection /></div>
       </div>

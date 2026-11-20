@@ -175,13 +175,8 @@ export const saveWorkspace = (name: string, layout: Record<string, unknown>, win
   send<Workspace>("PUT", `/api/workspaces/${encodeURIComponent(name)}`, { layout, windows });
 export const deleteWorkspace = (name: string) => send<{ deleted: boolean }>("DELETE", `/api/workspaces/${encodeURIComponent(name)}`);
 
-/** Fired when the server wants a login (the session ended or was never there); the login screen listens. */
-export const LOGGED_OUT_EVENT = "wednesday:logged-out";
-
-async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(url, init);
-  if (res.status === 401 && !url.startsWith("/api/auth/")) window.dispatchEvent(new Event(LOGGED_OUT_EVENT));
-  return res;
+function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  return fetch(url, init);
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -1029,14 +1024,4 @@ export async function importReport(id: string, file: File): Promise<{ trades: nu
   return res.json();
 }
 
-/** Optional dashboard login (XAU_AUTH_PASSWORD) and the API tokens scripts use with it. */
-export interface AuthStatus { enabled: boolean; logged_in: boolean }
-export interface ApiToken { id: string; name: string; created_at: string; last_used_at: string | null }
-export const fetchAuthStatus = () => getJson<AuthStatus>("/api/auth/status");
-export const logIn = (password: string) => send<AuthStatus>("POST", "/api/auth/login", { password });
-export const logOut = () => send<AuthStatus>("POST", "/api/auth/logout");
-export const fetchApiTokens = () => getJson<{ tokens: ApiToken[] }>("/api/auth/tokens");
-/** The secret (`token`) is in this response only. */
-export const createApiToken = (name: string) => send<ApiToken & { token: string }>("POST", "/api/auth/tokens", { name });
-export const revokeApiToken = (id: string) => send<{ tokens: ApiToken[] }>("DELETE", `/api/auth/tokens/${encodeURIComponent(id)}`);
 

@@ -126,7 +126,7 @@ html {
   text-rendering: optimizeLegibility;
   scrollbar-color: var(--line-strong) transparent;
   /* Keep the scrollbar's space even on a page too short to scroll, so switching between a long and a
-     short page (Settings > History, Access, Plugins) doesn't shift everything sideways (#76). */
+     short page (Settings > History, Plugins) doesn't shift everything sideways (#76). */
   scrollbar-gutter: stable;
 }
 /* Views that never scroll fill the whole window instead. */
@@ -4001,23 +4001,6 @@ fieldset:disabled .switch {
 /* Full screen covers the status bar: the news card sits at the corner. */
 .focus .news-card {
   bottom: var(--s4);
-}
-
-/* Model signature state: a signed file reads calm, anything else draws the eye. */
-
-/* Login screen and the API token shown once. */
-.login-card {
-  max-width: 360px;
-}
-.login-card .field input {
-  width: 100%;
-}
-.token-once input {
-  width: 100%;
-  margin-top: var(--s1);
-}
-.token-new {
-  margin-top: var(--s3);
 }
 
 /* Settings > LLM usage. */

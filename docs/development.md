@@ -98,9 +98,8 @@ Ported so far: `/api/health`, workspaces and drawing templates.
   tables from `server-rs/schema.json`, which `tests/test_rust_schema.py` generates from
   `storage.py`, and stores JSON as Python's `json.dumps` writes it. When Rust can't open
   the database (or `XAU_DB_URL=none`), Python serves those routes.
-- **The login** is still Python's. A ported route behind it asks Python
-  (`/api/auth/status`, with the request's cookie and token) and refuses cross-site writes
-  as `auth.py` does, so there is one set of rules until the login moves.
+- **No login.** The dashboard runs on the trader's machine; ported routes refuse
+  cross-site writes as `same_site.py` does.
 - **Drawings** stay in Python until the drawing alerts move (step 9): saving a drawing
   resets the alert checker's cache in the Python process, and drawings are filed under
   the engine's current source and symbol. Their storage is ported already.
@@ -131,8 +130,7 @@ setups, session levels and quarters) and gives the same output as Python's on
 `tests/golden/`, but no route serves it yet: the scan routes need the engine's
 state (the live M1 buffer and the feed), which move with the engine.
 
-The Rust server only listens on `127.0.0.1` for now: the login, and the address it
-counts failed logins by, are still Python's.
+The Rust server only listens on `127.0.0.1`: the dashboard has no login.
 
 ## How a scan flows
 

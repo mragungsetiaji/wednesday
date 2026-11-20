@@ -48,8 +48,7 @@ The backend is moving to Rust route by route (#96). `server-rs/` is the Rust ser
 shell runs it on the dashboard's port, it answers the routes in `PORTED` and passes the rest
 to the Python sidecar on another local port (`WEDNESDAY_GATEWAY=0` turns it off). A ported
 route must answer as `tests/api_contract.json` says and match `tests/golden/` where it
-scans. The login is still Python's: a ported route behind it asks Python
-(`/api/auth/status`) and refuses cross-site writes as `auth.py` does. The scan itself
+scans, and refuses cross-site writes as `same_site.py` does. The scan itself
 (resampling, structure, detectors, setups, sessions, quarters) exists twice for now,
 `src/wednesday/` and `server-rs/src/scan/`: a change to one must go into the other, and
 both `make test` and `make test-tauri` check them against the same `tests/golden/`.
@@ -79,11 +78,11 @@ both `make test` and `make test-tauri` check them against the same `tests/golden
   notice and a link to tradingview.com where users see the charts; the status bar
   carries both (the charts set `attributionLogo: false`), so keep it visible,
   full screen included.
-- **The dashboard login is optional** (`auth.py`, on when `XAU_AUTH_PASSWORD` is
-  set). Keep the default host `127.0.0.1`; a non-loopback host without the login is
-  refused unless `--insecure`. New `/api` routes are guarded by the middleware
-  automatically (`tests/test_auth.py` walks them); only add to `auth.PUBLIC` what
-  must work logged out. Don't add endpoints that expose secrets or files outside `data/`.
+- **There is no login; the dashboard stays local.** Keep the default host
+  `127.0.0.1`; a non-loopback host is refused unless `--insecure`. Cross-site
+  writes to `/api` are refused (`same_site.py`, and `cross_site` in `server-rs`), so
+  another web page can't drive the dashboard. Don't add endpoints that expose
+  secrets or files outside `data/`.
 - **Time zones are explicit.** Bar times come in the feed's clock (`XAU_CLOCK`; UTC for
   Yahoo and TradingView, a broker clock such as NY+7 for some CSV exports); the quarterly
   view works in New York time. Convert with `quarters.to_new_york` / `utc_to_feed` rather

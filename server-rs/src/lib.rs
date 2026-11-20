@@ -5,10 +5,9 @@
 //! the Tauri shell can't tell the difference, so routes move over one at a time and the app works
 //! at every step. When the last route is ported, the Python server goes (step 10).
 //!
-//! What a ported route answers must match `tests/api_contract.json` (step 1). The login is still
-//! Python's: a ported route behind it asks the Python server whether the request is logged in
-//! (`/api/auth/status`, with the request's cookie and token) and refuses cross-site requests the
-//! way `auth.py` does, so the rules stay one set until the login itself moves.
+//! What a ported route answers must match `tests/api_contract.json` (step 1). There is no login
+//! (the dashboard runs on the trader's machine); cross-site writes are refused as `same_site.py`
+//! refuses them, so another web page in the browser can't drive the dashboard.
 //!
 //! Routes that keep their data in the database ([`store`]) are served here only when this server
 //! could open the same database as Python; otherwise they go to Python like the rest.
@@ -27,7 +26,6 @@ use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Method, StatusCode,
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use http_body_util::BodyExt;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
@@ -47,9 +45,6 @@ pub const PORTED: &[&str] = &[
     "PUT /api/drawing-templates/{family}/{name}",
     "DELETE /api/drawing-templates/{family}/{name}",
 ];
-
-/// Routes open without the login (`auth.PUBLIC`).
-pub const PUBLIC: &[&str] = &["/api/health", "/api/auth/status", "/api/auth/login"];
 
 /// The version the dashboard and `/api/health` report; `scripts/set_version.py` keeps it in step.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -113,11 +108,11 @@ pub async fn open_store(home: &std::path::Path) -> Option<Store> {
     }
 }
 
-// ---- the login, still Python's ----
+// ---- cross-site writes (same_site.py) ----
 
 const UNSAFE: [Method; 4] = [Method::POST, Method::PUT, Method::PATCH, Method::DELETE];
 
-/// A state-changing browser request that came from another site (`auth.cross_site`).
+/// A state-changing browser request that came from another site (`same_site.cross_site`).
 pub fn cross_site(method: &Method, headers: &HeaderMap) -> bool {
     if !UNSAFE.contains(method) {
         return false;
@@ -143,44 +138,15 @@ fn detail(status: StatusCode, detail: impl Into<Value>) -> Response {
 }
 
 impl App {
-    /// None when the request may go on, else the answer `auth.py`'s guard would give.
-    async fn guard(&self, method: &Method, headers: &HeaderMap) -> Option<Response> {
-        let mut ask = Request::get(format!("http://{}/api/auth/status", self.backend));
-        for name in [header::COOKIE, header::AUTHORIZATION, header::HOST] {
-            if let Some(v) = headers.get(&name) {
-                ask = ask.header(name, v);
-            }
-        }
-        let answer = match self.client.request(ask.body(Body::empty()).unwrap()).await {
-            Ok(res) if res.status().is_success() => res.into_body().collect().await.ok().map(|b| b.to_bytes()),
-            _ => None,
-        };
-        let Some(status) = answer.and_then(|b| serde_json::from_slice::<Value>(&b).ok()) else {
-            return Some(detail(StatusCode::BAD_GATEWAY, "The screener isn't answering. Restart Wednesday if this stays."));
-        };
-        let enabled = status["enabled"] == true;
-        let logged_in = status["logged_in"] == true;
-        let bearer = headers
-            .get(header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|v| v.len() >= 7 && v[..7].eq_ignore_ascii_case("bearer "));
-        // A valid API token isn't sent by a browser on its own; everything else must be same-site.
-        let api_token = enabled && logged_in && bearer;
-        if !api_token && cross_site(method, headers) {
-            return Some(detail(StatusCode::FORBIDDEN, "Cross-site request refused"));
-        }
-        if enabled && !logged_in {
-            let mut res = detail(StatusCode::UNAUTHORIZED, "Log in first");
-            res.headers_mut().insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
-            return Some(res);
-        }
-        None
+    /// None when the request may go on, else the 403 `same_site.py` gives a cross-site write.
+    fn guard(&self, method: &Method, headers: &HeaderMap) -> Option<Response> {
+        cross_site(method, headers).then(|| detail(StatusCode::FORBIDDEN, "Cross-site request refused"))
     }
 
     /// The store and a cleared request, or the answer to send instead (Python's, without a store).
     async fn admit(&self, req: Request) -> Result<(Store, Request), Response> {
         let Some(store) = self.store.clone() else { return Err(forward(State(self.clone()), req).await) };
-        match self.guard(req.method(), req.headers()).await {
+        match self.guard(req.method(), req.headers()) {
             Some(refused) => Err(refused),
             None => Ok((store, req)),
         }

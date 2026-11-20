@@ -45,9 +45,8 @@ wednesday ...` commands directly (see [deploy-windows.md](deploy-windows.md)).
 | `--recent-bars` | `3` | Report levels swept/mitigated within this many candles |
 | `--serve` | off | Also run the web dashboard + API (`XAU_SERVE=1`) |
 | `--no-poll` | off | With `--serve`: scan once at start, then fetch nothing (no minute scans, no live prices); for working on the dashboard (the status shows *Paused*) |
-| `--host` / `--port` | `127.0.0.1` / `8000` | Dashboard address (`XAU_HOST`, `XAU_PORT`); a non-loopback host needs the login on or `--insecure` |
-| `--insecure` | off | Serve on a non-loopback host without a login |
-| `--hash-password` | - | Read a dashboard password and print the `XAU_AUTH_PASSWORD_HASH` line for `.env` |
+| `--host` / `--port` | `127.0.0.1` / `8000` | Dashboard address (`XAU_HOST`, `XAU_PORT`); a non-loopback host needs `--insecure` |
+| `--insecure` | off | Serve on a non-loopback host (the dashboard has no login) |
 | `--db` | `sqlite:///data/xau.db` | Storage URL (`XAU_DB_URL`); `none` disables it |
 | `--reset-settings` | off | Forget the data source saved from the dashboard |
 | `--once` | off | Scan once and exit instead of looping every minute |
@@ -71,7 +70,6 @@ bars are fetched each minute.
 | `XAU_DB_URL` | Storage URL |
 | `XAU_MAX_SL`, `XAU_DETECTORS` | Strategy settings |
 | `XAU_SERVE`, `XAU_HOST`, `XAU_PORT` | Dashboard |
-| `XAU_AUTH_PASSWORD`, `XAU_AUTH_PASSWORD_HASH` | Dashboard login ([deploy-windows.md](deploy-windows.md#opening-it-from-a-phone-or-laptop-login--https)); the hash wins when both are set |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Telegram alerts; fallback when not set in Settings |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | News brief ([bias.md](bias.md)); fallback when not set in Settings |
 | `XAU_LOG_FILE`, `XAU_JSON_OUT` | Logs and JSON lines output |

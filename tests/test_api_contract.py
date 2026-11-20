@@ -27,7 +27,6 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from wednesday.alerts import AlertManager
-from wednesday.auth import Auth, hash_password
 from wednesday.brief import BriefRunner
 from wednesday.detectors import DetectorParams
 from wednesday.engine import Runtime
@@ -68,11 +67,7 @@ def client(tmp_path, monkeypatch):
                       brief=BriefRunner(store),
                       journals=Journals(store, sample=True), poll=False)
     runtime.engine.step()
-    # With the login on, so its routes answer too; the client stays logged in.
-    auth = Auth(hash_password("contract", n=2**10), store)
-    client = TestClient(create_app(runtime, source="synthetic", ui_dir=tmp_path, auth=auth))
-    assert client.post("/api/auth/login", json={"password": "contract"}).status_code == 200
-    return client
+    return TestClient(create_app(runtime, source="synthetic", ui_dir=tmp_path))
 
 
 def _api_routes(routes):

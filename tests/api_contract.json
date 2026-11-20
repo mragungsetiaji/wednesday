@@ -65,24 +65,6 @@
     }
    }
   },
-  "POST /api/auth/login": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
-  "POST /api/auth/tokens": {
-   "body": {
-    "application/json": {
-     "additionalProperties": true,
-     "title": "Body",
-     "type": "object"
-    }
-   }
-  },
   "POST /api/brief/generate": {
    "body": {
     "application/json": {
@@ -287,13 +269,6 @@
    },
    "token_set": "bool",
    "token_source": "null"
-  },
-  "GET /api/auth/status": {
-   "enabled": "bool",
-   "logged_in": "bool"
-  },
-  "GET /api/auth/tokens": {
-   "tokens": []
   },
   "GET /api/bias": {
    "bias": "null"
@@ -1822,12 +1797,6 @@
   "PUT /api/alerts",
   "GET /api/alerts/chats",
   "POST /api/alerts/test",
-  "POST /api/auth/login",
-  "POST /api/auth/logout",
-  "GET /api/auth/status",
-  "GET /api/auth/tokens",
-  "POST /api/auth/tokens",
-  "DELETE /api/auth/tokens/{token_id}",
   "GET /api/bias",
   "PUT /api/bias",
   "GET /api/brief",

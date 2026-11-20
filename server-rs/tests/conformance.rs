@@ -17,8 +17,6 @@ use hyper_util::rt::TokioExecutor;
 use serde_json::{json, Value};
 use wednesday_rs::store::Store;
 
-const PASSWORD: &str = "conformance";
-
 struct Python(Child);
 
 impl Drop for Python {
@@ -46,7 +44,6 @@ fn start_python(dir: &Path, port: u16) -> Option<Python> {
         .args(["run", "--project"]).arg(repo())
         .args(["wednesday", "--serve", "--source", "synthetic", "--lookback", "50", "--host", "127.0.0.1"])
         .args(["--port", &port.to_string(), "--db", &db, "--env-file"]).arg(dir.join("none.env"))
-        .env("XAU_AUTH_PASSWORD", PASSWORD)
         .current_dir(dir)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -64,7 +61,6 @@ fn start_python(dir: &Path, port: u16) -> Option<Python> {
 struct Answer {
     status: u16,
     body: Value,
-    cookie: Option<String>,
 }
 
 /// Percent-encode what a URL path can't hold as it is (spaces, non-ASCII).
@@ -92,10 +88,8 @@ async fn call(addr: SocketAddr, method: &str, path: &str, cookie: &str, body: Op
     .unwrap();
     let res = Client::builder(TokioExecutor::new()).build_http().request(r).await.unwrap();
     let status = res.status().as_u16();
-    let cookie = res.headers().get("set-cookie").and_then(|v| v.to_str().ok())
-        .map(|c| c.split(';').next().unwrap().to_string());
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
-    Answer { status, body: serde_json::from_slice(&bytes).unwrap_or(Value::Null), cookie }
+    Answer { status, body: serde_json::from_slice(&bytes).unwrap_or(Value::Null) }
 }
 
 /// `saved_at` differs by when each server saved; check it's an ISO time and drop it.
@@ -186,17 +180,13 @@ async fn the_ported_routes_answer_as_python_does() {
     let Some(_python) = start_python(&dir, port) else { return };
     let python: SocketAddr = ([127, 0, 0, 1], port).into();
 
-    // Rust in front of the same Python (for the login), on a database of its own.
+    // Rust in front of the same Python, on a database of its own.
     let rust_store = Store::open(&format!("sqlite:///{}", dir.join("rust.db").display()), &dir).await.unwrap();
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let rust = l.local_addr().unwrap();
     tokio::spawn(wednesday_rs::serve(l, python, Some(rust_store.clone())));
 
-    let login = call(python, "POST", "/api/auth/login", "", Some(&json!({"password": PASSWORD}))).await;
-    assert_eq!(login.status, 200);
-    let cookie = login.cookie.expect("a session cookie");
-    assert_eq!(call(rust, "GET", "/api/workspaces", "", None).await.status, 401, "logged out");
-
+    let cookie = String::new();
     let mut failures = Vec::new();
     for (method, path, body) in steps() {
         let p = call(python, method, &path, &cookie, body.as_ref()).await;

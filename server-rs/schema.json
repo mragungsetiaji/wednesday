@@ -86,61 +86,6 @@
    ]
   },
   {
-   "name": "auth_tokens",
-   "create": {
-    "sqlite": "CREATE TABLE IF NOT EXISTS auth_tokens ( id VARCHAR(36) NOT NULL, kind VARCHAR(16) NOT NULL, name VARCHAR(120), hash VARCHAR(64) NOT NULL, created_at VARCHAR(40) NOT NULL, last_used_at VARCHAR(40), expires_at VARCHAR(40), PRIMARY KEY (id), UNIQUE (hash) )",
-    "postgresql": "CREATE TABLE IF NOT EXISTS auth_tokens ( id VARCHAR(36) NOT NULL, kind VARCHAR(16) NOT NULL, name VARCHAR(120), hash VARCHAR(64) NOT NULL, created_at VARCHAR(40) NOT NULL, last_used_at VARCHAR(40), expires_at VARCHAR(40), PRIMARY KEY (id), UNIQUE (hash) )"
-   },
-   "indexes": {
-    "sqlite": [],
-    "postgresql": []
-   },
-   "columns": [
-    {
-     "name": "id",
-     "nullable": false,
-     "sqlite": "VARCHAR(36)",
-     "postgresql": "VARCHAR(36)"
-    },
-    {
-     "name": "kind",
-     "nullable": false,
-     "sqlite": "VARCHAR(16)",
-     "postgresql": "VARCHAR(16)"
-    },
-    {
-     "name": "name",
-     "nullable": true,
-     "sqlite": "VARCHAR(120)",
-     "postgresql": "VARCHAR(120)"
-    },
-    {
-     "name": "hash",
-     "nullable": false,
-     "sqlite": "VARCHAR(64)",
-     "postgresql": "VARCHAR(64)"
-    },
-    {
-     "name": "created_at",
-     "nullable": false,
-     "sqlite": "VARCHAR(40)",
-     "postgresql": "VARCHAR(40)"
-    },
-    {
-     "name": "last_used_at",
-     "nullable": true,
-     "sqlite": "VARCHAR(40)",
-     "postgresql": "VARCHAR(40)"
-    },
-    {
-     "name": "expires_at",
-     "nullable": true,
-     "sqlite": "VARCHAR(40)",
-     "postgresql": "VARCHAR(40)"
-    }
-   ]
-  },
-  {
    "name": "calendar_events",
    "create": {
     "sqlite": "CREATE TABLE IF NOT EXISTS calendar_events ( time BIGINT NOT NULL, currency VARCHAR(8) NOT NULL, title VARCHAR(200) NOT NULL, impact VARCHAR(16), forecast VARCHAR(40), previous VARCHAR(40), actual VARCHAR(40), source VARCHAR(16), PRIMARY KEY (time, currency, title) )",

@@ -44,18 +44,7 @@ fn python() -> Router {
             .body(Body::from_stream(ReceiverStream::new(rx)))
             .unwrap()
     }
-    // The login: on, and logged in with the cookie wednesday_session=good or the token "good".
-    async fn auth_status(headers: HeaderMap) -> axum::Json<serde_json::Value> {
-        let get = |n: &str| headers.get(n).and_then(|v| v.to_str().ok()).unwrap_or("");
-        let logged_in = if get("authorization").is_empty() {
-            get("cookie").contains("wednesday_session=good")
-        } else {
-            get("authorization") == "Bearer good"
-        };
-        axum::Json(serde_json::json!({"enabled": true, "logged_in": logged_in}))
-    }
     Router::new()
-        .route("/api/auth/status", get(auth_status))
         .route("/api/health", get(|| async { "python answered" }))
         .route("/api/stream", get(stream))
         .fallback(any(echo))
@@ -147,39 +136,26 @@ async fn python_not_answering_is_a_502_saying_what_to_do() {
     assert!(text(res).await.contains("Restart Wednesday"));
 }
 
-// ---- routes behind the login, which is still Python's ----
+// ---- no login; no cross-site writes ----
 
 #[tokio::test]
-async fn ported_routes_ask_python_about_the_login() {
-    let addr = front_with(listen(python()).await, Some(temp_store("login").await)).await;
-    for route in wednesday_rs::PORTED {
-        let (method, path) = route.split_once(' ').unwrap();
-        if wednesday_rs::PUBLIC.contains(&path) {
-            continue;
-        }
-        let path = path.replace("{name}", "x").replace("{family}", "line");
-        let body = (method == "PUT").then(|| serde_json::json!({"style": {}}));
-        let res = send(req(method, addr, &path, "", body.clone())).await;
-        assert_eq!(res.status(), 401, "{route} without a login");
-        assert_eq!(res.headers()["www-authenticate"], "Bearer");
-        let res = send(req(method, addr, &path, "wednesday_session=good", body)).await;
-        assert!(res.status() != 401 && res.status() != 403, "{route} logged in: {}", res.status());
-    }
-}
-
-#[tokio::test]
-async fn cross_site_writes_are_refused_unless_an_api_token_sends_them() {
+async fn cross_site_writes_are_refused() {
     let addr = front_with(listen(python()).await, Some(temp_store("xsite").await)).await;
-    let mut r = req("DELETE", addr, "/api/workspaces/x", "wednesday_session=good", None);
+    let mut r = req("DELETE", addr, "/api/workspaces/x", "", None);
     r.headers_mut().insert("origin", "http://evil.example".parse().unwrap());
+    let res = send(r).await;
+    assert_eq!(res.status(), 403);
+    assert_eq!(text(res).await, r#"{"detail":"Cross-site request refused"}"#);
+    let mut r = req("PUT", addr, "/api/drawing-templates/line/x", "", Some(serde_json::json!({"style": {}})));
+    r.headers_mut().insert("sec-fetch-site", "cross-site".parse().unwrap());
     assert_eq!(send(r).await.status(), 403);
     let mut r = req("DELETE", addr, "/api/workspaces/x", "", None);
-    r.headers_mut().insert("sec-fetch-site", "cross-site".parse().unwrap());
-    r.headers_mut().insert("authorization", "Bearer good".parse().unwrap());
-    assert_eq!(send(r).await.status(), 200, "an API token isn't a browser");
-    let mut r = req("DELETE", addr, "/api/workspaces/x", "wednesday_session=good", None);
     r.headers_mut().insert("origin", format!("http://{addr}").parse().unwrap());
     assert_eq!(send(r).await.status(), 200, "same origin");
+    assert_eq!(send(req("DELETE", addr, "/api/workspaces/x", "", None)).await.status(), 200, "scripts send no Origin");
+    let mut r = req("GET", addr, "/api/workspaces", "", None);
+    r.headers_mut().insert("origin", "http://evil.example".parse().unwrap());
+    assert_eq!(send(r).await.status(), 200, "reads pass");
 }
 
 #[tokio::test]
@@ -191,7 +167,7 @@ async fn without_a_database_python_serves_them() {
     assert_eq!(got["line"], "GET /api/workspaces", "the stand-in Python echoed it");
 }
 
-// ---- the contract (tests/api_contract.json, src/wednesday/auth.py) ----
+// ---- the contract (tests/api_contract.json) ----
 
 fn repo(path: &str) -> String {
     std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join(path)).unwrap()
@@ -204,11 +180,6 @@ fn ported_routes_are_in_the_contract() {
     for route in wednesday_rs::PORTED {
         assert!(routes.contains(route), "{route} isn't in tests/api_contract.json");
     }
-    let auth = repo("src/wednesday/auth.py");
-    let public = auth.lines().find(|l| l.starts_with("PUBLIC = ")).expect("auth.PUBLIC");
-    for path in wednesday_rs::PUBLIC {
-        assert!(public.contains(&format!("\"{path}\"")), "{path}: auth.PUBLIC changed");
-    }
 }
 
 #[tokio::test]
@@ -218,12 +189,12 @@ async fn ported_answers_have_the_contract_shape() {
     // What the Python contract test puts in the lists: a workspace "Contract", and a template.
     let window = serde_json::json!({"route": "#", "x": 0, "y": 0, "width": 1440, "height": 900, "maximized": true});
     let ws = serde_json::json!({"layout": {"xau.tf": "15M"}, "windows": [window]});
-    assert_eq!(send(req("PUT", addr, "/api/workspaces/Contract", "wednesday_session=good", Some(ws))).await.status(), 200);
+    assert_eq!(send(req("PUT", addr, "/api/workspaces/Contract", "", Some(ws))).await.status(), 200);
     let tpl = serde_json::json!({"style": {"color": "#3b82f6", "width": 1, "dash": "dotted"}, "text": "H1 OB"});
-    assert_eq!(send(req("PUT", addr, "/api/drawing-templates/line/H1", "wednesday_session=good", Some(tpl))).await.status(), 200);
+    assert_eq!(send(req("PUT", addr, "/api/drawing-templates/line/H1", "", Some(tpl))).await.status(), 200);
     for route in wednesday_rs::PORTED.iter().filter(|r| r.starts_with("GET ")) {
         let path = route[4..].replace("{name}", "Contract");
-        let res = send(req("GET", addr, &path, "wednesday_session=good", None)).await;
+        let res = send(req("GET", addr, &path, "", None)).await;
         assert_eq!(res.status(), 200, "{route}");
         let body: serde_json::Value = serde_json::from_str(&text(res).await).unwrap();
         let want = &contract["responses"][*route];

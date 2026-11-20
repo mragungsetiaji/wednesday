@@ -565,12 +565,11 @@ The dashboard follows the system theme and works down to phone width.
 
 ## Access
 
-By default the dashboard has no login and binds to `127.0.0.1`; any other address
-is refused unless the login is on or `--insecure` is passed. Set
-`XAU_AUTH_PASSWORD` (or `XAU_AUTH_PASSWORD_HASH` from `wednesday --hash-password`)
-to turn the login on, then reach it through an HTTPS proxy; see
-[deploy-windows.md](deploy-windows.md#opening-it-from-a-phone-or-laptop-login--https).
-**Settings > Access** logs out and makes API tokens for scripts.
+The dashboard has no login: it binds to `127.0.0.1`, and any other address is
+refused unless `--insecure` is passed. Write requests from another web site are
+refused, so a page open in the same browser can't drive it. To reach it from
+another machine, use an SSH tunnel or a VPN; see
+[deploy-windows.md](deploy-windows.md).
 
 ## UI development
 
