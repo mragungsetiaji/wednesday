@@ -13,16 +13,16 @@
 //! In front of Python, routes that keep their data in the database ([`store`]) are served here
 //! only when this server could open the same database; otherwise they go to Python like the rest.
 
-pub mod alerts;
+pub use wednesday_alerts as alerts;
 pub mod bias;
-pub mod calendar;
+pub use wednesday_calendar as calendar;
 pub use wednesday_base::config;
-pub mod drawings;
+pub use wednesday_drawings as drawings;
 pub use wednesday_engine as engine;
 pub mod journal;
 pub mod logfile;
 pub use wednesday_base::notify;
-pub mod plugins;
+pub use wednesday_plugins as plugins;
 pub use wednesday_base::pyjson;
 pub use wednesday_scan as scan;
 pub mod settings_routes;

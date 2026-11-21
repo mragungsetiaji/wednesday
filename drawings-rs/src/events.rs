@@ -4,7 +4,7 @@
 use serde_json::{Map, Value};
 
 use super::py;
-use crate::scan::{unix, Bar};
+use wednesday_scan::{unix, Bar};
 
 /// The parts of a drawing an alert reads.
 #[derive(Clone, Debug, PartialEq)]

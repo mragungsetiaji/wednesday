@@ -21,7 +21,7 @@ use std::path::{Component, Path, PathBuf};
 use base64::Engine as _;
 use serde_json::{json, Value};
 
-use crate::store::Store;
+use wednesday_store::Store;
 
 pub const PREFIX: &str = "WEDPKG1";
 // A copy of DEFAULT_SERVER in src/wednesday/plugin_install.py, which is a TEMP address (a Mac on
@@ -65,7 +65,7 @@ fn damaged<T>() -> Result<T, InstallError> {
 
 /// A setting from the environment, else `home/.env` (where Python's CLI loaded it from).
 fn env(home: &Path, name: &str) -> Option<String> {
-    crate::config::env_setting(name, &home.join(".env")).filter(|v| !v.trim().is_empty())
+    wednesday_base::config::env_setting(name, &home.join(".env")).filter(|v| !v.trim().is_empty())
 }
 
 /// `WEDNESDAY_PLUGINS_DIR` (relative to `home`), else `<home>/data/plugins`.

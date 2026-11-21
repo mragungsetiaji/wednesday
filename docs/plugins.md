@@ -16,13 +16,13 @@ downloads the API 2 build.
 
 Users don't install anything by hand: they enter their licence key in
 **Settings > Plan**. When no plugin handles licences and the key comes from the
-licence server (`WEDK-...`), Wednesday (`server-rs/src/plugins/install.rs`):
+licence server (`WEDK-...`), Wednesday (`plugins-rs/src/install.rs`):
 
 1. sends the key, this install's device id and the target it was built for (a Rust
    target triple such as `x86_64-pc-windows-msvc`) to `POST /v1/download` on the
    licence server (`WEDNESDAY_LICENCE_SERVER`);
 2. checks the answer: a manifest (name, version, plugin API, target, file name,
-   SHA-256) signed with Ed25519 by a key in `server-rs/src/plugins/keys.rs`, and a
+   SHA-256) signed with Ed25519 by a key in `plugins-rs/src/keys.rs`, and a
    zip whose hash matches it. Only `wednesday_ee`, for API 2 and this build's target,
    no larger than 50 MB, is accepted; nothing downloaded runs before this check;
 3. unpacks the zip to `data/plugins/wednesday_ee.new/` (`WEDNESDAY_PLUGINS_DIR`),
@@ -53,7 +53,7 @@ download is a zip of that folder; the licence server signs it as above.
 ## How Wednesday runs it
 
 At startup (once the server listens) and after a download, the server
-(`server-rs/src/plugins/mod.rs`) reads each `data/plugins/*/plugin.json` and starts
+(`plugins-rs/src/lib.rs`) reads each `data/plugins/*/plugin.json` and starts
 the program with its folder as the working directory, standard input and output
 piped, standard error into Wednesday's log, and:
 
@@ -110,7 +110,7 @@ plugins only and are not part of the dashboard's API contract.
 
 ## Features
 
-`server-rs/src/plugins/catalog.rs` (a copy of `wednesday/features.py`) lists the paid
+`plugins-rs/src/catalog.rs` (a copy of `wednesday/features.py`) lists the paid
 feature ids with a title and a line on what each does, so the Plan screen can show
 them, locked, even when no plugin is installed. A plugin can provide ids that aren't
 in the list; they show too. The core's own checks (a second journal needs

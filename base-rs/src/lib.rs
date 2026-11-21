@@ -25,3 +25,15 @@ impl Refusal {
 
 /// What a ported route gives: its JSON body, or a refusal.
 pub type Answer = Result<Value, Refusal>;
+
+/// What the trader can fix (422), or a store failure (500).
+pub enum Refused {
+    Invalid(String),
+    Store(String),
+}
+
+impl From<String> for Refused {
+    fn from(e: String) -> Self {
+        Refused::Store(e)
+    }
+}

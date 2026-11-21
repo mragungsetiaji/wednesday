@@ -54,7 +54,7 @@ class CalendarSettings:
     def from_dict(cls, d: dict | None) -> CalendarSettings:
         """Settings from a saved or sent dict; ValueError for a field of the wrong type.
 
-        The Rust server (``server-rs/src/calendar.rs``) reads them the same way (#96).
+        The Rust server (``calendar-rs/src/``) reads them the same way (#96).
         """
         d = d or {}
         base = cls()

@@ -62,7 +62,7 @@ fn good_color(c: &str) -> bool {
 /// Err with the message Python's ValueError carries.
 pub fn clean_drawing(drawing_id: &str, body: &Map<String, Value>) -> Result<Map<String, Value>, String> {
     let mut row = clean_drawing_at(drawing_id, body)?;
-    row.insert("updated_at".into(), crate::engine::py_iso_utc(Utc::now()).into());
+    row.insert("updated_at".into(), wednesday_engine::py_iso_utc(Utc::now()).into());
     Ok(row)
 }
 
@@ -212,7 +212,7 @@ pub fn drawing_payload(row: &Map<String, Value>) -> Value {
 /// the feed-clock unix time of the last closed M1 bar now (only later bars count).
 pub fn clean_alert(kind: &str, body: &Map<String, Value>, armed_bar: Option<i64>) -> Result<Map<String, Value>, String> {
     let mut row = clean_alert_at(kind, body, armed_bar, Utc::now())?;
-    row.insert("created_at".into(), crate::engine::py_iso_utc(Utc::now()).into());
+    row.insert("created_at".into(), wednesday_engine::py_iso_utc(Utc::now()).into());
     Ok(row)
 }
 

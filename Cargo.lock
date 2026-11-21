@@ -5397,11 +5397,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "wednesday-alerts"
+version = "0.3.2"
+dependencies = [
+ "chrono",
+ "log",
+ "reqwest 0.12.28",
+ "security-framework",
+ "serde_json",
+ "tokio",
+ "wednesday-base",
+ "wednesday-engine",
+ "wednesday-scan",
+ "wednesday-store",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "wednesday-base"
 version = "0.3.2"
 dependencies = [
  "chrono",
  "serde_json",
+]
+
+[[package]]
+name = "wednesday-calendar"
+version = "0.3.2"
+dependencies = [
+ "chrono",
+ "chrono-tz",
+ "log",
+ "reqwest 0.12.28",
+ "serde_json",
+ "tokio",
+ "wednesday-base",
+ "wednesday-engine",
+ "wednesday-scan",
+ "wednesday-store",
 ]
 
 [[package]]
@@ -5417,6 +5450,20 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-single-instance",
  "wednesday-rs",
+]
+
+[[package]]
+name = "wednesday-drawings"
+version = "0.3.2"
+dependencies = [
+ "chrono",
+ "log",
+ "serde_json",
+ "tokio",
+ "wednesday-base",
+ "wednesday-engine",
+ "wednesday-scan",
+ "wednesday-store",
 ]
 
 [[package]]
@@ -5445,6 +5492,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "wednesday-plugins"
+version = "0.3.2"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "flate2",
+ "hyper-util",
+ "log",
+ "reqwest 0.12.28",
+ "ring",
+ "serde_json",
+ "tokio",
+ "wednesday-base",
+ "wednesday-store",
+ "zip",
+]
+
+[[package]]
 name = "wednesday-rs"
 version = "0.3.2"
 dependencies = [
@@ -5459,17 +5524,19 @@ dependencies = [
  "log",
  "reqwest 0.12.28",
  "ring",
- "security-framework",
  "serde_json",
  "sqlx",
  "tokio",
  "tokio-stream",
+ "wednesday-alerts",
  "wednesday-base",
+ "wednesday-calendar",
+ "wednesday-drawings",
  "wednesday-engine",
  "wednesday-journal",
+ "wednesday-plugins",
  "wednesday-scan",
  "wednesday-store",
- "windows-sys 0.61.2",
  "zip",
 ]
 

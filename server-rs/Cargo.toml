@@ -17,12 +17,12 @@ path = "src/main.rs"
 [dependencies]
 chrono.workspace = true
 chrono-tz.workspace = true
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+axum.workspace = true
 http-body-util = "0.1"
 hyper = { version = "1", features = ["client", "http1"] }
-hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
+hyper-util.workspace = true
 log.workspace = true
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest.workspace = true
 serde_json.workspace = true
 wednesday-base.workspace = true
 wednesday-scan.workspace = true
@@ -32,21 +32,15 @@ wednesday-engine.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tokio-stream = "0.1"
-ring = "0.17"
-base64 = "0.22"
-# Downloaded plugins (plugins/install.rs): Ed25519 and SHA-256 from ring (already here for rustls),
-# zip archives read with flate2's pure-Rust backend.
-zip = { version = "4.2.0", default-features = false, features = ["deflate-flate2"] }
-flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
-
-# The OS credential store, where Python's keyring keeps the Telegram bot token (alerts/secrets.rs).
-[target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "3"
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+wednesday-alerts.workspace = true
+wednesday-calendar.workspace = true
+wednesday-drawings.workspace = true
+wednesday-plugins.workspace = true
 
 [dev-dependencies]
+base64.workspace = true
 flate2 = "1"
+ring.workspace = true
+zip.workspace = true
 tokio = { version = "1", features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"

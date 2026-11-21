@@ -1,5 +1,5 @@
 """Reference data for the order block alerts (#96, step 9e): what ``alerts.py`` makes of given
-order blocks, settings and M1 bars, for the Rust port (``server-rs/src/alerts/``) to match.
+order blocks, settings and M1 bars, for the Rust port (``alerts-rs/src/``) to match.
 
 ``tests/golden/alerts/`` holds:
 

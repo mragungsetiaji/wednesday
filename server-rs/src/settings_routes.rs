@@ -6,17 +6,7 @@ use serde_json::{json, Map, Value};
 use crate::pyjson;
 use crate::store::Store;
 
-/// What the trader can fix (422), or a store failure (500).
-pub enum Refused {
-    Invalid(String),
-    Store(String),
-}
-
-impl From<String> for Refused {
-    fn from(e: String) -> Self {
-        Refused::Store(e)
-    }
-}
+pub use wednesday_base::Refused;
 
 fn invalid<T>(msg: impl Into<String>) -> Result<T, Refused> {
     Err(Refused::Invalid(msg.into()))

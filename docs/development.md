@@ -97,9 +97,17 @@ The Rust crates form one Cargo workspace (`Cargo.toml` at the root): one `Cargo.
 `target/` folder, one version (`[workspace.package]`, set by `scripts/set_version.py`). Debug
 builds keep only line tables for our code and no debug info for dependencies, and
 `.cargo/config.toml` limits builds to two jobs (CI sets `CARGO_BUILD_JOBS`).
-The crates, each a folder at the root: `base-rs` (`wednesday-base`: Python-identical JSON and
-text, `.env` settings, a route's `Answer`/`Refusal`), `scan-rs` (`wednesday-scan`: the scan), `store-rs` (`wednesday-store`: the database and `schema.json`), `journal-rs` (`wednesday-journal`: MT5 reports, stats, entries, snapshots), `engine-rs` (`wednesday-engine`: the feed, the scan loop, charts, analysis, other markets),
-`server-rs` (`wednesday-rs`: the routes, store, engine and features) and `src-tauri` (the shell).
+The crates, each a folder at the root:
+
+- `base-rs` (`wednesday-base`): Python-identical JSON and text, `.env` settings, a route's
+  `Answer`/`Refusal`, Python-style times.
+- `scan-rs` (`wednesday-scan`): the scan.
+- `store-rs` (`wednesday-store`): the database and `schema.json`.
+- `engine-rs` (`wednesday-engine`): the feed, the scan loop, charts, analysis, other markets.
+- `journal-rs`, `alerts-rs`, `drawings-rs`, `calendar-rs`, `plugins-rs`: one feature each.
+- `server-rs` (`wednesday-rs`): the routes (`lib.rs`), the dashboard files, the log, `main`.
+- `src-tauri`: the desktop shell.
+
 A crate that doesn't change isn't rebuilt. The integration tests are one binary, `server-rs/tests/it/` (`main.rs` lists the modules; a test that
 sets environment variables holds `env_lock()`): `cargo test -p wednesday-rs --test it <filter>`.
 
@@ -124,9 +132,9 @@ request to Python, streaming the answer back. Each answer then carries
   the database (or `XAU_DB_URL=none`), Python serves those routes.
 - **No login.** The dashboard runs on the trader's machine; ported routes refuse
   cross-site writes as `same_site.py` does.
-- **Drawings and alerts** run with the engine (step 9e). `server-rs/src/drawings/` has the
+- **Drawings and alerts** run with the engine (step 9e). `drawings-rs/src/` has the
   drawings routes and the drawing alerts (`checker.rs`, checked after each scan and, for
-  intrabar alerts, on each tick); `server-rs/src/alerts/` has the order block alerts, the
+  intrabar alerts, on each tick); `alerts-rs/src/` has the order block alerts, the
   Telegram client and `/api/alerts`. The bot token is read and saved in the OS credential store
   where Python's `keyring` keeps it (`alerts/secrets.rs`: Keychain on macOS, Credential Manager
   on Windows; on Linux only `.env` or the session), so either server finds the other's token.
@@ -141,7 +149,7 @@ request to Python, streaming the answer back. Each answer then carries
   (`POST .../entries`, with the engine) freezes the market of the moment (`journal/market.rs`:
   the last scan, the active bias, the price and the coming news; `tests/golden/market/`).
   A second journal needs the `journal.multi` feature, read from the plugin host's registry
-  (`server-rs/src/plugins/`, see `docs/plugins.md`).
+  (`plugins-rs/src/`, see `docs/plugins.md`).
 - **The engine** runs in Rust (`engine-rs/src/`): the feed (`feed.rs`: the TradingView
   helper, synthetic data), the M1 buffer stored in `m1_bars`, the scan after each minute close,
   the live price and the forming candle. It answers `/api/status`, `/api/scan`, `/api/tick`,
@@ -157,7 +165,7 @@ request to Python, streaming the answer back. Each answer then carries
   From a checkout: `make serve-rs ARGS=--engine` (Rust on 8000), then
   `WEDNESDAY_FOLLOW=http://127.0.0.1:8000 make serve-py PORT=8001`; `conformance.rs` checks the follower's
   answers against Rust's. Python on its own (`make serve-py`) runs its own feed.
-- **The calendar** is ported in `server-rs/src/calendar/`: the settings, the weekly
+- **The calendar** is ported in `calendar-rs/src/`: the settings, the weekly
   ForexFactory fetch (`Calendar`, at most hourly, retried ten minutes after a failure, the last
   good week kept in `calendar_cache`), the history (`calendar_events`), the past reactions on the
   engine's M1 bars and feed clock (`reactions.rs`) and the CSV import (`import.rs`, Python's `csv`

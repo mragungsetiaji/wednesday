@@ -54,7 +54,7 @@ pub fn py_capitalize(s: &str) -> String {
 pub fn py_str(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
-        other => crate::drawings::py::repr(other),
+        other => wednesday_base::py::repr(other),
     }
 }
 
@@ -188,7 +188,7 @@ pub fn fromisoformat(s: &str) -> Option<IsoTime> {
 
 /// `datetime.isoformat()` of an aware UTC time (microseconds only when there are some).
 pub fn iso_utc(t: DateTime<Utc>) -> String {
-    crate::engine::py_iso_utc(t)
+    wednesday_engine::py_iso_utc(t)
 }
 
 /// `int(dt.timestamp())`: seconds, cut toward zero.

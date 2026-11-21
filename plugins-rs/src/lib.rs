@@ -30,7 +30,7 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::{oneshot, watch};
 
-use crate::store::Store;
+use wednesday_store::Store;
 
 /// The plugin API this Wednesday runs (API 1 was Python packages loaded into the Python server).
 pub const API: i64 = install::API;

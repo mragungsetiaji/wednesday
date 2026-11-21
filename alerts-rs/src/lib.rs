@@ -21,10 +21,10 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Map, Value};
 
-use crate::engine::{py_iso_naive, py_iso_utc, Answer, Refusal};
-use crate::notify::Sender;
-use crate::scan::{Bar, Level, ScanResult, Time, TIMEFRAMES};
-use crate::store::Store;
+use wednesday_engine::{py_iso_naive, py_iso_utc, Answer, Refusal};
+use wednesday_base::notify::Sender;
+use wednesday_scan::{Bar, Level, ScanResult, Time, TIMEFRAMES};
+use wednesday_store::Store;
 pub use secrets::{Keyring, OsKeyring, Secrets, TELEGRAM_BOT_TOKEN};
 pub use telegram::{TelegramClient, TelegramError, API};
 
@@ -69,12 +69,12 @@ pub(crate) fn py_repr_value(v: &Value) -> String {
     match v {
         Value::Null => "None".into(),
         Value::Bool(b) => (if *b { "True" } else { "False" }).into(),
-        Value::Number(_) => crate::pyjson::dumps(v),
-        Value::String(s) => crate::calendar::py_repr(s),
+        Value::Number(_) => wednesday_base::pyjson::dumps(v),
+        Value::String(s) => wednesday_base::py::py_repr(s),
         Value::Array(a) => format!("[{}]", a.iter().map(py_repr_value).collect::<Vec<_>>().join(", ")),
         Value::Object(o) => format!(
             "{{{}}}",
-            o.iter().map(|(k, v)| format!("{}: {}", crate::calendar::py_repr(k), py_repr_value(v))).collect::<Vec<_>>().join(", ")
+            o.iter().map(|(k, v)| format!("{}: {}", wednesday_base::py::py_repr(k), py_repr_value(v))).collect::<Vec<_>>().join(", ")
         ),
     }
 }
@@ -405,7 +405,7 @@ impl Alerts {
     /// fallbacks, and Telegram's API.
     pub async fn load(store: Option<Store>, home: &Path) -> Alerts {
         let env_file = home.join(".env");
-        let env: Env = Arc::new(move |k: &str| crate::config::env_setting(k, &env_file));
+        let env: Env = Arc::new(move |k: &str| wednesday_base::config::env_setting(k, &env_file));
         let env2 = env.clone();
         let secrets = Secrets::os(move |k| env2(k));
         let saved = match &store {

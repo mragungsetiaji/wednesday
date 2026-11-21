@@ -4,7 +4,7 @@
 
 [workspace]
 resolver = "2"
-members = ["base-rs", "engine-rs", "journal-rs", "scan-rs", "server-rs", "src-tauri", "store-rs"]
+members = ["alerts-rs", "base-rs", "calendar-rs", "drawings-rs", "engine-rs", "journal-rs", "plugins-rs", "scan-rs", "server-rs", "src-tauri", "store-rs"]
 
 [workspace.package]
 version = "0.3.2"
@@ -23,6 +23,17 @@ wednesday-scan = { path = "scan-rs" }
 wednesday-store = { path = "store-rs" }
 wednesday-journal = { path = "journal-rs" }
 wednesday-engine = { path = "engine-rs" }
+wednesday-alerts = { path = "alerts-rs" }
+wednesday-calendar = { path = "calendar-rs" }
+wednesday-drawings = { path = "drawings-rs" }
+wednesday-plugins = { path = "plugins-rs" }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+ring = "0.17"
+base64 = "0.22"
+zip = { version = "4.2.0", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 log = "0.4"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite", "postgres"] }

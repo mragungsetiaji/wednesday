@@ -13,9 +13,9 @@ use chrono::{DateTime, Duration};
 use serde_json::{json, Map, Value};
 
 use super::events::{event_key, py_digit, py_space, py_strip, CalRow};
-use crate::engine::analysis::np_mean;
-use crate::scan::{round_to, unix, Bar, Clock, Time};
-use crate::store::Store;
+use wednesday_engine::analysis::np_mean;
+use wednesday_scan::{round_to, unix, Bar, Clock, Time};
+use wednesday_store::Store;
 
 pub const WINDOWS: [i64; 3] = [5, 15, 60]; // minutes after the release
 pub const LIMIT: usize = 24; // most recent covered releases per event type

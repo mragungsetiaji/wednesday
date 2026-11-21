@@ -1,0 +1,18 @@
+[package]
+name = "wednesday-drawings"
+version.workspace = true
+description = "Wednesday's drawings and the price alerts on them"
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+log.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+wednesday-base.workspace = true
+wednesday-engine.workspace = true
+wednesday-scan.workspace = true
+wednesday-store.workspace = true
