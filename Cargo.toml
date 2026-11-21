@@ -4,7 +4,7 @@
 
 [workspace]
 resolver = "2"
-members = ["alerts-rs", "base-rs", "calendar-rs", "drawings-rs", "engine-rs", "journal-rs", "plugins-rs", "scan-rs", "server-rs", "src-tauri", "store-rs"]
+members = ["wed-alerts", "wed-base", "wed-calendar", "wed-drawings", "wed-engine", "wed-journal", "wed-plugins", "wed-scan", "wed-server", "src-tauri", "wed-store"]
 
 [workspace.package]
 version = "0.3.2"
@@ -18,15 +18,15 @@ publish = false
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 chrono-tz = "0.10"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
-wednesday-base = { path = "base-rs" }
-wednesday-scan = { path = "scan-rs" }
-wednesday-store = { path = "store-rs" }
-wednesday-journal = { path = "journal-rs" }
-wednesday-engine = { path = "engine-rs" }
-wednesday-alerts = { path = "alerts-rs" }
-wednesday-calendar = { path = "calendar-rs" }
-wednesday-drawings = { path = "drawings-rs" }
-wednesday-plugins = { path = "plugins-rs" }
+wednesday-base = { path = "wed-base" }
+wednesday-scan = { path = "wed-scan" }
+wednesday-store = { path = "wed-store" }
+wednesday-journal = { path = "wed-journal" }
+wednesday-engine = { path = "wed-engine" }
+wednesday-alerts = { path = "wed-alerts" }
+wednesday-calendar = { path = "wed-calendar" }
+wednesday-drawings = { path = "wed-drawings" }
+wednesday-plugins = { path = "wed-plugins" }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

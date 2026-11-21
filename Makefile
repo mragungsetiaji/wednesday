@@ -1,5 +1,5 @@
 # Wednesday: common tasks on macOS and Linux. Needs Rust (cargo), Node 20+ and uv.
-# The server is Rust (server-rs); Python stays as the reference that writes tests/golden/ and as
+# The server is Rust (wed-server); Python stays as the reference that writes tests/golden/ and as
 # `wednesday --serve` / `make scan` from source.
 # `make` lists the targets. Pass extra CLI flags with ARGS, e.g. make scan ARGS="--source synthetic".
 
@@ -50,7 +50,7 @@ $(UI_BUILD): $(WEB)/node_modules $(UI_SOURCES)
 	cd $(WEB) && $(NPM) run build
 
 serve: $(UI_BUILD) ## The Rust server: scan engine + dashboard on http://HOST:PORT (data in this folder, source from Settings or .env)
-	cd server-rs && cargo run --release -- --host $(HOST) --port $(PORT) --home $(CURDIR) --ui-dir $(CURDIR)/$(WEB)/dist $(ARGS)
+	cd wed-server && cargo run --release -- --host $(HOST) --port $(PORT) --home $(CURDIR) --ui-dir $(CURDIR)/$(WEB)/dist $(ARGS)
 
 serve-py: $(UI_BUILD) ## The Python server from source (wednesday --serve), the reference implementation
 	$(UV) run wednesday --serve --host $(HOST) --port $(PORT) $(ARGS)
@@ -59,7 +59,7 @@ dev: $(WEB)/node_modules ## Rust server on synthetic data + Vite dev server with
 	$(MAKE) -j2 dev-api dev-ui
 
 dev-api:
-	cd server-rs && cargo run -- --source synthetic --port $(PORT) --home $(CURDIR) $(ARGS)
+	cd wed-server && cargo run -- --source synthetic --port $(PORT) --home $(CURDIR) $(ARGS)
 
 dev-ui:
 	cd $(WEB) && XAU_API=http://127.0.0.1:$(PORT) $(NPM) run dev
@@ -71,7 +71,7 @@ test-tauri: ## Run the Rust tests: every crate of the workspace (shell, server, 
 	cargo test --workspace
 
 serve-rs: ## Compare: the Rust server on PORT in front of a running Python one on PORT+1 (make serve-py PORT=8001 first; ARGS=--engine runs the engine)
-	cd server-rs && cargo run -- --port $(PORT) --backend $$(( $(PORT) + 1 )) --home $(CURDIR) $(ARGS)
+	cd wed-server && cargo run -- --port $(PORT) --backend $$(( $(PORT) + 1 )) --home $(CURDIR) $(ARGS)
 
 scan: ## One scan in the console (Python, from source)
 	$(UV) run wednesday --once $(ARGS)

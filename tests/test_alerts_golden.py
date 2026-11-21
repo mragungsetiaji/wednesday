@@ -1,5 +1,5 @@
 """Reference data for the order block alerts (#96, step 9e): what ``alerts.py`` makes of given
-order blocks, settings and M1 bars, for the Rust port (``alerts-rs/src/``) to match.
+order blocks, settings and M1 bars, for the Rust port (``wed-alerts/src/``) to match.
 
 ``tests/golden/alerts/`` holds:
 
@@ -10,7 +10,7 @@ order blocks, settings and M1 bars, for the Rust port (``alerts-rs/src/``) to ma
 - ``check.json``: ``AlertManager.check`` scenarios: order blocks, settings and the M1 bars at each
   check, the trade bias, and the keys and messages each check sends.
 
-``server-rs/tests/it/alerts_golden.rs`` runs the Rust code on the same input and wants the same
+``wed-server/tests/it/alerts_golden.rs`` runs the Rust code on the same input and wants the same
 output. Rewrite the files after a deliberate change to the alerts, and review the diff:
 
     UPDATE_GOLDEN=1 uv run pytest tests/test_alerts_golden.py

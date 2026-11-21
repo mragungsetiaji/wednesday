@@ -1,6 +1,6 @@
 """Other-symbol panes (/api/markets/*): Python's answers to tests/golden/markets/cases.json.
 
-The Rust port (engine-rs/src/markets.rs) must answer the same: server-rs/tests/it/engine_markets.rs
+The Rust port (wed-engine/src/markets.rs) must answer the same: wed-server/tests/it/engine_markets.rs
 runs the same cases against the same fake helper (tests/golden/markets/fake_feed.mjs) and compares
 with answers.json. After a deliberate change, rewrite it with
 ``UPDATE_MARKETS_GOLDEN=1 uv run pytest tests/test_markets_parity.py``. Needs Node; skipped without it.
@@ -57,4 +57,4 @@ def test_markets_answers_match_the_golden_file():
         path.write_text(json.dumps(got, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     assert json.loads(path.read_text(encoding="utf-8")) == got, (
         "Python's /api/markets answers changed: if on purpose, rerun with UPDATE_MARKETS_GOLDEN=1 "
-        "and check server-rs/tests/it/engine_markets.rs still passes")
+        "and check wed-server/tests/it/engine_markets.rs still passes")

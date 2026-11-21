@@ -1,5 +1,5 @@
 """Reference data for the economic calendar (#96, step 9f): the real ``news.py`` and ``news_stats.py``
-functions on fixed input, for the Rust port (``server-rs/tests/it/calendar_golden.rs``) to match
+functions on fixed input, for the Rust port (``wed-server/tests/it/calendar_golden.rs``) to match
 exactly (key order, ints and floats, float bits).
 
 ``tests/golden/calendar/`` holds the input, written once and kept (``input.json``: a ForexFactory

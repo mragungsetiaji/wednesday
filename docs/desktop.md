@@ -91,7 +91,7 @@ Only one copy runs at a time; starting a second one brings the first to the fron
 ## How it's built
 
 The app is a [Tauri v2](https://tauri.app) shell (#92, `src-tauri/`); it replaced
-the pywebview app in 0.3.1. Since #96 it runs Wednesday's Rust server (`server-rs/`) in
+the pywebview app in 0.3.1. Since #96 it runs Wednesday's Rust server (`wed-server/`) in
 its own process, with no Python: the scan engine (the TradingView connection, the
 minute scans, the live price), the alerts, every route the dashboard calls and the
 dashboard build, on `127.0.0.1` (port 8000 when free). It shows the dashboard in

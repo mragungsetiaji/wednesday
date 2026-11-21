@@ -11,7 +11,7 @@ make tauri       # the desktop app from this checkout
 make             # list every target
 ```
 
-The server is Rust (`server-rs/`). Python stays in the repository as the reference: it
+The server is Rust (`wed-server/`). Python stays in the repository as the reference: it
 writes the golden files the Rust tests read (`make test`), and runs from source as
 `make serve-py` (`wednesday --serve`), `make scan` and `make check`. Extra flags go
 through `ARGS`: `make serve ARGS="--source synthetic"` for the Rust server,
@@ -31,7 +31,7 @@ and Node 20+. Without make:
 
 ```bash
 uv sync && uv run pytest
-cd server-rs && cargo run -- --source synthetic --home ..   # API on :8000
+cd wed-server && cargo run -- --source synthetic --home ..   # API on :8000
 cd web && npm install && npm run dev                         # Vite on :5173, /api proxied to :8000
 ```
 
@@ -61,7 +61,7 @@ src/wednesday/
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)
 src-tauri/        the Tauri desktop shell (#92), with the Rust server in its process
-server-rs/        the server: scan engine, API and dashboard build (#96)
+wed-server/        the server: scan engine, API and dashboard build (#96)
 scripts/          Windows VPS: auto-restart wrapper + Task Scheduler installer
 docs/             these docs
 tests/
@@ -86,7 +86,7 @@ The scan's own output is kept the same way in `tests/golden/` (see
 
 ## The Rust server (#96)
 
-The backend moved to Rust a route at a time; `server-rs/` is now the server. It is an
+The backend moved to Rust a route at a time; `wed-server/` is now the server. It is an
 [axum](https://github.com/tokio-rs/axum) server that runs the scan engine, answers every route
 the dashboard calls and serves the dashboard build (`web/dist`, or `XAU_UI_DIR`; `ui.rs` does what
 Starlette's `StaticFiles(html=True)` did). An unknown `/api` route is FastAPI's 404,
@@ -99,20 +99,20 @@ builds keep only line tables for our code and no debug info for dependencies, an
 `.cargo/config.toml` limits builds to two jobs (CI sets `CARGO_BUILD_JOBS`).
 The crates, each a folder at the root:
 
-- `base-rs` (`wednesday-base`): Python-identical JSON and text, `.env` settings, a route's
+- `wed-base` (`wednesday-base`): Python-identical JSON and text, `.env` settings, a route's
   `Answer`/`Refusal`, Python-style times.
-- `scan-rs` (`wednesday-scan`): the scan.
-- `store-rs` (`wednesday-store`): the database and `schema.json`.
-- `engine-rs` (`wednesday-engine`): the feed, the scan loop, charts, analysis, other markets.
-- `journal-rs`, `alerts-rs`, `drawings-rs`, `calendar-rs`, `plugins-rs`: one feature each.
-- `server-rs` (`wednesday-rs`): the routes (`lib.rs`), the dashboard files, the log, `main`.
+- `wed-scan` (`wednesday-scan`): the scan.
+- `wed-store` (`wednesday-store`): the database and `schema.json`.
+- `wed-engine` (`wednesday-engine`): the feed, the scan loop, charts, analysis, other markets.
+- `wed-journal`, `wed-alerts`, `wed-drawings`, `wed-calendar`, `wed-plugins`: one feature each.
+- `wed-server` (`wednesday-rs`): the routes (`lib.rs`), the dashboard files, the log, `main`.
 - `src-tauri`: the desktop shell.
 
-A crate that doesn't change isn't rebuilt. The integration tests are one binary, `server-rs/tests/it/` (`main.rs` lists the modules; a test that
+A crate that doesn't change isn't rebuilt. The integration tests are one binary, `wed-server/tests/it/` (`main.rs` lists the modules; a test that
 sets environment variables holds `env_lock()`): `cargo test -p wednesday-rs --test it <filter>`.
 
 ```bash
-cd server-rs && cargo run -- [--host 127.0.0.1] [--port 8000] [--home DIR] [--db URL] [--ui-dir DIR] [--source synthetic]
+cd wed-server && cargo run -- [--host 127.0.0.1] [--port 8000] [--home DIR] [--db URL] [--ui-dir DIR] [--source synthetic]
 ```
 
 `--home` is the data folder (its `.env`, and `data/xau.db` by default; `make serve` and `make dev`
@@ -124,24 +124,24 @@ For comparing the two, `--backend <port>` puts it back in front of a Python serv
 request to Python, streaming the answer back. Each answer then carries
 `x-wednesday-server: rust` or `python`.
 
-- **The database.** `store-rs/src/lib.rs` opens the same database as Python
+- **The database.** `wed-store/src/lib.rs` opens the same database as Python
   (`XAU_DB_URL` from the environment or the home folder's `.env`, else
   `sqlite:///data/xau.db` in the home folder), on SQLite or PostgreSQL. It makes the
-  tables from `store-rs/schema.json`, which `tests/test_rust_schema.py` generates from
+  tables from `wed-store/schema.json`, which `tests/test_rust_schema.py` generates from
   `storage.py`, and stores JSON as Python's `json.dumps` writes it. When Rust can't open
   the database (or `XAU_DB_URL=none`), Python serves those routes.
 - **No login.** The dashboard runs on the trader's machine; ported routes refuse
   cross-site writes as `same_site.py` does.
-- **Drawings and alerts** run with the engine (step 9e). `drawings-rs/src/` has the
+- **Drawings and alerts** run with the engine (step 9e). `wed-drawings/src/` has the
   drawings routes and the drawing alerts (`checker.rs`, checked after each scan and, for
-  intrabar alerts, on each tick); `alerts-rs/src/` has the order block alerts, the
+  intrabar alerts, on each tick); `wed-alerts/src/` has the order block alerts, the
   Telegram client and `/api/alerts`. The bot token is read and saved in the OS credential store
   where Python's `keyring` keeps it (`alerts/secrets.rs`: Keychain on macOS, Credential Manager
   on Windows; on Linux only `.env` or the session), so either server finds the other's token.
   `tests/golden/alerts/` and `tests/golden/drawings/` hold the reference output
   (`tests/test_alerts_golden.py`, `tests/test_drawings_golden.py`). `watch_alerts` in `lib.rs`
   runs the checks; Python's plugins still hear `on_alert`, from the `alert_log` rows Rust wrote.
-- **The journal** is in `journal-rs/` (`wednesday-journal`; freezing the market stays in `server-rs/src/journal/market.rs`): the MT5 report import (`report.rs`, its own
+- **The journal** is in `wed-journal/` (`wednesday-journal`; freezing the market stays in `wed-server/src/journal/market.rs`): the MT5 report import (`report.rs`, its own
   HTML tokenizer copying Python's `HTMLParser`), the stats (`stats.rs`, numpy and pandas
   arithmetic copied to the last bit) and the routes (`service.rs`). `tests/golden/reports/` and
   `tests/golden/journal/` hold the reference output both must give (`tests/test_report_golden.py`,
@@ -149,8 +149,8 @@ request to Python, streaming the answer back. Each answer then carries
   (`POST .../entries`, with the engine) freezes the market of the moment (`journal/market.rs`:
   the last scan, the active bias, the price and the coming news; `tests/golden/market/`).
   A second journal needs the `journal.multi` feature, read from the plugin host's registry
-  (`plugins-rs/src/`, see `docs/plugins.md`).
-- **The engine** runs in Rust (`engine-rs/src/`): the feed (`feed.rs`: the TradingView
+  (`wed-plugins/src/`, see `docs/plugins.md`).
+- **The engine** runs in Rust (`wed-engine/src/`): the feed (`feed.rs`: the TradingView
   helper, synthetic data), the M1 buffer stored in `m1_bars`, the scan after each minute close,
   the live price and the forming candle. It answers `/api/status`, `/api/scan`, `/api/tick`,
   `/api/stream`, `/api/settings`, the charts (`charts.rs`: `/api/candles`, `/api/replay`,
@@ -165,7 +165,7 @@ request to Python, streaming the answer back. Each answer then carries
   From a checkout: `make serve-rs ARGS=--engine` (Rust on 8000), then
   `WEDNESDAY_FOLLOW=http://127.0.0.1:8000 make serve-py PORT=8001`; `conformance.rs` checks the follower's
   answers against Rust's. Python on its own (`make serve-py`) runs its own feed.
-- **The calendar** is ported in `calendar-rs/src/`: the settings, the weekly
+- **The calendar** is ported in `wed-calendar/src/`: the settings, the weekly
   ForexFactory fetch (`Calendar`, at most hourly, retried ten minutes after a failure, the last
   good week kept in `calendar_cache`), the history (`calendar_events`), the past reactions on the
   engine's M1 bars and feed clock (`reactions.rs`) and the CSV import (`import.rs`, Python's `csv`
@@ -174,17 +174,17 @@ request to Python, streaming the answer back. Each answer then carries
   fake source. With the engine, Rust answers `/api/calendar`, its reactions and imports, and
   fetches whenever the week is stale (Python fetched only when the dashboard asked); without
   it, Rust only checks and saves the settings and Python answers.
-- **Terms, bias, snapshots** (`terms.rs`, `bias.rs`, `journal-rs/src/snapshots.rs`). The disclaimer is built
+- **Terms, bias, snapshots** (`terms.rs`, `bias.rs`, `wed-journal/src/snapshots.rs`). The disclaimer is built
   into the binary; `TERMS_VERSION` must equal `terms.py`'s (a unit test checks). The bias is
   only ever what the trader sent; the Python follower reads it from the database.
 
 To add or change a route:
 
-1. Add its handler in `server-rs/src/lib.rs` and the route to `PORTED` (or `ENGINE_ROUTES`).
+1. Add its handler in `wed-server/src/lib.rs` and the route to `PORTED` (or `ENGINE_ROUTES`).
 2. Its answer must have the shape `tests/api_contract.json` gives it; the Rust tests
    check every GET route listed there. A route that scans must also match
    `tests/golden/`. Python's server is the reference: change it the same way.
-3. Add its requests to `server-rs/tests/it/conformance.rs`, which sends each one to the
+3. Add its requests to `wed-server/tests/it/conformance.rs`, which sends each one to the
    real Python server and to Rust and compares the answers (status and JSON).
 
 ```bash
@@ -193,13 +193,13 @@ make serve-py PORT=8001         # the Python server ...
 make serve-rs PORT=8000         # ... and the Rust one in front, on http://127.0.0.1:8000
 ```
 
-`server-rs/tests/it/storage.rs` checks the store against `storage.py`: the same tables,
+`wed-server/tests/it/storage.rs` checks the store against `storage.py`: the same tables,
 and what one writes the other reads. It runs on SQLite, and on PostgreSQL when
 `initdb` works or `WEDNESDAY_TEST_POSTGRES` names a server where it may create
 databases (`postgresql://postgres@127.0.0.1:5432/postgres`); otherwise it says
 PostgreSQL was skipped.
 
-The scan exists twice (`scan-rs/src/` and `src/wednesday/`: resampling, structure,
+The scan exists twice (`wed-scan/src/` and `src/wednesday/`: resampling, structure,
 the detectors, setups, session levels and quarters) and both give the same output on
 `tests/golden/`. A change to one goes into the other.
 

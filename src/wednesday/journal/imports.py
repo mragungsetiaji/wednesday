@@ -23,7 +23,7 @@ class ReportError(ValueError):
 
 
 # A file the parser chokes on in another way (cut short, broken markup, a missing column); the
-# Rust server (journal-rs/src/report.rs) answers these with the same message.
+# Rust server (wed-journal/src/report.rs) answers these with the same message.
 UNREADABLE = "Couldn't read that report. Save it again in the terminal: History tab, right click, Report, HTML"
 
 

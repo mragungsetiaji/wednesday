@@ -30,7 +30,7 @@ PLACES: list[tuple[str, re.Pattern, int]] = [
     ("web/package-lock.json", re.compile(r'(\n    "": \{\n      "name": "[^"]+",\n      "version": ")([^"]+)(")'), 1),
     # The Tauri desktop shell (src-tauri, #92): its config, crate and lock entry
     ("src-tauri/tauri.conf.json", re.compile(r'^(  "version": ")([^"]+)(")', re.M), 1),
-    # The Rust workspace (server-rs, src-tauri): one version for every crate, and the lock entries
+    # The Rust workspace (wed-server, src-tauri): one version for every crate, and the lock entries
     ("Cargo.toml", re.compile(r'(?<=^\[workspace\.package\]\n)(version = ")([^"]+)(")', re.M), 1),
     ("Cargo.lock", re.compile(r'(\[\[package\]\]\nname = "wednesday-desktop"\nversion = ")([^"]+)(")'), 1),
     ("Cargo.lock", re.compile(r'(\[\[package\]\]\nname = "wednesday-rs"\nversion = ")([^"]+)(")'), 1),

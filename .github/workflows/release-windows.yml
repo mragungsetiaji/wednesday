@@ -2,7 +2,7 @@
 # Push a tag like v0.3.1 to publish it on a GitHub release; run it by hand
 # (Actions > Release Windows > Run workflow) for a test build kept as a workflow artifact.
 #
-# The shell (src-tauri) runs Wednesday's Rust server (server-rs) in its own process; there is no
+# The shell (src-tauri) runs Wednesday's Rust server (wed-server) in its own process; there is no
 # Python in the installer. tauri.release.conf.json bundles the dashboard build (web/dist), the
 # TradingView helper (tradingview/, production dependencies only) and node.exe (packaging/node)
 # into the NSIS installer's resources.

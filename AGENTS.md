@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Wednesday is a Smart Money Concepts screener for XAUUSD (gold): a Rust server with the
-scan engine (`server-rs/`, axum), a Python reference implementation of it (`src/wednesday/`,
+scan engine (`wed-server/`, axum), a Python reference implementation of it (`src/wednesday/`,
 FastAPI, SQLAlchemy) and a React + Vite + TypeScript dashboard in `web/`. A single
 discretionary trader runs it, usually as the Windows desktop app, and acts on
 its levels by hand. It suggests; it never places trades.
@@ -18,7 +18,7 @@ make serve       # the Rust server and the built dashboard on http://127.0.0.1:8
 make serve-py    # the Python server from source (wednesday --serve), the reference
 make scan ARGS="--source synthetic"   # one scan in the console (Python)
 make tauri       # the Tauri desktop app (src-tauri), the Rust server in its process
-make test-tauri  # the Rust tests (cargo test in src-tauri and server-rs)
+make test-tauri  # the Rust tests (cargo test in src-tauri and wed-server)
 make release v0.3.2   # tag main and push: CI builds and publishes the Windows installer
 ```
 
@@ -50,7 +50,7 @@ The installer bundles the dashboard build, the TradingView helper and node as re
 (`tauri.release.conf.json`); `Wednesday.exe --forget-secrets` is the installer's fresh start.
 Run `make test-tauri` after changes there.
 
-The server is Rust (`server-rs/`, #96): the scan engine (`engine-rs/src/`, the
+The server is Rust (`wed-server/`, #96): the scan engine (`wed-engine/src/`, the
 TradingView feed), the alerts, every dashboard route and the dashboard build (`ui.rs`).
 Python stays in the repository as the reference: it writes `tests/golden/`, defines
 `tests/api_contract.json`, and runs from source as `wednesday --serve` (`make serve-py`).
@@ -59,7 +59,7 @@ to compare them, with Python following the Rust engine (`FollowFeed`, `WEDNESDAY
 route must answer as `tests/api_contract.json` says and match `tests/golden/` where it scans,
 and refuses cross-site writes as `same_site.py` does. The scan itself (resampling, structure,
 detectors, setups, sessions, quarters) exists twice, `src/wednesday/` and
-`scan-rs/src/`: a change to one must go into the other, and both `make test` and
+`wed-scan/src/`: a change to one must go into the other, and both `make test` and
 `make test-tauri` check them against the same `tests/golden/`.
 
 ## Rules that matter here
@@ -88,7 +88,7 @@ detectors, setups, sessions, quarters) exists twice, `src/wednesday/` and
   full screen included.
 - **There is no login; the dashboard stays local.** Keep the default host
   `127.0.0.1`; a non-loopback host is refused unless `--insecure` (both servers). Cross-site
-  writes to `/api` are refused (`same_site.py`, and `cross_site` in `server-rs`), so
+  writes to `/api` are refused (`same_site.py`, and `cross_site` in `wed-server`), so
   another web page can't drive the dashboard. Don't add endpoints that expose
   secrets or files outside `data/`.
 - **Time zones are explicit.** Bar times come in the feed's clock (`XAU_CLOCK`; UTC for
@@ -96,8 +96,8 @@ detectors, setups, sessions, quarters) exists twice, `src/wednesday/` and
   view works in New York time. Convert with `quarters.to_new_york` / `utc_to_feed` rather
   than assuming UTC.
 - **Storage runs on SQLite and PostgreSQL.** Go through `storage.py` (SQLAlchemy); no
-  SQLite-only SQL. The Rust server (`store-rs/src/lib.rs`) makes the same tables from
-  `store-rs/schema.json`: after changing a table, run
+  SQLite-only SQL. The Rust server (`wed-store/src/lib.rs`) makes the same tables from
+  `wed-store/schema.json`: after changing a table, run
   `UPDATE_RUST_SCHEMA=1 uv run pytest tests/test_rust_schema.py` and `make test-tauri`.
 - **Optional extras stay optional.** `postgres` and `desktop` are extras; import them
   inside the function that needs them so the core runs without them, and report a missing one as an install hint.

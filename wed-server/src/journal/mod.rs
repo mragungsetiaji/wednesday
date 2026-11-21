@@ -1,4 +1,4 @@
-//! The journal: the crate `wednesday-journal` (journal-rs), plus freezing the market into an
+//! The journal: the crate `wednesday-journal` (wed-journal), plus freezing the market into an
 //! entry, which needs the engine (`market`).
 
 pub mod market;

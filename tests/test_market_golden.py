@@ -1,5 +1,5 @@
 """Reference data for the bias a ``PUT /api/bias`` saves and the market a journal entry freezes (#96,
-step 9f): ``tests/golden/market/frozen.json``. The Rust port (``server-rs/tests/it/market_golden.rs``)
+step 9f): ``tests/golden/market/frozen.json``. The Rust port (``wed-server/tests/it/market_golden.rs``)
 must give the same output.
 
 * ``bias``: a request body and the time it is made in, out the bias saved (``TradeBias(...).stamped()``,

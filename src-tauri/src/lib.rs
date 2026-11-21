@@ -1,6 +1,6 @@
 //! Wednesday's desktop shell (Tauri, #92).
 //!
-//! The shell runs Wednesday's server (`server-rs`, #96) in this process: the scan engine with the
+//! The shell runs Wednesday's server (`wed-server`, #96) in this process: the scan engine with the
 //! TradingView feed, the API and the dashboard build, on 127.0.0.1 (port 8000 when free). It shows
 //! the dashboard in native windows: the main one, and a window per popped-out chart, so each can
 //! sit on its own monitor. The page calls the shell through four commands (see

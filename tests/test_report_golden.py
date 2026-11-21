@@ -3,7 +3,7 @@
 Each case in ``tests/golden/reports/<case>/`` has ``report.html``, the file as the trader would
 upload it (raw bytes: UTF-16 as the terminal saves it, or UTF-8), and ``expected.json``: either
 ``{"ok": {"account": ..., "trades": ..., "cash": ...}}`` or ``{"error": "<the ReportError message>"}``
-(a file the parser chokes on otherwise gives ``imports.UNREADABLE``). ``server-rs/tests/it/report_golden.rs`` runs the Rust
+(a file the parser chokes on otherwise gives ``imports.UNREADABLE``). ``wed-server/tests/it/report_golden.rs`` runs the Rust
 ``parse_report`` on the same files and wants the same output, key order and float bits included.
 
 Rewrite the files after a deliberate change to the import, and review the diff:
@@ -29,7 +29,7 @@ import pytest
 from wednesday.journal.imports import ReportError, parse_report
 
 GOLDEN = Path(__file__).with_name("golden") / "reports"
-RUST = Path(__file__).parents[1] / "server-rs" / "src" / "journal" / "report.rs"
+RUST = Path(__file__).parents[1] / "wed-server" / "src" / "journal" / "report.rs"
 UPDATE = os.environ.get("UPDATE_GOLDEN") == "1"
 
 

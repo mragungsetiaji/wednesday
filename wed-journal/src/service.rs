@@ -628,7 +628,7 @@ fn clean_entry(text: Option<&Value>, tags: Option<&Value>, mood: Option<&Value>)
 }
 
 /// `POST .../entries` (`Journals.add_entry`): a note, a session review, or a setup from the
-/// ladder, with `market` (the market now, `journal::market::freeze` in server-rs) frozen into it.
+/// ladder, with `market` (the market now, `journal::market::freeze` in wed-server) frozen into it.
 pub async fn add_entry(store: &Store, id: &str, body: &Map<String, Value>, market: Option<Value>) -> Result<Value, Fail> {
     get(store, id).await?;
     let kind = if truthy(body.get("kind")) { py_str(&body["kind"]) } else { "note".into() };
