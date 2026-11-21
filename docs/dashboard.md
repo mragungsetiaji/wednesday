@@ -7,7 +7,7 @@ make serve          # the Rust server; or the Python one: make serve-py
 Opens on http://127.0.0.1:8000. It refreshes every few seconds; the server
 rescans once a minute. With the Python server (`make serve-py`), API docs live at `/api/docs`.
 
-![Dashboard: 30M chart with the top bar, EMA 20 and 50, a fib retracement and an XABCD pattern, the drawing tools, the rail and the dock](images/dashboard.png)
+![Dashboard: 30M gold chart with the market menu (XAUUSD) at the start of its top bar, order blocks, liquidity and session levels, the drawing tools, the bias and levels pane, and the dock](images/dashboard.png)
 
 ## Chart first
 

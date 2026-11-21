@@ -5,7 +5,7 @@
 **Smart Money Concepts screener for XAUUSD.**<br>
 Order blocks, liquidity and inducement across 4H → 5M, with ranked limit setups and Telegram alerts.
 
-<img src="docs/images/dashboard.png" alt="Wednesday dashboard: the 30M gold chart with order blocks, liquidity, EMA 20 and 50, the chart toolbar on top, drawing tools on the left, the bias and level ladder on the right" width="100%">
+<img src="docs/images/dashboard.png" alt="Wednesday dashboard: the 30M gold chart with order blocks, liquidity and session levels, the chart toolbar with the market menu on top, drawing tools on the left, the bias and level ladder on the right" width="100%">
 
 </div>
 
