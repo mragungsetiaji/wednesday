@@ -88,7 +88,31 @@ async fn check(python_url: &str, rust_url: &str, dir: &Path, postgres: bool) {
     theirs.drawing_put(&row).await.unwrap();
     assert!(theirs.drawing_delete("py-0000002", "synthetic", "XAUUSD").await.unwrap());
     assert!(!theirs.drawing_delete("py-0000002", "synthetic", "XAUUSD").await.unwrap());
+    let mut alert = written["alerts"][0].as_object().unwrap().clone();
+    alert.insert("drawing_id".into(), "rs-0000003".into());
+    alert.insert("note".into(), Value::Null);
+    alert.insert("expires_at".into(), "2099-06-01T03:00:00+00:00".into());
+    alert.insert("armed_bar".into(), Value::Null);
+    theirs.drawing_alert_put(&alert).await.unwrap();
+    theirs
+        .drawing_alert_update("rs-0000003", vec![
+            ("armed", wednesday_rs::store::Arg::Bool(false)),
+            ("fired_at", wednesday_rs::store::Arg::Str(Some("2026-03-04T13:01:00.250000+00:00".into()))),
+            ("fired_price", wednesday_rs::store::Arg::Float(Some(2151.5))),
+            ("fires", wednesday_rs::store::Arg::Int(Some(1))),
+        ])
+        .await
+        .unwrap();
+    for (k, v) in [("armed", json!(false)), ("fired_at", json!("2026-03-04T13:01:00.250000+00:00")),
+                   ("fired_price", json!(2151.5)), ("fires", json!(1))] {
+        alert.insert(k.into(), v);
+    }
     let read = python(python_url, "read", dir, postgres).unwrap();
+    // A deleted drawing keeps its alert (for undo); Python reads the alert Rust wrote as Rust wrote it.
+    let alerts = read["alerts"].as_array().unwrap();
+    assert_eq!(alerts.len(), 2);
+    assert_eq!(alerts.iter().find(|a| a["drawing_id"] == "py-0000002"), Some(&written["alerts"][0]));
+    assert_eq!(alerts.iter().find(|a| a["drawing_id"] == "rs-0000003"), Some(&Value::Object(alert)));
     assert_eq!(read["probe_rust"], value);
     let ids: Vec<&str> = read["drawings"].as_array().unwrap().iter().map(|d| d["id"].as_str().unwrap()).collect();
     assert_eq!(ids, ["py-0000001", "rs-0000003"], "by updated_at");

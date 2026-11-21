@@ -22,10 +22,18 @@ http-body-util = "0.1"
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 log = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite", "postgres"] }
 tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = "0.1"
+
+# The OS credential store, where Python's keyring keeps the Telegram bot token (alerts/secrets.rs).
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 
 [dev-dependencies]
 flate2 = "1"

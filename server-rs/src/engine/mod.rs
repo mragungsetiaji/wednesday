@@ -729,12 +729,18 @@ pub struct Runtime {
     pub store: Option<Store>,
     pub opts: Options,
     current: Mutex<(DataSettings, Arc<Engine>)>,
+    /// The order block alerts, set by [`crate::start_engine`] (which knows where `.env` is);
+    /// without them the alert routes go to Python.
+    pub alerts: std::sync::OnceLock<Arc<crate::alerts::Alerts>>,
+    /// The alerts on the trader's drawings, checked after each scan and on each tick.
+    pub drawing_alerts: Arc<crate::drawings::DrawingAlerts>,
 }
 
 impl Runtime {
     pub fn start(settings: DataSettings, opts: Options, store: Option<Store>) -> Result<Arc<Runtime>, String> {
         let engine = start(&settings, &opts, store.clone())?;
-        Ok(Arc::new(Runtime { store, opts, current: Mutex::new((settings, engine)) }))
+        Ok(Arc::new(Runtime { store, opts, current: Mutex::new((settings, engine)), alerts: Default::default(),
+                             drawing_alerts: Default::default() }))
     }
 
     pub fn engine(&self) -> Arc<Engine> {

@@ -440,6 +440,44 @@ impl Store {
         }
     }
 
+    // ---- the alert log (order block and drawing alerts) ----
+
+    /// Whether this key was sent (`alert_sent`): a failed one may be retried.
+    pub async fn alert_sent(&self, key: &str) -> Result<bool, String> {
+        let rows = self.rows("alert_log", "SELECT status FROM alert_log WHERE key = ?", vec![Arg::Str(Some(key.into()))]).await?;
+        Ok(rows.first().and_then(|r| r.get("status")).and_then(Value::as_str) == Some("sent"))
+    }
+
+    /// Whether this key was logged at all, sent or not (`alert_logged`).
+    pub async fn alert_logged(&self, key: &str) -> Result<bool, String> {
+        let rows = self.rows("alert_log", "SELECT key FROM alert_log WHERE key = ?", vec![Arg::Str(Some(key.into()))]).await?;
+        Ok(!rows.is_empty())
+    }
+
+    /// Insert or update an alert row by its key (`log_alert`); the row's columns as JSON values
+    /// (numbers go in as floats, the rest as text).
+    pub async fn log_alert(&self, row: &Map<String, Value>) -> Result<(), String> {
+        let args = row
+            .iter()
+            .map(|(k, v)| {
+                let a = match v {
+                    Value::Null => Arg::Str(None),
+                    Value::Number(n) => Arg::Float(n.as_f64()),
+                    Value::String(s) => Arg::Str(Some(s.clone())),
+                    other => Arg::Str(Some(other.to_string())),
+                };
+                (k.as_str(), a)
+            })
+            .collect();
+        self.upsert("alert_log", args, &["key"]).await
+    }
+
+    /// The latest alerts, newest first (`recent_alerts`): every column of `alert_log`.
+    pub async fn recent_alerts(&self, limit: usize) -> Result<Vec<Map<String, Value>>, String> {
+        self.rows("alert_log", "SELECT * FROM alert_log ORDER BY sent_at DESC LIMIT ?", vec![Arg::Int(Some(limit as i64))])
+            .await
+    }
+
     // ---- settings ----
 
     pub async fn get_setting(&self, key: &str) -> Result<Option<Value>, String> {
@@ -498,6 +536,34 @@ impl Store {
         self.rows("drawing_alerts", "SELECT * FROM drawing_alerts WHERE source = ? AND symbol = ?",
                   vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))])
             .await
+    }
+
+    /// An alert row as `drawing_alerts.clean_alert` makes it, plus drawing_id, source and symbol.
+    pub async fn drawing_alert_put(&self, row: &Map<String, Value>) -> Result<(), String> {
+        let s = |k: &str| Arg::Str(row.get(k).and_then(Value::as_str).map(String::from));
+        let b = |k: &str| Arg::Bool(row.get(k).and_then(Value::as_bool).unwrap_or(false));
+        self.upsert("drawing_alerts", vec![
+            ("drawing_id", s("drawing_id")), ("source", s("source")), ("symbol", s("symbol")),
+            ("condition", s("condition")), ("mode", s("mode")), ("note", s("note")), ("expires_at", s("expires_at")),
+            ("intrabar", b("intrabar")), ("armed", b("armed")),
+            ("armed_bar", Arg::Int(row.get("armed_bar").and_then(Value::as_i64))), ("fired_at", s("fired_at")),
+            ("fired_price", Arg::Float(row.get("fired_price").and_then(Value::as_f64))),
+            ("fires", Arg::Int(Some(row.get("fires").and_then(Value::as_i64).unwrap_or(0)))),
+            ("created_at", s("created_at")),
+        ], &["drawing_id"])
+        .await
+    }
+
+    /// Set some columns of a drawing's alert (`drawing_alert_update`: disarm, a firing).
+    pub async fn drawing_alert_update(&self, drawing_id: &str, values: Vec<(&str, Arg)>) -> Result<(), String> {
+        if values.is_empty() {
+            return Ok(());
+        }
+        let sets: Vec<String> = values.iter().map(|(k, _)| format!("\"{k}\" = ?")).collect();
+        let sql = format!("UPDATE drawing_alerts SET {} WHERE drawing_id = ?", sets.join(", "));
+        let mut args: Vec<Arg> = values.into_iter().map(|(_, a)| a).collect();
+        args.push(Arg::Str(Some(drawing_id.into())));
+        self.execute(&sql, args).await.map(|_| ())
     }
 
     pub async fn drawing_alert_delete(&self, id: &str, source: &str, symbol: &str) -> Result<bool, String> {

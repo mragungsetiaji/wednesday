@@ -1,0 +1,429 @@
+[
+ {
+  "body": {},
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": null
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "enabled": false,
+   "timeframes": [
+    "1H",
+    "4H"
+   ],
+   "priorities": [
+    "extreme"
+   ],
+   "neutral_alerts": true,
+   "chat_id": " 123 "
+  },
+  "settings": {
+   "enabled": false,
+   "timeframes": [
+    "1H",
+    "4H"
+   ],
+   "priorities": [
+    "extreme"
+   ],
+   "neutral_alerts": true,
+   "chat_id": "123"
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "enabled": 0,
+   "neutral_alerts": "yes",
+   "chat_id": "-1001234567890"
+  },
+  "settings": {
+   "enabled": false,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": true,
+   "chat_id": "-1001234567890"
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "enabled": "",
+   "chat_id": "@my_channel"
+  },
+  "settings": {
+   "enabled": false,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": "@my_channel"
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "chat_id": "my channel"
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": "my channel"
+  },
+  "errors": [
+   "The chat id is a number like 123456789 (or -100… for a group), or @channelname"
+  ]
+ },
+ {
+  "body": {
+   "chat_id": "--12"
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": "--12"
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "chat_id": "-"
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": "-"
+  },
+  "errors": [
+   "The chat id is a number like 123456789 (or -100… for a group), or @channelname"
+  ]
+ },
+ {
+  "body": {
+   "chat_id": 123456789
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": "123456789"
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "chat_id": 0
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": null
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "chat_id": 12.5
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": "12.5"
+  },
+  "errors": [
+   "The chat id is a number like 123456789 (or -100… for a group), or @channelname"
+  ]
+ },
+ {
+  "body": {
+   "chat_id": true
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": "True"
+  },
+  "errors": [
+   "The chat id is a number like 123456789 (or -100… for a group), or @channelname"
+  ]
+ },
+ {
+  "body": {
+   "chat_id": null,
+   "telegram_bot_token": "123:ABC",
+   "forget_telegram_bot_token": true
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": null
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "timeframes": [
+    "2H",
+    "1H",
+    5
+   ],
+   "priorities": [
+    "low",
+    null,
+    "middle"
+   ]
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "2H",
+    "1H",
+    5
+   ],
+   "priorities": [
+    "low",
+    null,
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": null
+  },
+  "errors": [
+   "Unknown timeframe '2H'",
+   "Unknown timeframe 5",
+   "Unknown priority 'low'",
+   "Unknown priority None"
+  ]
+ },
+ {
+  "body": {
+   "timeframes": "4H"
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "4",
+    "H"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": null
+  },
+  "errors": [
+   "Unknown timeframe '4'",
+   "Unknown timeframe 'H'"
+  ]
+ },
+ {
+  "body": {
+   "timeframes": [],
+   "priorities": []
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [],
+   "priorities": [],
+   "neutral_alerts": false,
+   "chat_id": null
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "timeframes": {
+    "5M": 1
+   }
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": null
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "timeframes": null
+  },
+  "error": "TypeError"
+ },
+ {
+  "body": {
+   "enabled": [],
+   "neutral_alerts": [
+    0
+   ],
+   "chat_id": "  "
+  },
+  "settings": {
+   "enabled": false,
+   "timeframes": [
+    "4H",
+    "1H",
+    "30M",
+    "15M",
+    "5M"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": true,
+   "chat_id": null
+  },
+  "errors": []
+ },
+ {
+  "body": {
+   "timeframes": [
+    "it's"
+   ],
+   "chat_id": "x\"y"
+  },
+  "settings": {
+   "enabled": true,
+   "timeframes": [
+    "it's"
+   ],
+   "priorities": [
+    "extreme",
+    "middle"
+   ],
+   "neutral_alerts": false,
+   "chat_id": "x\"y"
+  },
+  "errors": [
+   "Unknown timeframe \"it's\"",
+   "The chat id is a number like 123456789 (or -100… for a group), or @channelname"
+  ]
+ }
+]

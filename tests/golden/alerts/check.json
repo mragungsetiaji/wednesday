@@ -1,0 +1,627 @@
+[
+ {
+  "name": "enter-once",
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "price": 2472.0,
+  "settings": {},
+  "timeframes": [
+   {
+    "tf": "4H",
+    "bias": {
+     "direction": "bullish",
+     "event": "BOS",
+     "level": 2433.5
+    },
+    "obs": [
+     {
+      "kind": "bullish",
+      "top": 2471.5,
+      "bottom": 2468.0,
+      "time": "2026-03-02T04:40:00",
+      "confirmed_time": "2026-03-02T05:00:00",
+      "touches": 1,
+      "meta": {
+       "priority": "extreme",
+       "entry": 2471.5,
+       "sl": 2468.0,
+       "risk": 3.5,
+       "body": 3.5,
+       "sl_capped": false,
+       "swing": "HL"
+      }
+     }
+    ]
+   },
+   {
+    "tf": "1H",
+    "bias": null,
+    "obs": [
+     {
+      "kind": "bullish",
+      "top": 2474.0,
+      "bottom": 2473.0,
+      "time": "2026-03-02T09:45:00",
+      "confirmed_time": "2026-03-02T10:05:00",
+      "touches": 0,
+      "meta": {
+       "priority": "extreme",
+       "entry": 2474.0,
+       "sl": 2473.0,
+       "risk": 1.0,
+       "body": 1.0,
+       "sl_capped": false,
+       "swing": null
+      }
+     }
+    ]
+   },
+   {
+    "tf": "5M",
+    "bias": {
+     "direction": "bearish",
+     "event": "CHoCH",
+     "level": 2490.25
+    },
+    "obs": [
+     {
+      "kind": "bullish",
+      "top": 2471.0,
+      "bottom": 2469.5,
+      "time": "2026-03-02T08:40:00",
+      "confirmed_time": "2026-03-02T09:00:00",
+      "touches": 0,
+      "meta": {
+       "priority": "extreme",
+       "entry": 2471.0,
+       "sl": 2469.5,
+       "risk": 1.5,
+       "body": 1.5,
+       "sl_capped": false,
+       "swing": null
+      }
+     },
+     {
+      "kind": "bearish",
+      "top": 2481.0,
+      "bottom": 2480.0,
+      "time": "2026-03-02T08:40:00",
+      "confirmed_time": "2026-03-02T09:00:00",
+      "touches": 0,
+      "meta": {
+       "priority": "extreme",
+       "entry": 2480.0,
+       "sl": 2481.0,
+       "risk": 1.0,
+       "body": 1.0,
+       "sl_capped": false,
+       "swing": "LH"
+      }
+     },
+     {
+      "kind": "bullish",
+      "top": 2466.0,
+      "bottom": 2465.0,
+      "time": "2026-03-02T08:40:00",
+      "confirmed_time": "2026-03-02T09:00:00",
+      "touches": 0,
+      "meta": {
+       "priority": "middle",
+       "entry": 2466.0,
+       "sl": 2465.0,
+       "risk": 1.0,
+       "body": 1.0,
+       "sl_capped": false,
+       "swing": null
+      }
+     }
+    ]
+   }
+  ],
+  "m1": [
+   [
+    "2026-03-02T10:00:00",
+    2475,
+    2475,
+    2473,
+    2473,
+    1.0
+   ],
+   [
+    "2026-03-02T10:01:00",
+    2475,
+    2475,
+    2473,
+    2473,
+    1.0
+   ],
+   [
+    "2026-03-02T10:02:00",
+    2475,
+    2475,
+    2473,
+    2473,
+    1.0
+   ],
+   [
+    "2026-03-02T10:03:00",
+    2475,
+    2475,
+    2473,
+    2473,
+    1.0
+   ],
+   [
+    "2026-03-02T10:04:00",
+    2475,
+    2475,
+    2473,
+    2473,
+    1.0
+   ],
+   [
+    "2026-03-02T10:05:00",
+    2474,
+    2474,
+    2472.5,
+    2472.5,
+    1.0
+   ],
+   [
+    "2026-03-02T10:06:00",
+    2473,
+    2473,
+    2470.8,
+    2470.8,
+    1.0
+   ],
+   [
+    "2026-03-02T10:07:00",
+    2471.5,
+    2471.5,
+    2470.5,
+    2470.5,
+    1.0
+   ],
+   [
+    "2026-03-02T10:08:00",
+    2480.2,
+    2480.2,
+    2475,
+    2475,
+    1.0
+   ],
+   [
+    "2026-03-02T10:09:00",
+    2466.5,
+    2466.5,
+    2464.0,
+    2464.0,
+    1.0
+   ],
+   [
+    "2026-03-02T11:05:00",
+    2473.6,
+    2473.6,
+    2473.5,
+    2473.5,
+    1.0
+   ]
+  ],
+  "steps": [
+   {
+    "bars": 5,
+    "trade_bias": null,
+    "keys": [],
+    "messages": []
+   },
+   {
+    "bars": 6,
+    "trade_bias": null,
+    "keys": [],
+    "messages": []
+   },
+   {
+    "bars": 7,
+    "trade_bias": null,
+    "keys": [
+     "tradingview|XAUUSD|4H|bullish|2026-03-02T04:40:00|2471.50000",
+     "tradingview|XAUUSD|5M|bullish|2026-03-02T08:40:00|2471.00000"
+    ],
+    "messages": [
+     "<b>XAUUSD entered 4H bullish OB</b> (extreme at HL)\nBuy limit <b>2,471.50</b> · SL 2,468.00 · risk 3.50\nZone 2,468.00 – 2,471.50 · price 2,472.00\nEntry tested 1× before\n4H structure: bullish BOS at 2,433.50",
+     "<b>XAUUSD entered 5M bullish OB</b> (extreme)\nBuy limit <b>2,471.00</b> · SL 2,469.50 · risk 1.50\nZone 2,469.50 – 2,471.00 · price 2,472.00\n5M structure: bearish CHoCH at 2,490.25"
+    ]
+   },
+   {
+    "bars": 8,
+    "trade_bias": null,
+    "keys": [],
+    "messages": []
+   },
+   {
+    "bars": 10,
+    "trade_bias": "bearish",
+    "keys": [
+     "tradingview|XAUUSD|5M|bearish|2026-03-02T08:40:00|2481.00000",
+     "tradingview|XAUUSD|5M|bullish|2026-03-02T08:40:00|2466.00000"
+    ],
+    "messages": [
+     "<b>XAUUSD entered 5M bearish OB</b> (extreme at LH)\nSell limit <b>2,480.00</b> · SL 2,481.00 · risk 1.00\nZone 2,480.00 – 2,481.00 · price 2,472.00\n5M structure: bearish CHoCH at 2,490.25\n<b>RISK ON</b> (with bearish bias)",
+     "<b>XAUUSD entered 5M bullish OB</b> (mid)\nBuy limit <b>2,466.00</b> · SL 2,465.00 · risk 1.00\nZone 2,465.00 – 2,466.00 · price 2,472.00\n5M structure: bearish CHoCH at 2,490.25\n<b>RISK OFF</b> (against bearish bias)"
+    ]
+   },
+   {
+    "bars": 10,
+    "trade_bias": null,
+    "keys": [],
+    "messages": []
+   },
+   {
+    "bars": 11,
+    "trade_bias": "bullish",
+    "keys": [
+     "tradingview|XAUUSD|1H|bullish|2026-03-02T09:45:00|2474.00000"
+    ],
+    "messages": [
+     "<b>XAUUSD entered 1H bullish OB</b> (extreme)\nBuy limit <b>2,474.00</b> · SL 2,473.00 · risk 1.00\nZone 2,473.00 – 2,474.00 · price 2,472.00\n<b>RISK ON</b> (with bullish bias)"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "filters",
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "price": 2472.0,
+  "settings": {
+   "timeframes": [
+    "4H",
+    "1H"
+   ],
+   "priorities": [
+    "middle"
+   ],
+   "chat_id": "7"
+  },
+  "timeframes": [
+   {
+    "tf": "4H",
+    "bias": null,
+    "obs": [
+     {
+      "kind": "bullish",
+      "top": 2471.5,
+      "bottom": 2468.0,
+      "time": "2026-03-02T05:40:00",
+      "confirmed_time": "2026-03-02T06:00:00",
+      "touches": 0,
+      "meta": {
+       "priority": "middle",
+       "entry": 2471.5,
+       "sl": 2466.5,
+       "risk": 5.0,
+       "body": 3.5,
+       "sl_capped": true,
+       "swing": null
+      }
+     }
+    ]
+   },
+   {
+    "tf": "1H",
+    "bias": null,
+    "obs": [
+     {
+      "kind": "bullish",
+      "top": 2470.0,
+      "bottom": 2469.0,
+      "time": "2026-03-02T08:40:00",
+      "confirmed_time": "2026-03-02T09:00:00",
+      "touches": 0,
+      "meta": {
+       "priority": "extreme",
+       "entry": 2470.0,
+       "sl": 2469.0,
+       "risk": 1.0,
+       "body": 1.0,
+       "sl_capped": false,
+       "swing": null
+      }
+     }
+    ]
+   },
+   {
+    "tf": "5M",
+    "bias": null,
+    "obs": [
+     {
+      "kind": "bullish",
+      "top": 2471.0,
+      "bottom": 2470.0,
+      "time": "2026-03-02T08:40:00",
+      "confirmed_time": "2026-03-02T09:00:00",
+      "touches": 0,
+      "meta": {
+       "priority": "middle",
+       "entry": 2471.0,
+       "sl": 2470.0,
+       "risk": 1.0,
+       "body": 1.0,
+       "sl_capped": false,
+       "swing": null
+      }
+     }
+    ]
+   }
+  ],
+  "m1": [
+   [
+    "2026-03-02T10:00:00",
+    2475,
+    2475,
+    2473,
+    2473,
+    1.0
+   ],
+   [
+    "2026-03-02T10:01:00",
+    2472,
+    2472,
+    2469.5,
+    2469.5,
+    1.0
+   ]
+  ],
+  "steps": [
+   {
+    "bars": 1,
+    "trade_bias": null,
+    "keys": [],
+    "messages": []
+   },
+   {
+    "bars": 2,
+    "trade_bias": "bearish",
+    "keys": [
+     "tradingview|XAUUSD|4H|bullish|2026-03-02T05:40:00|2471.50000"
+    ],
+    "messages": [
+     "<b>XAUUSD entered 4H bullish OB</b> (mid)\nBuy limit <b>2,471.50</b> · SL 2,466.50 · risk 5.00 (capped)\nZone 2,468.00 – 2,471.50 · price 2,472.00\n<b>RISK OFF</b> (against bearish bias)"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "neutral-held-back",
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "price": 2472.0,
+  "settings": {},
+  "timeframes": [
+   {
+    "tf": "5M",
+    "bias": null,
+    "obs": [
+     {
+      "kind": "bullish",
+      "top": 2471.0,
+      "bottom": 2469.5,
+      "time": "2026-03-02T08:40:00",
+      "confirmed_time": "2026-03-02T09:00:00",
+      "touches": 0,
+      "meta": {
+       "priority": "extreme",
+       "entry": 2471.0,
+       "sl": 2469.5,
+       "risk": 1.5,
+       "body": 1.5,
+       "sl_capped": false,
+       "swing": null
+      }
+     }
+    ]
+   }
+  ],
+  "m1": [
+   [
+    "2026-03-02T10:00:00",
+    2475,
+    2475,
+    2473,
+    2473,
+    1.0
+   ],
+   [
+    "2026-03-02T10:01:00",
+    2472,
+    2472,
+    2470.0,
+    2470.0,
+    1.0
+   ],
+   [
+    "2026-03-02T10:02:00",
+    2473,
+    2473,
+    2472.0,
+    2472.0,
+    1.0
+   ],
+   [
+    "2026-03-02T10:03:00",
+    2473,
+    2473,
+    2470.9,
+    2470.9,
+    1.0
+   ]
+  ],
+  "steps": [
+   {
+    "bars": 1,
+    "trade_bias": "neutral",
+    "keys": [],
+    "messages": []
+   },
+   {
+    "bars": 2,
+    "trade_bias": "neutral",
+    "keys": [],
+    "messages": []
+   },
+   {
+    "bars": 3,
+    "trade_bias": "bullish",
+    "keys": [],
+    "messages": []
+   },
+   {
+    "bars": 4,
+    "trade_bias": "bullish",
+    "keys": [
+     "tradingview|XAUUSD|5M|bullish|2026-03-02T08:40:00|2471.00000"
+    ],
+    "messages": [
+     "<b>XAUUSD entered 5M bullish OB</b> (extreme)\nBuy limit <b>2,471.00</b> · SL 2,469.50 · risk 1.50\nZone 2,469.50 – 2,471.00 · price 2,472.00\n<b>RISK ON</b> (with bullish bias)"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "neutral-alerts-on",
+  "source": "tradingview",
+  "symbol": "XAU<USD>",
+  "price": 2472.0,
+  "settings": {
+   "neutral_alerts": true
+  },
+  "timeframes": [
+   {
+    "tf": "15M",
+    "bias": null,
+    "obs": [
+     {
+      "kind": "bearish",
+      "top": 2481.0,
+      "bottom": 2480.0,
+      "time": "2026-03-02T08:40:00",
+      "confirmed_time": "2026-03-02T09:00:00",
+      "touches": 0,
+      "meta": {
+       "priority": "extreme",
+       "entry": 2480.0,
+       "sl": 2481.0,
+       "risk": 1.0,
+       "body": 1.0,
+       "sl_capped": false,
+       "swing": null
+      }
+     }
+    ]
+   }
+  ],
+  "m1": [
+   [
+    "2026-03-02T10:00:00",
+    2475,
+    2475,
+    2473,
+    2473,
+    1.0
+   ],
+   [
+    "2026-03-02T10:01:00",
+    2480.0,
+    2480.0,
+    2476.0,
+    2476.0,
+    1.0
+   ]
+  ],
+  "steps": [
+   {
+    "bars": 1,
+    "trade_bias": "neutral",
+    "keys": [],
+    "messages": []
+   },
+   {
+    "bars": 2,
+    "trade_bias": "neutral",
+    "keys": [
+     "tradingview|XAU<USD>|15M|bearish|2026-03-02T08:40:00|2481.00000"
+    ],
+    "messages": [
+     "<b>XAU&lt;USD&gt; entered 15M bearish OB</b> (extreme)\nSell limit <b>2,480.00</b> · SL 2,481.00 · risk 1.00\nZone 2,480.00 – 2,481.00 · price 2,472.00\n<b>NO TRADE</b> (neutral bias)"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "paused",
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "price": 2472.0,
+  "settings": {
+   "enabled": false
+  },
+  "timeframes": [
+   {
+    "tf": "5M",
+    "bias": null,
+    "obs": [
+     {
+      "kind": "bullish",
+      "top": 2471.0,
+      "bottom": 2469.5,
+      "time": "2026-03-02T08:40:00",
+      "confirmed_time": "2026-03-02T09:00:00",
+      "touches": 0,
+      "meta": {
+       "priority": "extreme",
+       "entry": 2471.0,
+       "sl": 2469.5,
+       "risk": 1.5,
+       "body": 1.5,
+       "sl_capped": false,
+       "swing": null
+      }
+     }
+    ]
+   }
+  ],
+  "m1": [
+   [
+    "2026-03-02T10:00:00",
+    2475,
+    2475,
+    2473,
+    2473,
+    1.0
+   ],
+   [
+    "2026-03-02T10:01:00",
+    2472,
+    2472,
+    2470.0,
+    2470.0,
+    1.0
+   ]
+  ],
+  "steps": [
+   {
+    "bars": 1,
+    "trade_bias": null,
+    "keys": [],
+    "messages": []
+   },
+   {
+    "bars": 2,
+    "trade_bias": null,
+    "keys": [],
+    "messages": []
+   }
+  ]
+ }
+]

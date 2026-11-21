@@ -1,0 +1,304 @@
+[
+ {
+  "symbol": "XAUUSD",
+  "tf": "5M",
+  "ob": {
+   "kind": "bullish",
+   "top": 2471.0,
+   "bottom": 2469.5,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 2471.0,
+    "sl": 2469.5,
+    "risk": 1.5,
+    "body": 1.5,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "price": 2472.0,
+  "bias": null,
+  "digits": 2,
+  "trade_bias": null,
+  "text": "<b>XAUUSD entered 5M bullish OB</b> (extreme)\nBuy limit <b>2,471.00</b> · SL 2,469.50 · risk 1.50\nZone 2,469.50 – 2,471.00 · price 2,472.00"
+ },
+ {
+  "symbol": "XAUUSD",
+  "tf": "1H",
+  "ob": {
+   "kind": "bearish",
+   "top": 2481.25,
+   "bottom": 2479.4,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 2,
+   "meta": {
+    "priority": "middle",
+    "entry": 2479.4,
+    "sl": 2481.25,
+    "risk": 1.85,
+    "body": 1.85,
+    "sl_capped": false,
+    "swing": "LH"
+   }
+  },
+  "price": 2478.0,
+  "bias": {
+   "direction": "bearish",
+   "event": "CHoCH",
+   "level": 2490.5
+  },
+  "digits": 2,
+  "trade_bias": "bearish",
+  "text": "<b>XAUUSD entered 1H bearish OB</b> (mid at LH)\nSell limit <b>2,479.40</b> · SL 2,481.25 · risk 1.85\nZone 2,479.40 – 2,481.25 · price 2,478.00\nEntry tested 2× before\n1H structure: bearish CHoCH at 2,490.50\n<b>RISK ON</b> (with bearish bias)"
+ },
+ {
+  "symbol": "XAUUSD",
+  "tf": "4H",
+  "ob": {
+   "kind": "bullish",
+   "top": 2471.0,
+   "bottom": 2455.0,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 2471.0,
+    "sl": 2461.0,
+    "risk": 10.0,
+    "body": 16.0,
+    "sl_capped": true,
+    "swing": "HL"
+   }
+  },
+  "price": 2475.123,
+  "bias": {
+   "direction": "bullish",
+   "event": "BOS",
+   "level": 2433.333
+  },
+  "digits": 2,
+  "trade_bias": "bearish",
+  "text": "<b>XAUUSD entered 4H bullish OB</b> (extreme at HL)\nBuy limit <b>2,471.00</b> · SL 2,461.00 · risk 10.00 (capped)\nZone 2,455.00 – 2,471.00 · price 2,475.12\n4H structure: bullish BOS at 2,433.33\n<b>RISK OFF</b> (against bearish bias)"
+ },
+ {
+  "symbol": "XAUUSD",
+  "tf": "15M",
+  "ob": {
+   "kind": "bullish",
+   "top": 2471.0,
+   "bottom": 2469.5,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 1,
+   "meta": {
+    "priority": "extreme",
+    "entry": 2471.0,
+    "sl": 2469.5,
+    "risk": 1.5,
+    "body": 1.5,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "price": 2470.0,
+  "bias": null,
+  "digits": 2,
+  "trade_bias": "bullish",
+  "text": "<b>XAUUSD entered 15M bullish OB</b> (extreme)\nBuy limit <b>2,471.00</b> · SL 2,469.50 · risk 1.50\nZone 2,469.50 – 2,471.00 · price 2,470.00\nEntry tested 1× before\n<b>RISK ON</b> (with bullish bias)"
+ },
+ {
+  "symbol": "XAUUSD",
+  "tf": "30M",
+  "ob": {
+   "kind": "bearish",
+   "top": 2481.0,
+   "bottom": 2480.0,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 2480.0,
+    "sl": 2481.0,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "price": 2480.5,
+  "bias": null,
+  "digits": 2,
+  "trade_bias": "neutral",
+  "text": "<b>XAUUSD entered 30M bearish OB</b> (extreme)\nSell limit <b>2,480.00</b> · SL 2,481.00 · risk 1.00\nZone 2,480.00 – 2,481.00 · price 2,480.50\n<b>NO TRADE</b> (neutral bias)"
+ },
+ {
+  "symbol": "BTC<USD>&'x\"",
+  "tf": "5M",
+  "ob": {
+   "kind": "bullish",
+   "top": 104999.995,
+   "bottom": 104250.0,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 104999.995,
+    "sl": 104250.0,
+    "risk": 749.995,
+    "body": 749.995,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "price": 1234567.891,
+  "bias": {
+   "direction": "bullish",
+   "event": "BOS",
+   "level": 99999.999
+  },
+  "digits": 2,
+  "trade_bias": null,
+  "text": "<b>BTC&lt;USD&gt;&amp;&#x27;x&quot; entered 5M bullish OB</b> (extreme)\nBuy limit <b>104,999.99</b> · SL 104,250.00 · risk 750.00\nZone 104,250.00 – 104,999.99 · price 1,234,567.89\n5M structure: bullish BOS at 100,000.00"
+ },
+ {
+  "symbol": "EURUSD",
+  "tf": "5M",
+  "ob": {
+   "kind": "bullish",
+   "top": 1.08455,
+   "bottom": 1.08412,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 1.08455,
+    "sl": 1.08412,
+    "risk": 0.00043,
+    "body": 0.00043,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "price": 1.084505,
+  "bias": null,
+  "digits": 5,
+  "trade_bias": "bullish",
+  "text": "<b>EURUSD entered 5M bullish OB</b> (extreme)\nBuy limit <b>1.08455</b> · SL 1.08412 · risk 0.00043\nZone 1.08412 – 1.08455 · price 1.08451\n<b>RISK ON</b> (with bullish bias)"
+ },
+ {
+  "symbol": "USDJPY",
+  "tf": "1H",
+  "ob": {
+   "kind": "bearish",
+   "top": 151.234,
+   "bottom": 151.1,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 151.1,
+    "sl": 151.234,
+    "risk": 0.134,
+    "body": 0.134,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "price": 151.2,
+  "bias": null,
+  "digits": 3,
+  "trade_bias": null,
+  "text": "<b>USDJPY entered 1H bearish OB</b> (extreme)\nSell limit <b>151.100</b> · SL 151.234 · risk 0.134\nZone 151.100 – 151.234 · price 151.200"
+ },
+ {
+  "symbol": "US30",
+  "tf": "1H",
+  "ob": {
+   "kind": "bullish",
+   "top": 39001.5,
+   "bottom": 38990.0,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 39001.5,
+    "sl": 38990.0,
+    "risk": 11.5,
+    "body": 11.5,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "price": 39000.49,
+  "bias": null,
+  "digits": 0,
+  "trade_bias": null,
+  "text": "<b>US30 entered 1H bullish OB</b> (extreme)\nBuy limit <b>39,002</b> · SL 38,990 · risk 12\nZone 38,990 – 39,002 · price 39,000"
+ },
+ {
+  "symbol": "XAUUSD",
+  "tf": "5M",
+  "ob": {
+   "kind": "bullish",
+   "top": 999.995,
+   "bottom": 999.0,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 999.995,
+    "sl": 999.0,
+    "risk": 0.995,
+    "body": 0.995,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "price": 999.9949999,
+  "bias": null,
+  "digits": 2,
+  "trade_bias": "bullish",
+  "text": "<b>XAUUSD entered 5M bullish OB</b> (extreme)\nBuy limit <b>1,000.00</b> · SL 999.00 · risk 0.99\nZone 999.00 – 1,000.00 · price 999.99\n<b>RISK ON</b> (with bullish bias)"
+ },
+ {
+  "symbol": "XAUUSD",
+  "tf": "5M",
+  "ob": {
+   "kind": "bullish",
+   "top": 2471.0,
+   "bottom": 2469.5,
+   "time": "2026-03-02T08:40:00",
+   "confirmed_time": "2026-03-02T09:00:00",
+   "touches": 0,
+   "meta": {
+    "priority": "middle",
+    "entry": 2471.0,
+    "sl": 2469.5,
+    "risk": 1.5,
+    "body": 1.5,
+    "sl_capped": false,
+    "swing": ""
+   }
+  },
+  "price": 2470.0,
+  "bias": {
+   "direction": "bearish",
+   "event": "BOS",
+   "level": 0.125
+  },
+  "digits": 2,
+  "trade_bias": null,
+  "text": "<b>XAUUSD entered 5M bullish OB</b> (mid)\nBuy limit <b>2,471.00</b> · SL 2,469.50 · risk 1.50\nZone 2,469.50 – 2,471.00 · price 2,470.00\n5M structure: bearish BOS at 0.12"
+ }
+]

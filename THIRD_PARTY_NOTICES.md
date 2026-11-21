@@ -49,6 +49,14 @@ program built with these crates, each under the MIT License or the Apache Licens
 - `serde` and `serde_json` (<https://github.com/serde-rs>), `base64`
   (<https://github.com/marshallpierce/rust-base64>) and `log`
   (<https://github.com/rust-lang/log>).
+- The Rust server (`server-rs/`) sends Telegram alerts with `reqwest`
+  (<https://github.com/seanmonstar/reqwest>) over `hyper-rustls` and `rustls`
+  (<https://github.com/rustls>; MIT, Apache-2.0 or ISC), with `tower-http` (MIT)
+  and `sync_wrapper` (Apache-2.0); it reads the bot token from the macOS Keychain with
+  `security-framework` and `core-foundation` (<https://github.com/kornelski/rust-security-framework>,
+  <https://github.com/servo/core-foundation-rs>) and from Windows Credential Manager with
+  `windows-sys` (<https://github.com/microsoft/windows-rs>). The other crates it uses are
+  listed in `server-rs/Cargo.lock`.
 
 On Windows its windows are drawn by Microsoft Edge WebView2, which Windows provides.
 

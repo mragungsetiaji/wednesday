@@ -394,6 +394,17 @@ class Store:
     def log_alert(self, row: dict) -> None:
         self._upsert(alerts_table, [row], ["key"])
 
+    def alerts_sent_since(self, sent_at: str, source: str, symbol: str) -> list[tuple[str, str]]:
+        """(sent_at, key) of order block alerts sent after ``sent_at``, oldest first: how a server
+        following the Rust engine learns which alerts Rust sent (for the plugins' on_alert hook)."""
+        t = alerts_table
+        q = (select(t.c.sent_at, t.c.key)
+             .where(t.c.sent_at > sent_at, t.c.status == "sent", t.c.kind != "drawing",
+                    t.c.source == source, t.c.symbol == symbol)
+             .order_by(t.c.sent_at))
+        with self.engine.connect() as conn:
+            return [(r[0], r[1]) for r in conn.execute(q)]
+
     def recent_alerts(self, limit: int = 20) -> list[dict]:
         t = alerts_table
         q = select(t).order_by(t.c.sent_at.desc()).limit(limit)

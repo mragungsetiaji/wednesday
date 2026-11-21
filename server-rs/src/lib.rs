@@ -12,10 +12,13 @@
 //! Routes that keep their data in the database ([`store`]) are served here only when this server
 //! could open the same database as Python; otherwise they go to Python like the rest.
 
+pub mod alerts;
 pub mod calendar;
 pub mod config;
+pub mod drawings;
 pub mod engine;
 pub mod journal;
+pub mod notify;
 pub mod pyjson;
 pub mod scan;
 pub mod settings_routes;
@@ -82,6 +85,16 @@ pub const ENGINE_ROUTES: &[&str] = &[
     "GET /api/quarters",
     "GET /api/sessions",
     "GET /api/distribution",
+    "GET /api/drawings",
+    "GET /api/drawings/alerts",
+    "PUT /api/drawings/{drawing_id}",
+    "DELETE /api/drawings/{drawing_id}",
+    "PUT /api/drawings/{drawing_id}/alert",
+    "DELETE /api/drawings/{drawing_id}/alert",
+    "GET /api/alerts",
+    "PUT /api/alerts",
+    "GET /api/alerts/chats",
+    "POST /api/alerts/test",
     "GET /api/markets/candles",
     "GET /api/markets/tick",
 ];
@@ -130,7 +143,17 @@ pub fn app_with(backend: SocketAddr, store: Option<Store>, runtime: Option<Arc<e
             .route("/api/sessions", get(analysis_sessions))
             .route("/api/distribution", get(analysis_distribution))
             .route("/api/markets/candles", get(markets_candles))
-            .route("/api/markets/tick", get(markets_tick));
+            .route("/api/markets/tick", get(markets_tick))
+            .route("/api/drawings", get(drawings_list))
+            .route("/api/drawings/alerts", get(drawings_alerts))
+            .route("/api/drawings/{id}", axum::routing::put(drawing_put).delete(drawing_delete))
+            .route("/api/drawings/{id}/alert", axum::routing::put(drawing_alert_put).delete(drawing_alert_delete));
+    }
+    if runtime.as_ref().is_some_and(|rt| rt.alerts.get().is_some()) {
+        router = router
+            .route("/api/alerts", get(alerts_get).put(alerts_put))
+            .route("/api/alerts/chats", get(alerts_chats))
+            .route("/api/alerts/test", axum::routing::post(alerts_test));
     }
     router
         .route("/api/health", get(health))
@@ -197,7 +220,59 @@ pub async fn start_engine(home: &std::path::Path, store: Option<Store>) -> Resul
     let env = |k: &str| config::env_setting(k, &env_file);
     let settings = engine::resolve(store.as_ref(), &env).await;
     let cfg = engine::scan_config(&env);
-    engine::Runtime::start(settings, engine::Options { cfg, ..Default::default() }, store)
+    let alerts = Arc::new(alerts::Alerts::load(store.clone(), home).await);
+    let rt = engine::Runtime::start(settings, engine::Options { cfg, ..Default::default() }, store)?;
+    let _ = rt.alerts.set(alerts);
+    tokio::spawn(watch_alerts(rt.clone()));
+    Ok(rt)
+}
+
+/// After each scan, the order block alerts then the drawing alerts on the closed M1 bars; on each
+/// tick, the drawings' intrabar alerts (`Runtime._after_scan`, `_on_tick` in engine.py). An alert
+/// problem never stops anything: the checks log and keep their `last_error`.
+async fn watch_alerts(rt: Arc<engine::Runtime>) {
+    let mut engine = rt.engine();
+    let mut changes = engine.subscribe();
+    let (mut version, mut tick) = { let st = engine.state(); (st.version, st.tick) };
+    loop {
+        tokio::select! {
+            changed = changes.changed() => {
+                if changed.is_err() {
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await; // stopped: a new one comes
+                }
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {} // catch an engine swap
+        }
+        let now = rt.engine();
+        if !Arc::ptr_eq(&now, &engine) {
+            engine = now;
+            changes = engine.subscribe();
+            let st = engine.state();
+            (version, tick) = (st.version, st.tick);
+            continue;
+        }
+        let st = engine.state();
+        let sender = rt.alerts.get().and_then(|a| a.sender());
+        if st.version != version {
+            version = st.version;
+            if let Some(result) = &st.result {
+                if let Some(a) = rt.alerts.get() {
+                    let (_, active) = engine::bias(rt.store.as_ref()).await;
+                    a.check(&engine.source, &engine.symbol, result, &st.m1, active.as_deref()).await;
+                }
+                if let Some(store) = &rt.store {
+                    rt.drawing_alerts.check(store, &engine.source, &engine.symbol, &st.m1, sender.as_ref()).await;
+                }
+            }
+        }
+        if st.tick != tick {
+            tick = st.tick;
+            if let (Some(store), Some(live)) = (&rt.store, &st.live) {
+                rt.drawing_alerts.check_tick(store, &engine.source, &engine.symbol, live.price, live.time,
+                                             sender.as_ref()).await;
+            }
+        }
+    }
 }
 
 /// The database the Python server in `home` uses, opened; None (with a log line) when there is
@@ -844,6 +919,98 @@ async fn analysis_sessions(State(app): State<App>, axum::extract::Query(q): Quer
 
 async fn analysis_distribution(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
     engine_answer(engine::analysis::distribution(runtime_of(&app), &q).await)
+}
+
+// ---- drawings and their alerts (drawings/), order block alerts (alerts/) ----
+
+/// The database the drawings live in, or Python's 409 without one (`drawing_store()`).
+fn drawing_store(app: &App) -> Result<&Store, Response> {
+    app.store.as_ref().ok_or_else(|| detail(StatusCode::CONFLICT, "Drawings need a database"))
+}
+
+async fn drawings_list(State(app): State<App>) -> Response {
+    let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
+    let e = runtime_of(&app).engine();
+    engine_answer(drawings::routes::list(store, &e.source, &e.symbol).await)
+}
+
+async fn drawings_alerts(State(app): State<App>) -> Response {
+    let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
+    let e = runtime_of(&app).engine();
+    engine_answer(drawings::routes::alerts(store, &e.source, &e.symbol).await)
+}
+
+async fn drawing_put(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
+    let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
+    let rt = runtime_of(&app);
+    let e = rt.engine();
+    engine_answer(drawings::routes::put(store, &e.source, &e.symbol, &id, &body, Some(&rt.drawing_alerts)).await)
+}
+
+async fn drawing_delete(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
+    let rt = runtime_of(&app);
+    let e = rt.engine();
+    engine_answer(drawings::routes::delete(store, &e.source, &e.symbol, &id, Some(&rt.drawing_alerts)).await)
+}
+
+async fn drawing_alert_put(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
+    let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
+    let rt = runtime_of(&app);
+    let e = rt.engine();
+    let armed = drawings::routes::armed_bar(&e.state().m1);
+    engine_answer(drawings::routes::alert_put(store, &e.source, &e.symbol, &id, armed, &body, Some(&rt.drawing_alerts)).await)
+}
+
+async fn drawing_alert_delete(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
+    let rt = runtime_of(&app);
+    let e = rt.engine();
+    engine_answer(drawings::routes::alert_delete(store, &e.source, &e.symbol, &id, Some(&rt.drawing_alerts)).await)
+}
+
+fn alerts_of(app: &App) -> &Arc<alerts::Alerts> {
+    runtime_of(app).alerts.get().expect("alert routes are only mounted with alerts")
+}
+
+async fn alerts_get(State(app): State<App>) -> Response {
+    let drawing_error = runtime_of(&app).drawing_alerts.last_error();
+    engine_answer(alerts_of(&app).get(drawing_error).await)
+}
+
+async fn alerts_put(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
+    let drawing_error = runtime_of(&app).drawing_alerts.last_error();
+    engine_answer(alerts_of(&app).put(&body, drawing_error).await)
+}
+
+async fn alerts_chats(State(app): State<App>) -> Response {
+    engine_answer(alerts_of(&app).chats().await)
+}
+
+async fn alerts_test(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let symbol = runtime_of(&app).engine().symbol.clone();
+    engine_answer(alerts_of(&app).test(&symbol).await)
 }
 
 async fn markets_candles(State(app): State<App>, axum::extract::Query(q): Query) -> Response {

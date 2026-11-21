@@ -1,0 +1,232 @@
+[
+ {
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "tf": "5M",
+  "ob": {
+   "kind": "bullish",
+   "top": 2471.0,
+   "bottom": 2470.0,
+   "time": "2026-03-02T09:40:00",
+   "confirmed_time": "2026-03-02T10:00:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 2471.0,
+    "sl": 2470.0,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "key": "tradingview|XAUUSD|5M|bullish|2026-03-02T09:40:00|2471.00000"
+ },
+ {
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "tf": "1H",
+  "ob": {
+   "kind": "bearish",
+   "top": 2471.123456789,
+   "bottom": 2470.123456789,
+   "time": "2026-03-02T10:17:00",
+   "confirmed_time": "2026-03-02T10:37:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 2470.123456789,
+    "sl": 2471.123456789,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "key": "tradingview|XAUUSD|1H|bearish|2026-03-02T10:17:00|2471.12346"
+ },
+ {
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "tf": "4H",
+  "ob": {
+   "kind": "bullish",
+   "top": 1.2345e-05,
+   "bottom": -0.999987655,
+   "time": "2026-03-02T10:54:00",
+   "confirmed_time": "2026-03-02T11:14:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 1.2345e-05,
+    "sl": -0.999987655,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "key": "tradingview|XAUUSD|4H|bullish|2026-03-02T10:54:00|0.00001"
+ },
+ {
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "tf": "5M",
+  "ob": {
+   "kind": "bearish",
+   "top": 1000000.0,
+   "bottom": 999999.0,
+   "time": "2026-03-02T11:31:00",
+   "confirmed_time": "2026-03-02T11:51:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 999999.0,
+    "sl": 1000000.0,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "key": "tradingview|XAUUSD|5M|bearish|2026-03-02T11:31:00|1000000.00000"
+ },
+ {
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "tf": "1H",
+  "ob": {
+   "kind": "bullish",
+   "top": 2471.000005,
+   "bottom": 2470.000005,
+   "time": "2026-03-02T12:08:00",
+   "confirmed_time": "2026-03-02T12:28:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 2471.000005,
+    "sl": 2470.000005,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "key": "tradingview|XAUUSD|1H|bullish|2026-03-02T12:08:00|2471.00000"
+ },
+ {
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "tf": "4H",
+  "ob": {
+   "kind": "bearish",
+   "top": 1234.567895,
+   "bottom": 1233.567895,
+   "time": "2026-03-02T12:45:00",
+   "confirmed_time": "2026-03-02T13:05:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 1233.567895,
+    "sl": 1234.567895,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "key": "tradingview|XAUUSD|4H|bearish|2026-03-02T12:45:00|1234.56789"
+ },
+ {
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "tf": "5M",
+  "ob": {
+   "kind": "bullish",
+   "top": 0.30000000000000004,
+   "bottom": -0.7,
+   "time": "2026-03-02T13:22:00",
+   "confirmed_time": "2026-03-02T13:42:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 0.30000000000000004,
+    "sl": -0.7,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "key": "tradingview|XAUUSD|5M|bullish|2026-03-02T13:22:00|0.30000"
+ },
+ {
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "tf": "1H",
+  "ob": {
+   "kind": "bearish",
+   "top": 1.000015,
+   "bottom": 1.5000000000098268e-05,
+   "time": "2026-03-02T13:59:00",
+   "confirmed_time": "2026-03-02T14:19:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 1.5000000000098268e-05,
+    "sl": 1.000015,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "key": "tradingview|XAUUSD|1H|bearish|2026-03-02T13:59:00|1.00002"
+ },
+ {
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "tf": "4H",
+  "ob": {
+   "kind": "bullish",
+   "top": 2.675,
+   "bottom": 1.6749999999999998,
+   "time": "2026-03-02T14:36:00",
+   "confirmed_time": "2026-03-02T14:56:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 2.675,
+    "sl": 1.6749999999999998,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "key": "tradingview|XAUUSD|4H|bullish|2026-03-02T14:36:00|2.67500"
+ },
+ {
+  "source": "tradingview",
+  "symbol": "XAUUSD",
+  "tf": "5M",
+  "ob": {
+   "kind": "bearish",
+   "top": 99999.999995,
+   "bottom": 99998.999995,
+   "time": "2026-03-02T15:13:00",
+   "confirmed_time": "2026-03-02T15:33:00",
+   "touches": 0,
+   "meta": {
+    "priority": "extreme",
+    "entry": 99998.999995,
+    "sl": 99999.999995,
+    "risk": 1.0,
+    "body": 1.0,
+    "sl_capped": false,
+    "swing": null
+   }
+  },
+  "key": "tradingview|XAUUSD|5M|bearish|2026-03-02T15:13:00|100000.00000"
+ }
+]

@@ -236,6 +236,17 @@ async fn engine_routes_have_the_contract_shape() {
     let store = temp_store("engine").await;
     let settings = DataSettings { source: "synthetic".into(), ..Default::default() };
     let rt = Runtime::start(settings, Options { poll: false, delay: 0.0, ..Default::default() }, Some(store.clone())).unwrap();
+    // The alerts without the OS credential store (no keychain prompt in a test) or Telegram.
+    struct NoKeyring;
+    impl wednesday_rs::alerts::secrets::Keyring for NoKeyring {
+        fn get(&self, _: &str, _: &str) -> Result<Option<String>, String> { Ok(None) }
+        fn set(&self, _: &str, _: &str, _: &str) -> Result<(), String> { Err("none".into()) }
+        fn delete(&self, _: &str, _: &str) -> Result<(), String> { Ok(()) }
+    }
+    let secrets = wednesday_rs::alerts::secrets::Secrets::with(Box::new(NoKeyring), |_| None);
+    let alerts = wednesday_rs::alerts::Alerts::new(Some(store.clone()), secrets, std::sync::Arc::new(|_: &str| None),
+                                                   "http://127.0.0.1:9", Default::default());
+    let _ = rt.alerts.set(std::sync::Arc::new(alerts));
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = l.local_addr().unwrap();
     tokio::spawn(wednesday_rs::serve_with_engine(l, listen(python()).await, Some(store), rt.clone()));
@@ -248,7 +259,7 @@ async fn engine_routes_have_the_contract_shape() {
         assert!(routes.contains(route), "{route} isn't in tests/api_contract.json");
         // The stream is read below; other markets need a TradingView helper (tests/engine_markets.rs).
         if !route.starts_with("GET ") || route.ends_with("/stream") || route.contains("/markets/")
-            || route.ends_with("/clock/feed") || route.ends_with("/api/replay") {
+            || route.ends_with("/clock/feed") || route.ends_with("/api/replay") || route.ends_with("/alerts/chats") {
             continue; // need a query (tests/engine_charts.rs covers them)
         }
         let res = send(req("GET", addr, &route[4..], "", None)).await;
@@ -363,6 +374,9 @@ fn differences(e: &serde_json::Value, a: &serde_json::Value, path: &str, out: &m
             for n in names {
                 match (ex.get(n), ac.get(n)) {
                     (Some((optional, _)), None) => if !optional { out.push(format!("{path}.{n}: missing")) },
+                    // A level's `meta` holds what its detector adds, which depends on the bars
+                    // (an inducement's `bos_time`): the sample may not have had every detector.
+                    (None, Some(_)) if path.ends_with(".meta") => {}
                     (None, Some(_)) => out.push(format!("{path}.{n}: new")),
                     (Some(p), Some(q)) => differences(&p.1, &q.1, &format!("{path}.{n}"), out),
                     (None, None) => {}

@@ -68,3 +68,28 @@ def test_without_the_rust_server_it_says_so(monkeypatch):
     feed = FollowFeed("http://127.0.0.1:9", "tradingview")
     with pytest.raises(RuntimeError, match="The Rust server isn't answering"):
         feed.connect()
+
+
+def test_following_rust_sends_no_alerts_and_tells_plugins_what_rust_sent(rust, monkeypatch, tmp_path):
+    from wednesday.alerts import AlertManager
+    from wednesday.engine import Runtime
+    from wednesday.scanner import ScanConfig
+    from wednesday.storage import Store
+
+    base, _ = rust
+    monkeypatch.setenv(feeds.FOLLOW_ENV, base)
+    store = Store(f"sqlite:///{tmp_path / 'w.db'}")
+    runtime = Runtime(ScanConfig(), DataSettings(source="tradingview"), store, alerts=AlertManager(store, None))
+    assert runtime.alerts is None and runtime.drawing_alerts is None  # Rust sends them
+    heard = []
+    runtime.hooks.on_alert.append(lambda keys, result: heard.append(keys))
+    row = {"source": "tradingview", "symbol": "FX:XAUUSD", "timeframe": "M15", "priority": "extreme",
+           "entry": 2000.0, "price": 2000.5, "status": "sent", "error": None}
+    store.log_alert({**row, "key": "old", "kind": "bullish", "sent_at": "2000-01-01T00:00:00+00:00"})
+    store.log_alert({**row, "key": "ob", "kind": "bullish", "sent_at": "2999-01-01T00:00:00+00:00"})
+    store.log_alert({**row, "key": "line", "kind": "drawing", "sent_at": "2999-01-01T00:00:01+00:00"})
+    store.log_alert({**row, "key": "failed", "kind": "bearish", "sent_at": "2999-01-01T00:00:02+00:00",
+                     "status": "failed", "error": "x"})
+    runtime._followed_alerts(runtime.engine, None)
+    runtime._followed_alerts(runtime.engine, None)  # heard once
+    assert heard == [["ob"]]

@@ -335,8 +335,12 @@ class Runtime:
         self.store = store
         self.delay = delay
         self.on_result = on_result
-        self.alerts = alerts  # AlertManager or None
-        self.drawing_alerts = DrawingAlerts(store) if store else None  # alerts on the trader's drawings
+        # Following the Rust engine (#96), Rust sends the Telegram and drawing alerts: this server
+        # only tells its plugins which order block alerts went out (``_followed_alerts``).
+        self.following = bool(follow_url())
+        self.alerts = None if self.following else alerts  # AlertManager or None
+        self.drawing_alerts = DrawingAlerts(store) if store and not self.following else None
+        self._alerts_seen = datetime.now(timezone.utc).isoformat()
         self.calendar = calendar  # news.Calendar or None
         self.journals = journals  # journal.service.Journals or None (needs a database)
         self.hooks = Hooks()  # filled by plugins (see plugins.py)
@@ -373,6 +377,11 @@ class Runtime:
                 log.exception("alert check failed")
             else:
                 self.hooks.run_on_alert(sent, result)
+        if self.following and self.store is not None:
+            try:
+                self._followed_alerts(engine, result)
+            except Exception:  # noqa: BLE001 - never stop scanning over an alert
+                log.exception("reading the alerts Rust sent failed")
         if self.drawing_alerts is not None:
             try:
                 self.drawing_alerts.check(self.settings.source, engine.symbol, engine.state.m1, self.telegram_send())
@@ -381,6 +390,13 @@ class Runtime:
         self.hooks.run_after_scan(result, engine)
         if self.on_result:
             self.on_result(result)
+
+    def _followed_alerts(self, engine: Engine, result) -> None:
+        """The order block alerts Rust sent since the last scan, to the plugins' on_alert hook."""
+        rows = self.store.alerts_sent_since(self._alerts_seen, self.settings.source, engine.symbol)
+        if rows:
+            self._alerts_seen = rows[-1][0]
+            self.hooks.run_on_alert([key for _, key in rows], result)
 
     def telegram_send(self):
         """Telegram's send when alerts are set up and on; None otherwise (drawing alerts are then only logged)."""

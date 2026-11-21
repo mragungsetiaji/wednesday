@@ -98,9 +98,15 @@ Ported so far: `/api/health`, workspaces, drawing templates, the calendar settin
   the database (or `XAU_DB_URL=none`), Python serves those routes.
 - **No login.** The dashboard runs on the trader's machine; ported routes refuse
   cross-site writes as `same_site.py` does.
-- **Drawings** stay in Python until the drawing alerts move (step 9): saving a drawing
-  resets the alert checker's cache in the Python process, and drawings are filed under
-  the engine's current source and symbol. Their storage is ported already.
+- **Drawings and alerts** run with the engine (step 9e). `server-rs/src/drawings/` has the
+  drawings routes and the drawing alerts (`checker.rs`, checked after each scan and, for
+  intrabar alerts, on each tick); `server-rs/src/alerts/` has the order block alerts, the
+  Telegram client and `/api/alerts`. The bot token is read and saved in the OS credential store
+  where Python's `keyring` keeps it (`alerts/secrets.rs`: Keychain on macOS, Credential Manager
+  on Windows; on Linux only `.env` or the session), so either server finds the other's token.
+  `tests/golden/alerts/` and `tests/golden/drawings/` hold the reference output
+  (`tests/test_alerts_golden.py`, `tests/test_drawings_golden.py`). `watch_alerts` in `lib.rs`
+  runs the checks; Python's plugins still hear `on_alert`, from the `alert_log` rows Rust wrote.
 - **The journal** is in `server-rs/src/journal/`: the MT5 report import (`report.rs`, its own
   HTML tokenizer copying Python's `HTMLParser`), the stats (`stats.rs`, numpy and pandas
   arithmetic copied to the last bit) and the routes (`service.rs`). `tests/golden/reports/` and
@@ -118,7 +124,7 @@ Ported so far: `/api/health`, workspaces, drawing templates, the calendar settin
   `tests/test_markets_parity.py` check them against Python. The Python server *follows* it: with
   `WEDNESDAY_FOLLOW=http://127.0.0.1:<port>` its feed is `feeds.FollowFeed`, which reads the bars,
   the scan price and the ticks from `GET /api/engine/m1` and `/api/tick` instead of connecting to
-  TradingView, so its alerts, drawing alerts and plugins see what Rust scanned. A settings
+  TradingView, so its plugins see what Rust scanned. It sends no alerts itself. A settings
   change saved through Rust tells Python to follow (`POST /api/settings/reconnect`).
   From a checkout: `make serve-rs ARGS=--engine` (Rust on 8000), then
   `WEDNESDAY_FOLLOW=http://127.0.0.1:8000 make serve PORT=8001`; `conformance.rs` checks the follower's
