@@ -9,6 +9,5 @@ data/
 *.log
 .env
 logs/
-tradingview/node_modules/
-packaging/node/
 /target/
+packaging/node/

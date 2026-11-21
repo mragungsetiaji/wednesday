@@ -8,7 +8,7 @@ grows while the screener runs.
 
 | Source | Cost | Notes |
 | --- | --- | --- |
-| `tradingview` (default) | Free | Spot gold from TradingView, `FX:XAUUSD` (FXCM) by default; ~5 days of 1-minute bars at first. Needs Node 20+ when run from source; the Windows app bundles it (see [TradingView](#tradingview)) |
+| `tradingview` (default) | Free | Spot gold from TradingView, `FX:XAUUSD` (FXCM) by default; ~5 days of 1-minute bars at first. Nothing to install (see [TradingView](#tradingview)) |
 
 TradingView is the only source the dashboard offers. MetaTrader 5, Yahoo Finance
 and the CSV file source were removed. A source saved by an older version (`mt5`,
@@ -92,23 +92,27 @@ the last closed bar, so a closed market doesn't draw a candle after the gap.
 
 ## TradingView
 
-The `tradingview` source reads TradingView's market data through
+The `tradingview` source reads TradingView's market data over the websocket its web
+chart uses, as the community library
 [TradingView-API](https://github.com/Mathieu2301/TradingView-API)
-(`@mathieuc/tradingview`), a community library. It is **unofficial**: TradingView
+(`@mathieuc/tradingview`) documents it. It is **unofficial**: TradingView
 doesn't offer this as an API, its terms don't allow automated access to its data,
-and the library can stop working when TradingView changes its site. Use it for
+and it can stop working when TradingView changes its site. Use it for
 personal charts only.
 
-It runs as a small Node helper (`tradingview/feed.mjs`) that the screener starts
-and keeps running, with one websocket open. The Windows app bundles Node.js and
-the helper, so there it works with nothing to install. Run from source, it needs
-Node 20+ on the PATH and the helper's packages:
+The server speaks the protocol itself (`wed-engine/src/tradingview.rs`; the Python
+reference has the same client in `src/wednesday/tradingview.py`) and keeps one
+websocket open, reopened when TradingView drops it. Nothing else is installed or
+started: no Node.js, no helper process.
 
 ```bash
-make install                      # also installs the helper (npm install in tradingview/)
-npm install --prefix tradingview  # the helper alone
 uv run wednesday --source tradingview --check
 ```
+
+When it stops working, the protocol is the place to look: each websocket message holds
+frames `~m~<length>~m~<payload>` (heartbeats `~h~<n>` are echoed), a chart session
+(`chart_create_session`, `resolve_symbol`, `create_series`, `request_more_data`) loads
+bars and a quote session (`quote_create_session`, `quote_add_symbols`) streams the price.
 
 The symbol takes TradingView's exchange prefix. `FX:` is FXCM:
 
@@ -124,7 +128,7 @@ days), so the 4H timeframe fills in as stored history grows. Bar
 times are UTC. The candle still forming is dropped; the live price comes from
 TradingView's quote and builds the forming candle between scans.
 
-The same helper feeds a full-screen chart set to another symbol (`FX:XAGUSD`
+The same connection feeds a full-screen chart set to another symbol (`FX:XAGUSD`
 beside gold, see [Dashboard](dashboard.md#full-screen-and-multiple-charts)):
 only its candles and live price, through
 `/api/markets/candles` and `/api/markets/tick`. Nothing about that symbol is

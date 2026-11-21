@@ -19,7 +19,7 @@ through `ARGS`: `make serve ARGS="--source synthetic"` for the Rust server,
 see [Windows and VPS](deploy-windows.md).
 
 ```bash
-make install     # Python deps (uv) + dashboard and TradingView helper deps (npm)
+make install     # Python deps (uv) + dashboard deps (npm)
 make test        # pytest (and the golden files)
 make test-tauri  # the Rust tests: the shell and the server
 make typecheck   # TypeScript
@@ -44,6 +44,7 @@ src/wednesday/
   levels.py       Level: the common output of every detector
   detectors/      order blocks, liquidity (BSL/SSL, EQH/EQL), inducement + registry
   feeds.py        TradingView and synthetic (development) feeds + rolling M1 buffer
+  tradingview.py  TradingView's websocket protocol (info, candles, quote), no Node
   scanner.py      multi-timeframe scan, nearest level above/below, limit setups
   quarters.py     quarterly theory blocks (weekday, session, 90m) in New York time + green stats
   report.py       console table
@@ -150,8 +151,8 @@ request to Python, streaming the answer back. Each answer then carries
   the last scan, the active bias, the price and the coming news; `tests/golden/market/`).
   A second journal needs the `journal.multi` feature, read from the plugin host's registry
   (`wed-plugins/src/`, see `docs/plugins.md`).
-- **The engine** runs in Rust (`wed-engine/src/`): the feed (`feed.rs`: the TradingView
-  helper, synthetic data), the M1 buffer stored in `m1_bars`, the scan after each minute close,
+- **The engine** runs in Rust (`wed-engine/src/`): the feed (`feed.rs`: TradingView over
+  `tradingview.rs`, its websocket; synthetic data), the M1 buffer stored in `m1_bars`, the scan after each minute close,
   the live price and the forming candle. It answers `/api/status`, `/api/scan`, `/api/tick`,
   `/api/stream`, `/api/settings`, the charts (`charts.rs`: `/api/candles`, `/api/replay`,
   `/api/replay/range`, `/api/clock/feed`), the analysis views (`analysis.rs`: `/api/sessions`,

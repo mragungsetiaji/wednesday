@@ -1,7 +1,7 @@
 [package]
 name = "wednesday-engine"
 version.workspace = true
-description = "Wednesday's scan engine in Rust: the TradingView feed, the M1 buffer, the scan loop, charts, analysis and other markets"
+description = "Wednesday's scan engine in Rust: the TradingView feed (its websocket, spoken directly), the M1 buffer, the scan loop, charts, analysis and other markets"
 edition.workspace = true
 rust-version.workspace = true
 license-file.workspace = true
@@ -9,9 +9,13 @@ publish.workspace = true
 
 [dependencies]
 chrono.workspace = true
+futures-util.workspace = true
 log.workspace = true
+rustls.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+tokio-tungstenite.workspace = true
+webpki-roots.workspace = true
 wednesday-base.workspace = true
 wednesday-scan.workspace = true
 wednesday-store.workspace = true

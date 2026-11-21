@@ -100,13 +100,8 @@ class DataSettings:
 
 
 def source_availability(source: str) -> tuple[bool, str | None]:
-    """Whether a source can run on this machine, and why not."""
-    if source == "tradingview":
-        from .feeds import tradingview_command
-
-        command, why = tradingview_command()
-        if command is None:
-            return False, why
+    """Whether a source can run on this machine, and why not. TradingView needs nothing
+    installed (its websocket is spoken directly), so every source can today."""
     return True, None
 
 

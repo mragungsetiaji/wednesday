@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import queue
-import shutil
 import subprocess
 import threading
 import time
@@ -18,13 +17,13 @@ import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 
 from .timeframes import M1, OHLCV_COLUMNS, normalize_ohlcv
+from .tradingview import Connection, TradingViewError
 
 if TYPE_CHECKING:
     from .settings import DataSettings
@@ -68,31 +67,9 @@ class DataFeed(ABC):
         return {"feed": self.name}
 
 
-TRADINGVIEW_DIR = Path(__file__).resolve().parents[2] / "tradingview"  # the Node helper, beside src/
-
-
-def tradingview_command() -> tuple[list[str] | None, str | None]:
-    """The command that starts the TradingView helper, or why it can't run here."""
-    folder = TRADINGVIEW_DIR
-    script = folder / "feed.mjs"
-    if not script.is_file():
-        return None, "The TradingView helper is missing from this install. Reinstall Wednesday, or run it from source."
-    node = shutil.which("node")
-    if node is None:
-        return None, "Needs Node 20+ (nodejs.org), then: npm install --prefix tradingview"
-    if not (folder / "node_modules" / "@mathieuc" / "tradingview").is_dir():
-        return None, "Install it with: npm install --prefix tradingview (or make install)"
-    return [node, str(script)], None
-
-
-class TradingViewError(RuntimeError):
-    def __init__(self, code: str, message: str):
-        super().__init__(f"TradingView: {message}")
-        self.code = code
-
-
-class _NodeHelper:
-    """A long-running helper process answering JSON-line requests (see tradingview/feed.mjs).
+class _ProcessHelper:
+    """A stand-in for TradingView in tests: a long-running process answering the same JSON-line
+    requests (``info``, ``candles``, ``quote``), e.g. ``tests/golden/markets/fake_feed.mjs``.
 
     Started on the first call and again after it dies. Replies carry the request id, so a late
     reply to a request that already timed out is skipped instead of answering the next one.
@@ -159,7 +136,7 @@ class _NodeHelper:
             return msg.get("result")
 
     def _why(self) -> str:
-        return self._stderr[-1] if self._stderr else "no output. Is Node 20+ installed?"
+        return self._stderr[-1] if self._stderr else "no output"
 
     def close(self) -> None:
         proc, self._proc = self._proc, None
@@ -173,7 +150,7 @@ class _NodeHelper:
 
 
 class TradingViewFeed(DataFeed):
-    """TradingView market data through a Node helper (``tradingview/``, unofficial library).
+    """TradingView market data over its websocket (unofficial protocol, see ``tradingview.py``).
 
     ``FX:XAUUSD`` is FXCM's spot gold; any TradingView symbol with its exchange prefix works
     (``OANDA:XAUUSD``, ...). Bar times are UTC. Without a TradingView account the server gives
@@ -184,18 +161,13 @@ class TradingViewFeed(DataFeed):
 
     def __init__(self, symbol: str = "FX:XAUUSD", command: list[str] | None = None):
         self.symbol = symbol
-        self.command = command
-        self._helper: _NodeHelper | None = None
+        self.command = command  # a stand-in process instead of TradingView (tests)
+        self._helper: Connection | _ProcessHelper | None = None
         self._info: dict | None = None
 
     def connect(self) -> None:
-        command = self.command
-        if command is None:
-            command, why = tradingview_command()
-            if command is None:
-                raise RuntimeError(f"TradingView source unavailable. {why}")
         self.close()
-        self._helper = _NodeHelper(command)
+        self._helper = Connection() if self.command is None else _ProcessHelper(self.command)
         try:
             self._info = self._call("info", 30)
         except TradingViewError as exc:

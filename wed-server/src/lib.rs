@@ -991,19 +991,16 @@ async fn engine_stream(State(app): State<App>, axum::extract::Query(q): axum::ex
     res
 }
 
-/// The data sources the dashboard offers, and whether each can run here (`settings.catalog`).
+/// The data sources the dashboard offers, and whether each can run here (`settings.catalog`):
+/// TradingView needs nothing installed, so every offered source can.
 fn catalog() -> Value {
     engine::SOURCES
         .iter()
         .filter(|s| s.offered)
         .map(|s| {
-            let why = match s.id {
-                "tradingview" => engine::feed::tradingview_command().err(),
-                _ => None,
-            };
             json!({"id": s.id, "title": s.title, "description": s.description, "default_symbol": s.default_symbol,
                    "default_clock": s.default_clock, "default_tick": s.default_tick, "min_tick": s.min_tick,
-                   "available": why.is_none(), "unavailable_reason": why})
+                   "available": true, "unavailable_reason": null})
         })
         .collect()
 }
@@ -1070,12 +1067,7 @@ async fn engine_settings_put(State(app): State<App>, req: Request) -> Response {
         Ok(s) => s,
         Err(e) => return detail(StatusCode::UNPROCESSABLE_ENTITY, format!("Invalid settings: {e}")),
     };
-    let mut errors = new.validate();
-    if errors.is_empty() && new.source == "tradingview" {
-        if let Err(why) = engine::feed::tradingview_command() {
-            errors.push(why);
-        }
-    }
+    let errors = new.validate();
     if !errors.is_empty() {
         return detail(StatusCode::UNPROCESSABLE_ENTITY, errors.join("; "));
     }

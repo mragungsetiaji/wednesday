@@ -16,8 +16,8 @@ Python or Node to set up.
    copy .env.example .env
    ```
 
-   The data source is TradingView (spot gold, `FX:XAUUSD`), which needs Node 20+
-   and its helper: `npm install --prefix tradingview`. Change the symbol in
+   The data source is TradingView (spot gold, `FX:XAUUSD`); it needs nothing
+   installed. Change the symbol in
    `.env` (`XAU_SYMBOL`, with `XAU_SOURCE=tradingview`) or later in the dashboard
    under **Settings**; the choice is saved in the database and survives restarts.
    See [Data sources](data-sources.md).

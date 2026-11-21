@@ -2,7 +2,7 @@
 //!
 //! The scan, levels, alerts, bias and drawings follow the data source's symbol. A full-screen
 //! pane can show another symbol beside it (`FX:XAGUSD` next to gold) through its own TradingView
-//! helper (`tradingview/feed.mjs`); nothing about it is scanned or stored. Times are converted to
+//! connection; nothing about it is scanned or stored. Times are converted to
 //! the feed's clock so the panes line up.
 //!
 //! Routes: `GET /api/markets/candles` ([`candles`]) and `GET /api/markets/tick` ([`tick`]), with
@@ -16,7 +16,7 @@ use std::time::{Duration as StdDuration, Instant};
 use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 use serde_json::{json, Map, Value};
 
-use super::feed::{tradingview_command, FeedError, NodeHelper};
+use super::feed::{FeedError, Helper};
 use super::{Answer, Refusal, Runtime};
 use wednesday_base::py::py_repr;
 use wednesday_scan::clock::{localize, NEW_YORK};
@@ -35,7 +35,7 @@ const LIMIT_MIN: i128 = 10;
 const LIMIT_MAX: i128 = 2000;
 const LIMIT_DEFAULT: i64 = 300;
 
-/// How the helper is started: (node, script), or why it can't run here.
+/// A stand-in process for TradingView (tests): (program, script), or why it can't run.
 type Command = Box<dyn Fn() -> Result<(PathBuf, PathBuf), String> + Send + Sync>;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -45,10 +45,10 @@ enum Key {
     Quote(String),
 }
 
-/// One TradingView helper for every pane's own symbol, started on first use (`Markets`).
+/// One TradingView connection for every pane's own symbol, opened on first use (`Markets`).
 pub struct Markets {
-    command: Command,
-    helper: tokio::sync::Mutex<Option<NodeHelper>>,
+    command: Option<Command>,
+    helper: tokio::sync::Mutex<Option<Helper>>,
     cache: Mutex<HashMap<Key, (Instant, Value)>>,
 }
 
@@ -59,23 +59,26 @@ impl Default for Markets {
 }
 
 impl Markets {
-    /// Markets on the TradingView helper `tradingview_command` finds.
+    /// Markets on TradingView.
     pub fn new() -> Markets {
-        Markets::with_command(tradingview_command)
+        Markets { command: None, helper: tokio::sync::Mutex::new(None), cache: Mutex::new(HashMap::new()) }
     }
 
-    /// Markets on another helper command (tests), as Python's `Markets(command=...)`.
+    /// Markets on a stand-in process (tests), as Python's `Markets(command=...)`.
     pub fn with_command(command: impl Fn() -> Result<(PathBuf, PathBuf), String> + Send + Sync + 'static) -> Markets {
-        Markets { command: Box::new(command), helper: tokio::sync::Mutex::new(None), cache: Mutex::new(HashMap::new()) }
+        Markets { command: Some(Box::new(command)), ..Markets::new() }
     }
 
     /// One helper call at a time; its failures as the statuses the dashboard shows.
     async fn call(&self, op: &str, timeout: f64, args: Map<String, Value>) -> Result<Value, Refusal> {
         let mut helper = self.helper.lock().await;
         if helper.is_none() {
-            let (node, script) = (self.command)()
-                .map_err(|why| Refusal::new(503, format!("Other symbols come from TradingView. {why}")))?;
-            *helper = Some(NodeHelper::new(node, script));
+            let command = match &self.command {
+                Some(command) => Some(command()
+                    .map_err(|why| Refusal::new(503, format!("Other symbols come from TradingView. {why}")))?),
+                None => None,
+            };
+            *helper = Some(Helper::new(command));
         }
         let symbol = args.get("symbol").and_then(Value::as_str).unwrap_or("None").to_string();
         let h = helper.as_mut().expect("started");
@@ -264,8 +267,8 @@ pub fn clean_symbol(symbol: &str) -> Result<String, Refusal> {
     }
 }
 
-/// `MarketError`: an unknown symbol is a 404, another TradingView error a 502, a helper that
-/// can't run or answer a 503.
+/// `MarketError`: an unknown symbol is a 404, another TradingView error a 502, no answer in time
+/// (or a stand-in that can't run) a 503.
 fn market_error(e: FeedError, symbol: &str) -> Refusal {
     if e.kind != "TradingViewError" {
         return Refusal::new(503, e.message);

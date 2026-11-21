@@ -1,11 +1,12 @@
-//! The TradingView feed against a fake helper: a tiny Node script answering feed.mjs's JSON-line
-//! protocol. Skipped, with a message, when `node` isn't on PATH.
+//! The TradingView feed against a stand-in process ([`ProcessHelper`]): a tiny Node script
+//! answering the JSON-line questions TradingView answers in production. Skipped, with a message,
+//! when `node` isn't on PATH. The websocket client itself is `wed-engine/src/tradingview.rs`.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use chrono::{DurationRound, TimeDelta, Utc};
 use serde_json::{json, Map};
-use wednesday_rs::engine::feed::{tradingview_command, Feed, NodeHelper, TradingViewFeed};
+use wednesday_rs::engine::feed::{Feed, ProcessHelper, TradingViewFeed};
 
 /// Answers one request at a time, in order, as feed.mjs does.
 const FAKE: &str = r#"
@@ -76,7 +77,7 @@ fn args(pairs: serde_json::Value) -> Map<String, serde_json::Value> {
 async fn helper_answers_skips_late_replies_times_out_and_restarts() {
     let Some(node) = node_or_skip("helper test") else { return };
     let dir = fake_dir("helper", true);
-    let mut helper = NodeHelper::new(node, dir.join("feed.mjs"));
+    let mut helper = ProcessHelper::new(node, dir.join("feed.mjs"));
 
     let info = helper.call("info", 10.0, args(json!({"symbol": "FX:XAUUSD"}))).await.unwrap();
     assert_eq!(info["exchange"], "FXCM");
@@ -110,9 +111,9 @@ async fn helper_that_cannot_run_says_so() {
     let dir = std::env::temp_dir().join(format!("wednesday-feed-broken-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("feed.mjs"), "process.exit(1);\n").unwrap();
-    let mut helper = NodeHelper::new(node, dir.join("feed.mjs"));
+    let mut helper = ProcessHelper::new(node, dir.join("feed.mjs"));
     let err = helper.call("info", 10.0, Map::new()).await.unwrap_err();
-    assert_eq!(err.message, "The TradingView helper stopped: no output. Is Node 20+ installed?");
+    assert_eq!(err.message, "The TradingView helper stopped: no output");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -161,58 +162,8 @@ async fn tradingview_feed_over_the_fake_helper() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// The only test that sets WEDNESDAY_TRADINGVIEW_DIR / WEDNESDAY_NODE (the environment is
-/// shared by the tests of this file).
-#[tokio::test]
-async fn finding_the_helper() {
-    let _env = crate::env_lock();
-    let Some(node) = node_or_skip("discovery test") else { return };
-    let set = |dir: &Path| std::env::set_var("WEDNESDAY_TRADINGVIEW_DIR", dir);
-
-    let empty = std::env::temp_dir().join(format!("wednesday-feed-empty-{}", std::process::id()));
-    std::fs::create_dir_all(&empty).unwrap();
-    set(&empty);
-    std::env::set_var("WEDNESDAY_NODE", &node);
-    assert_eq!(
-        tradingview_command().unwrap_err(),
-        "The TradingView helper is missing from this install. Reinstall Wednesday, or run it from source."
-    );
-
-    let bare = fake_dir("bare", false);
-    set(&bare);
-    assert_eq!(tradingview_command().unwrap_err(), "Install it with: npm install --prefix tradingview (or make install)");
-
-    std::env::set_var("WEDNESDAY_NODE", bare.join("no-such-node"));
-    assert_eq!(tradingview_command().unwrap_err(), "Needs Node 20+ (nodejs.org), then: npm install --prefix tradingview");
-
-    let full = fake_dir("full", true);
-    set(&full);
-    std::env::set_var("WEDNESDAY_NODE", &node);
-    assert_eq!(tradingview_command().unwrap(), (node.clone(), full.join("feed.mjs")));
-
-    // A feed without its own command finds the helper the same way.
-    let mut feed = Feed::build("tradingview", "FX:XAUUSD").unwrap();
-    feed.connect().await.unwrap();
-    assert_eq!(feed.describe()["exchange"], "FXCM");
-    feed.close().await;
-
-    std::env::set_var("WEDNESDAY_NODE", bare.join("no-such-node"));
-    let mut feed = Feed::build("tradingview", "FX:XAUUSD").unwrap();
-    let err = feed.connect().await.unwrap_err();
-    assert_eq!(
-        err.message,
-        "TradingView source unavailable. Needs Node 20+ (nodejs.org), then: npm install --prefix tradingview"
-    );
-
-    std::env::remove_var("WEDNESDAY_TRADINGVIEW_DIR");
-    std::env::remove_var("WEDNESDAY_NODE");
-    for d in [empty, bare, full] {
-        let _ = std::fs::remove_dir_all(d);
-    }
-}
-
-/// Real FX:XAUUSD bars through this checkout's tradingview/ helper (needs `npm install --prefix
-/// tradingview` and the network): `cargo test --test it feed -- --ignored`.
+/// Real FX:XAUUSD bars over TradingView's websocket (needs the network):
+/// `cargo test --test it feed -- --ignored`.
 #[tokio::test]
 #[ignore]
 async fn live_tradingview_bars() {

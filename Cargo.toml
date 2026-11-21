@@ -36,6 +36,11 @@ zip = { version = "4.2.0", default-features = false, features = ["deflate-flate2
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 log = "0.4"
+# TradingView's websocket (wed-engine/src/tradingview.rs), on rustls with ring like reqwest.
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "0.26"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite", "postgres"] }
 
 # Debug builds stay light: line numbers for our own code (backtraces still point at lines),

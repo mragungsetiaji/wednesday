@@ -23,17 +23,19 @@ License below.
 
 ## TradingView data source
 
-The `tradingview` data source runs a small Node.js helper. From source it is installed
-in `tradingview/node_modules`; the Windows app bundles it, with Node.js itself:
+The `tradingview` data source talks to TradingView's websocket itself (no Node.js, no
+helper process). The protocol is unofficial; Wednesday's client follows what the community
+library `@mathieuc/tradingview` (<https://github.com/Mathieu2301/TradingView-API>, by
+Mathieu Colmon, ISC License) documents, without copying its code. Neither is made or
+endorsed by TradingView. The client uses:
 
-- Node.js 22 (`node.exe`, <https://nodejs.org>), MIT License, Copyright Node.js
-  contributors. Node.js bundles third-party code under their own licenses, listed in
-  its `LICENSE` file, which the Windows app ships next to `node.exe`.
-- `@mathieuc/tradingview` 4.1.2 (<https://github.com/Mathieu2301/TradingView-API>),
-  by Mathieu Colmon, ISC License (declared in its `package.json`). An independent
-  library, not made or endorsed by TradingView.
-- `ws` 8 (<https://github.com/websockets/ws>), MIT License, Copyright (c) 2011 Einar
-  Otto Stangvik, (c) 2013 Arnout Kazemier and contributors, (c) 2016 Luigi Pinca and
+- In the Rust server (and the Windows app): `tokio-tungstenite` (MIT,
+  <https://github.com/snapview/tokio-tungstenite>) and `tungstenite` (MIT or Apache-2.0,
+  <https://github.com/snapview/tungstenite-rs>), `futures-util` (MIT or Apache-2.0,
+  <https://github.com/rust-lang/futures-rs>), `rustls` (see below) and `webpki-roots`
+  (Mozilla's root certificates, CDLA-Permissive-2.0, <https://github.com/rustls/webpki-roots>).
+- In the Python reference run from source: `websockets` (BSD-3-Clause,
+  <https://github.com/python-websockets/websockets>), Copyright (c) Aymeric Augustin and
   contributors.
 
 ## Tauri desktop shell

@@ -12,6 +12,7 @@ dependencies = [
     "pandas>=2.2",
     "sqlalchemy>=2.0",
     "uvicorn>=0.30",
+    "websockets>=13",
 ]
 
 [project.optional-dependencies]

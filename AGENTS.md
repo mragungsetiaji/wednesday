@@ -26,7 +26,8 @@ Python is managed by uv (3.11 locally, `>=3.10` supported); use `uv run`, not a 
 `python`. Run `make test` after Python changes, and `make typecheck` and `make test-ui`
 after changes in `web/`. Tests and local runs should use `--source synthetic` (random walk,
 development and tests only, not offered in the dashboard): the real source, TradingView,
-goes through the Node helper in `tradingview/` and the network. TradingView is the only
+is its websocket over the network (`wed-engine/src/tradingview.rs`, and `tradingview.py` for
+Python; unofficial protocol, no Node). TradingView is the only
 market data source; Yahoo Finance, CSV files, M1 file imports and MetaTrader 5 were removed
 (MT5 opened the terminal on start and froze): don't bring them back. The journal reads MT5
 only through an uploaded HTML report.

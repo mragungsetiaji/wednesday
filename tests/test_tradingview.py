@@ -1,6 +1,7 @@
-"""TradingView source: the Python side of the Node helper, with a Python stand-in for the helper.
+"""TradingView source: the feed and the other-symbol panes over a Python stand-in for TradingView.
 
-The real helper (tradingview/feed.mjs) needs Node and the network, so these tests never start it.
+TradingView itself (tradingview.py, its websocket) needs the network, so these tests never reach
+it: test_tradingview_ws.py tests the websocket client against a fake server.
 """
 
 import sys
@@ -9,7 +10,6 @@ import textwrap
 import pandas as pd
 import pytest
 
-from wednesday import feeds
 from wednesday.feeds import TradingViewFeed, build_feed
 from wednesday.settings import SOURCES, DataSettings, source_availability
 
@@ -117,16 +117,10 @@ def test_source_is_registered():
     assert isinstance(feed, TradingViewFeed) and feed.symbol == "FX:XAUUSD"
 
 
-def test_unavailable_without_the_helper(monkeypatch, tmp_path):
-    monkeypatch.setattr(feeds, "TRADINGVIEW_DIR", tmp_path)
-    ok, why = source_availability("tradingview")
-    assert not ok and "Node" in why
-    (tmp_path / "feed.mjs").write_text("")
-    monkeypatch.setattr(feeds.shutil, "which", lambda name: "/usr/bin/node")
-    ok, why = source_availability("tradingview")
-    assert not ok and "npm install --prefix tradingview" in why
-    (tmp_path / "node_modules" / "@mathieuc" / "tradingview").mkdir(parents=True)
+def test_available_without_anything_installed():
     assert source_availability("tradingview") == (True, None)
+    feed = TradingViewFeed("FX:XAUUSD")
+    assert feed.command is None  # the websocket, no helper to find
 
 
 # ---- another symbol in a full-screen pane (markets.py, /api/markets/*) ----

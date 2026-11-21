@@ -101,13 +101,12 @@ the windows were when the app closed is kept in the shell's own data folder
 monitor comes back onto the first one. The server stops with the app.
 
 The installer's resources hold what the server needs besides itself
-(`tauri.release.conf.json`):
+(`tauri.release.conf.json`). TradingView is reached over its websocket by the server, so
+neither Node.js nor a helper ships with the app:
 
 | Path | What |
 | --- | --- |
 | `web\` | The dashboard build (`web/dist`) |
-| `tradingview\` | The TradingView helper (`feed.mjs`, its production `node_modules`) |
-| `node\` | `node.exe`, which runs the helper, and its license |
 | `LICENSE`, `DISCLAIMER.md`, `THIRD_PARTY_NOTICES.md` | The license and notices |
 
 `Wednesday.exe --forget-secrets` removes the secrets Wednesday saved in the
@@ -115,7 +114,7 @@ credential store and exits without a window; the installer's fresh start runs it
 (`src-tauri/windows/hooks.nsh`).
 
 ```bash
-make tauri        # the app from this checkout (its web/dist and tradingview/)
+make tauri        # the app from this checkout (its web/dist)
 make test-tauri   # its Rust tests, and the Rust server's
 ```
 
@@ -134,11 +133,9 @@ Setup build before installing, and do the fresh start described under
 `.github/workflows/release-windows.yml` builds on a Windows runner:
 
 1. the dashboard (`npm ci && npm run build` in `web/`),
-2. the TradingView helper (`npm ci --omit=dev` in `tradingview/`) and `node.exe`
-   with its license, copied into `packaging\node\`,
-3. the Tauri app, with the Rust server built in, and its NSIS installer
+2. the Tauri app, with the Rust server built in, and its NSIS installer
    (`cargo tauri build --config tauri.release.conf.json` in `src-tauri/`, which
-   bundles the dashboard, the helper and node as resources), copied to
+   bundles the dashboard as a resource), copied to
    `dist\WednesdaySetup-<version>.exe`.
 
 To publish a release, tag main and push the tag; the version comes from the tag:
@@ -172,13 +169,8 @@ The same steps on a Windows PC, from the repository root:
 
 ```powershell
 cd web; npm ci; npm run build; cd ..
-npm ci --omit=dev --prefix tradingview
-New-Item -ItemType Directory -Force packaging\node
-Copy-Item (Get-Command node).Source packaging\node\node.exe   # Node 22
-Copy-Item (Join-Path (Split-Path (Get-Command node).Source) LICENSE) packaging\node\LICENSE
 cargo install tauri-cli --version "^2" --locked
 cd src-tauri; cargo tauri build --config tauri.release.conf.json
 ```
 
-Build the installer on Windows: the NSIS bundle and the Windows `node.exe`
-come from there.
+Build the installer on Windows: the NSIS bundle comes from there.

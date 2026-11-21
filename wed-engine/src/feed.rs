@@ -1,14 +1,15 @@
-//! 1-minute data feeds (`feeds.py`): TradingView through the Node helper, and synthetic data for
-//! development and tests. Every feed returns *closed* M1 bars, oldest first.
+//! 1-minute data feeds (`feeds.py`): TradingView over its websocket ([`crate::tradingview`]), and
+//! synthetic data for development and tests. Every feed returns *closed* M1 bars, oldest first.
 //!
-//! The TradingView helper (`tradingview/feed.mjs`) is a long-running Node process spoken to in
-//! JSON lines: one request per line on stdin, one reply per line on stdout, logs on stderr. It
-//! exits when its stdin closes.
+//! TradingView answers three questions (`info`, `candles`, `quote`). Tests can put a stand-in
+//! process in its place ([`ProcessHelper`]): it answers the same questions in JSON lines, one
+//! request per line on stdin, one reply per line on stdout, logs on stderr, and exits when its
+//! stdin closes.
 
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
 
 use chrono::{DurationRound, NaiveTime, TimeDelta, Utc};
@@ -147,86 +148,6 @@ impl Feed {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Finding the helper
-
-static BUNDLE_DIR: RwLock<Option<PathBuf>> = RwLock::new(None);
-
-/// Where the installed app keeps the helper (`<resources>/tradingview`) and its node
-/// (`<resources>/node`), set by the desktop shell.
-pub fn set_bundle_dir(dir: PathBuf) {
-    if let Ok(mut d) = BUNDLE_DIR.write() {
-        *d = Some(dir);
-    }
-}
-
-fn node_name() -> &'static str {
-    if cfg!(windows) {
-        "node.exe"
-    } else {
-        "node"
-    }
-}
-
-/// The helper's folder and the node bundled with it, from the installed app's resources.
-fn bundled(dir: &Path) -> Option<(PathBuf, Option<PathBuf>)> {
-    let folder = dir.join("tradingview");
-    if !folder.join("feed.mjs").is_file() {
-        return None;
-    }
-    let node = dir.join("node").join(node_name());
-    Some((folder, node.is_file().then_some(node)))
-}
-
-/// `shutil.which("node")`: the first executable `node` on PATH.
-fn which_node() -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|d| d.join(node_name())).find(|p| is_executable(p))
-}
-
-fn is_executable(p: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        p.metadata().map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0).unwrap_or(false)
-    }
-    #[cfg(not(unix))]
-    {
-        p.is_file()
-    }
-}
-
-/// The command that starts the TradingView helper (node, feed.mjs), or why it can't run here
-/// (`tradingview_command`, same messages).
-///
-/// The helper's folder is `WEDNESDAY_TRADINGVIEW_DIR`, else the installed app's (see
-/// [`set_bundle_dir`]), else this checkout's `tradingview/`. Node is `WEDNESDAY_NODE`, else the
-/// one bundled with the app, else `node` on PATH.
-pub fn tradingview_command() -> Result<(PathBuf, PathBuf), String> {
-    let env_dir = std::env::var_os("WEDNESDAY_TRADINGVIEW_DIR").filter(|v| !v.is_empty()).map(PathBuf::from);
-    let bundle = BUNDLE_DIR.read().ok().and_then(|d| d.clone()).and_then(|d| bundled(&d));
-    let (folder, bundled_node) = match (env_dir, bundle) {
-        (Some(dir), _) => (dir, None),
-        (None, Some((dir, node))) => (dir, node),
-        (None, None) => (Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("tradingview"), None),
-    };
-    let script = folder.join("feed.mjs");
-    if !script.is_file() {
-        return Err("The TradingView helper is missing from this install. Reinstall Wednesday, or run it from source.".into());
-    }
-    let node = match std::env::var_os("WEDNESDAY_NODE").filter(|v| !v.is_empty()) {
-        Some(n) => Some(PathBuf::from(n)).filter(|p| p.is_file()),
-        None => bundled_node.or_else(which_node),
-    };
-    let Some(node) = node else {
-        return Err("Needs Node 20+ (nodejs.org), then: npm install --prefix tradingview".into());
-    };
-    if !folder.join("node_modules").join("@mathieuc").join("tradingview").is_dir() {
-        return Err("Install it with: npm install --prefix tradingview (or make install)".into());
-    }
-    Ok((node, script))
-}
-
-// ---------------------------------------------------------------------------------------------
 // The helper process
 
 /// A running helper: its stdin, and the replies its stdout reader hands over (None: it exited).
@@ -237,12 +158,12 @@ struct Running {
     stderr_task: Option<JoinHandle<()>>,
 }
 
-/// A long-running helper process answering JSON-line requests (`_NodeHelper`, see
-/// `tradingview/feed.mjs`).
+/// A stand-in for TradingView in tests: a long-running process answering the same JSON-line
+/// requests (`_ProcessHelper`), e.g. `node tests/golden/markets/fake_feed.mjs`.
 ///
 /// Started on the first call and again after it dies. Replies carry the request id, so a late
 /// reply to a request that already timed out is skipped instead of answering the next one.
-pub struct NodeHelper {
+pub struct ProcessHelper {
     node: PathBuf,
     script: PathBuf,
     proc: Option<Running>,
@@ -250,9 +171,10 @@ pub struct NodeHelper {
     stderr: Arc<Mutex<Vec<String>>>, // last lines, for the error when the helper stops
 }
 
-impl NodeHelper {
-    pub fn new(node: PathBuf, script: PathBuf) -> NodeHelper {
-        NodeHelper { node, script, proc: None, id: 0, stderr: Arc::new(Mutex::new(Vec::new())) }
+impl ProcessHelper {
+    /// `program script`, e.g. node and a fake helper script.
+    pub fn new(node: PathBuf, script: PathBuf) -> ProcessHelper {
+        ProcessHelper { node, script, proc: None, id: 0, stderr: Arc::new(Mutex::new(Vec::new())) }
     }
 
     fn start(&mut self) -> Result<(), FeedError> {
@@ -261,7 +183,7 @@ impl NodeHelper {
         #[cfg(windows)]
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console window from the desktop app
         let mut child = cmd.spawn().map_err(|e| {
-            FeedError::runtime(format!("The TradingView helper didn't start ({e}). Is Node 20+ installed?"))
+            FeedError::runtime(format!("The TradingView helper didn't start ({e})."))
         })?;
         let stdin = child.stdin.take().expect("piped stdin");
         let stdout = child.stdout.take().expect("piped stdout");
@@ -370,7 +292,7 @@ impl NodeHelper {
 
     fn why(&self) -> String {
         let kept = self.stderr.lock().map(|k| k.last().cloned()).unwrap_or(None);
-        kept.unwrap_or_else(|| "no output. Is Node 20+ installed?".to_string())
+        kept.unwrap_or_else(|| "no output".to_string())
     }
 
     /// Close stdin (the helper exits when it closes), wait up to 3 s, then kill it.
@@ -380,6 +302,37 @@ impl NodeHelper {
         drop(stdin);
         if tokio::time::timeout(StdDuration::from_secs(3), child.wait()).await.is_err() {
             let _ = child.kill().await;
+        }
+    }
+}
+
+/// Where a feed's answers come from: TradingView itself, or a stand-in process (tests).
+pub enum Helper {
+    Native(crate::tradingview::Connection),
+    Process(ProcessHelper),
+}
+
+impl Helper {
+    /// TradingView, or the stand-in `command` (program, script) when given.
+    pub fn new(command: Option<(PathBuf, PathBuf)>) -> Helper {
+        match command {
+            Some((program, script)) => Helper::Process(ProcessHelper::new(program, script)),
+            None => Helper::Native(crate::tradingview::Connection::new()),
+        }
+    }
+
+    /// Answer `op` (`info`, `candles`, `quote`) within `timeout` seconds.
+    pub async fn call(&mut self, op: &str, timeout: f64, args: Map<String, Value>) -> Result<Value, FeedError> {
+        match self {
+            Helper::Native(c) => c.call(op, timeout, args).await,
+            Helper::Process(p) => p.call(op, timeout, args).await,
+        }
+    }
+
+    pub async fn close(&mut self) {
+        match self {
+            Helper::Native(c) => c.close().await,
+            Helper::Process(p) => p.close().await,
         }
     }
 }
@@ -496,14 +449,14 @@ fn py_timestamp(t: Time) -> String {
     }
 }
 
-/// TradingView market data through the Node helper (`tradingview/`, unofficial library).
+/// TradingView market data over its websocket (unofficial protocol, see [`crate::tradingview`]).
 ///
 /// `FX:XAUUSD` is FXCM's spot gold; any TradingView symbol with its exchange prefix works
 /// (`OANDA:XAUUSD`, ...). Bar times are UTC.
 pub struct TradingViewFeed {
     pub symbol: String,
     command: Option<(PathBuf, PathBuf)>,
-    helper: Option<NodeHelper>,
+    helper: Option<Helper>,
     info: Option<Value>,
     last: Option<Tick>, // the latest quote, for `describe`
 }
@@ -513,18 +466,14 @@ impl TradingViewFeed {
         TradingViewFeed { symbol: symbol.to_string(), command: None, helper: None, info: None, last: None }
     }
 
-    /// A feed with its own helper command (node, script), instead of [`tradingview_command`].
+    /// A feed on a stand-in process (program, script) instead of TradingView (tests).
     pub fn with_command(symbol: &str, node: PathBuf, script: PathBuf) -> TradingViewFeed {
         TradingViewFeed { command: Some((node, script)), ..TradingViewFeed::new(symbol) }
     }
 
     pub async fn connect(&mut self) -> Result<(), FeedError> {
-        let (node, script) = match &self.command {
-            Some(c) => c.clone(),
-            None => tradingview_command().map_err(|why| FeedError::runtime(format!("TradingView source unavailable. {why}")))?,
-        };
         self.close().await;
-        let helper = self.helper.insert(NodeHelper::new(node, script));
+        let helper = self.helper.insert(Helper::new(self.command.clone()));
         let mut args = Map::new();
         args.insert("symbol".into(), self.symbol.clone().into());
         match helper.call("info", 30.0, args).await {

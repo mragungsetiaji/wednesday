@@ -1,4 +1,4 @@
-# Wednesday: common tasks on macOS and Linux. Needs Rust (cargo), Node 20+ and uv.
+# Wednesday: common tasks on macOS and Linux. Needs Rust (cargo), Node 20+ (to build the dashboard) and uv.
 # The server is Rust (wed-server); Python stays as the reference that writes tests/golden/ and as
 # `wednesday --serve` / `make scan` from source.
 # `make` lists the targets. Pass extra CLI flags with ARGS, e.g. make scan ARGS="--source synthetic".
@@ -33,12 +33,8 @@ setup: doctor .env install ui ## First run: create .env, install dependencies, b
 	cp .env.example .env
 	@echo "Created .env from .env.example. Edit it for Telegram or the data source; the default source is TradingView."
 
-install: $(WEB)/node_modules tradingview/node_modules ## Install Python, dashboard and TradingView helper dependencies
+install: $(WEB)/node_modules ## Install Python and dashboard dependencies
 	$(UV) sync
-
-tradingview/node_modules: tradingview/package.json tradingview/package-lock.json
-	cd tradingview && $(NPM) install
-	@touch $@
 
 $(WEB)/node_modules: $(WEB)/package.json $(WEB)/package-lock.json
 	cd $(WEB) && $(NPM) install

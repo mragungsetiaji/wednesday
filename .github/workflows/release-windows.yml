@@ -3,9 +3,8 @@
 # (Actions > Release Windows > Run workflow) for a test build kept as a workflow artifact.
 #
 # The shell (src-tauri) runs Wednesday's Rust server (wed-server) in its own process; there is no
-# Python in the installer. tauri.release.conf.json bundles the dashboard build (web/dist), the
-# TradingView helper (tradingview/, production dependencies only) and node.exe (packaging/node)
-# into the NSIS installer's resources.
+# Python or Node in the installer (the server talks to TradingView's websocket itself).
+# tauri.release.conf.json bundles the dashboard build (web/dist) into the NSIS installer's resources.
 #
 # After a tagged build, the bump-main job writes the tag's version into every file that carries
 # it on main (scripts/set_version.py).
@@ -45,32 +44,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            web/package-lock.json
-            tradingview/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: Build dashboard
         working-directory: web
         run: |
           npm ci
           npm run build
-
-      # The TradingView data source: its helper and the node.exe that runs it ship with the app.
-      - name: Bundle Node and the TradingView helper
-        shell: pwsh
-        run: |
-          npm ci --omit=dev --prefix tradingview
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $node = (Get-Command node).Source
-          New-Item -ItemType Directory -Force packaging\node | Out-Null
-          Copy-Item $node packaging\node\node.exe
-          $license = Join-Path (Split-Path $node) LICENSE
-          if (Test-Path $license) {
-            Copy-Item $license packaging\node\LICENSE
-          } else {
-            Invoke-WebRequest "https://raw.githubusercontent.com/nodejs/node/$(node -v)/LICENSE" -OutFile packaging\node\LICENSE
-          }
-          & packaging\node\node.exe -v
 
       - uses: dtolnay/rust-toolchain@stable
 

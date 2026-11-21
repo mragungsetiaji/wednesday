@@ -3,10 +3,6 @@
   "bundle": {
     "resources": {
       "../web/dist/": "web/",
-      "../tradingview/feed.mjs": "tradingview/feed.mjs",
-      "../tradingview/package.json": "tradingview/package.json",
-      "../tradingview/node_modules/": "tradingview/node_modules/",
-      "../packaging/node/": "node/",
       "../LICENSE": "LICENSE",
       "../DISCLAIMER.md": "DISCLAIMER.md",
       "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md"

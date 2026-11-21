@@ -2,7 +2,7 @@
 
 The scan, levels, alerts, bias and drawings follow the data source's symbol. A full-screen
 pane can show another symbol beside it (``FX:XAGUSD`` next to gold) through its own
-TradingView helper (see ``tradingview/feed.mjs``); nothing about it is scanned or stored.
+TradingView connection (``tradingview.py``); nothing about it is scanned or stored.
 Times are converted to the feed's clock so the panes line up.
 """
 
@@ -16,7 +16,8 @@ from collections.abc import Callable
 
 import pandas as pd
 
-from .feeds import TradingViewError, _NodeHelper, tradingview_command
+from .feeds import TradingViewError, _ProcessHelper
+from .tradingview import Connection
 from .quarters import to_utc, utc_to_feed
 from .timeframes import OHLCV_COLUMNS, Timeframe
 
@@ -42,21 +43,25 @@ def clean_symbol(symbol: str) -> str:
 
 
 class Markets:
-    """One TradingView helper for every pane's own symbol, started on first use."""
+    """One TradingView connection for every pane's own symbol, opened on first use. ``command``
+    puts a stand-in process in TradingView's place (tests): it returns (command, None) or
+    (None, why it can't run)."""
 
-    def __init__(self, command: Callable[[], tuple[list[str] | None, str | None]] = tradingview_command):
+    def __init__(self, command: Callable[[], tuple[list[str] | None, str | None]] | None = None):
         self._command = command
         self._lock = threading.Lock()
-        self._helper: _NodeHelper | None = None
+        self._helper: Connection | _ProcessHelper | None = None
         self._cache: dict[tuple, tuple[float, object]] = {}
 
     def _call(self, op: str, timeout: float, **args):
         with self._lock:
-            if self._helper is None:
+            if self._helper is None and self._command is None:
+                self._helper = Connection()
+            elif self._helper is None:
                 command, why = self._command()
                 if command is None:
                     raise MarketError(503, f"Other symbols come from TradingView. {why}")
-                self._helper = _NodeHelper(command)
+                self._helper = _ProcessHelper(command)
             try:
                 return self._helper.call(op, timeout, **args)
             except TradingViewError as exc:

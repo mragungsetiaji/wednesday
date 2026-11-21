@@ -1,5 +1,5 @@
-//! Other-symbol panes (`engine/markets.rs`, `GET /api/markets/candles` and `/tick`) against a fake
-//! helper: `tests/golden/markets/fake_feed.mjs`, the one Python's `tests/test_markets_parity.py`
+//! Other-symbol panes (`engine/markets.rs`, `GET /api/markets/candles` and `/tick`) against a
+//! stand-in for TradingView: `tests/golden/markets/fake_feed.mjs`, the one Python's `tests/test_markets_parity.py`
 //! runs. Every case in `tests/golden/markets/cases.json` must answer as Python did
 //! (`answers.json`). Skipped, with a message, when `node` isn't on PATH.
 
@@ -182,35 +182,7 @@ async fn helper_failures_and_their_statuses() {
     rt.engine().stop();
 }
 
-/// `Markets::new()` finds the helper as the feed does: `WEDNESDAY_TRADINGVIEW_DIR` and
-/// `WEDNESDAY_NODE` (the only test here that sets them).
-#[tokio::test(flavor = "multi_thread")]
-async fn the_default_helper_comes_from_the_environment() {
-    let Some(node) = node_or_skip("markets helper lookup test") else { return };
-    let dir = std::env::temp_dir().join(format!("wednesday-markets-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::copy(golden("fake_feed.mjs"), dir.join("feed.mjs")).unwrap();
-    let _env = crate::env_lock();
-    std::env::set_var("WEDNESDAY_TRADINGVIEW_DIR", &dir);
-    std::env::set_var("WEDNESDAY_NODE", &node);
-    let rt = runtime("UTC");
-
-    let m = Markets::new();
-    assert_eq!(get(&m, &rt, "tick", json!({"symbol": "FX:XAGUSD"})).await,
-               (503, json!({"detail": "Other symbols come from TradingView. Install it with: npm install --prefix \
-                                       tradingview (or make install)"})));
-    std::fs::create_dir_all(dir.join("node_modules").join("@mathieuc").join("tradingview")).unwrap();
-    let m = Markets::default();
-    assert_eq!(get(&m, &rt, "tick", json!({"symbol": "FX:XAGUSD"})).await,
-               (200, json!({"symbol": "FX:XAGUSD", "price": 31.987, "time": NOW + 5})));
-    m.close().await;
-    rt.engine().stop();
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-/// Real TradingView: `cargo test --test it engine_markets -- --ignored` (needs the network and
-/// `npm install --prefix tradingview`).
+/// Real TradingView: `cargo test --test it engine_markets -- --ignored` (needs the network).
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn live_silver_from_tradingview() {

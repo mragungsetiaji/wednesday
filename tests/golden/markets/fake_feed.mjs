@@ -1,5 +1,6 @@
-// A stand-in for tradingview/feed.mjs for the other-symbol panes (markets.py, server-rs
-// engine/markets.rs): the same JSON-line protocol, fixed answers per symbol, no network.
+// A stand-in for TradingView for the other-symbol panes (markets.py, wed-engine markets.rs):
+// the questions TradingView answers in production (info, candles, quote) in JSON lines, fixed
+// answers per symbol, no network.
 // Python's tests/test_markets_parity.py and Rust's tests/engine_markets.rs both run it.
 import { createInterface } from 'node:readline';
 

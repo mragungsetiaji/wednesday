@@ -11,9 +11,9 @@
 //! folder and restored on the next start. Closing the main window closes everything and stops
 //! the server with the process.
 //!
-//! The installer bundles the dashboard build (`web/`), the TradingView helper (`tradingview/`) and
-//! the node that runs it (`node/`) in the app's resources (`tauri.release.conf.json`); a
-//! development build uses this checkout's `web/dist` and `tradingview/`.
+//! The installer bundles the dashboard build (`web/`) in the app's resources
+//! (`tauri.release.conf.json`); a development build uses this checkout's `web/dist`. TradingView
+//! is reached over its websocket from the server itself: nothing else ships with the app.
 //!
 //! `--forget-secrets` removes the secrets Wednesday saved in the OS credential store and exits:
 //! the installer runs it for a fresh install.
@@ -393,9 +393,6 @@ pub fn run() {
             };
             let port = listener.local_addr().map(|a| a.port()).unwrap_or(8000);
             let resources = handle.path().resource_dir().ok();
-            if let Some(r) = resources.as_ref().filter(|r| r.join("tradingview").join("feed.mjs").is_file()) {
-                wednesday_rs::engine::feed::set_bundle_dir(r.clone());
-            }
             let home = wednesday_rs::config::home_dir();
             wednesday_rs::logfile::init(Some(&home.join("logs").join("screener.log")));
             let ui = ui_dir(resources.as_deref(), &home);

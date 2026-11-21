@@ -29,7 +29,7 @@ import pytest
 from wednesday.journal.imports import ReportError, parse_report
 
 GOLDEN = Path(__file__).with_name("golden") / "reports"
-RUST = Path(__file__).parents[1] / "wed-server" / "src" / "journal" / "report.rs"
+RUST = Path(__file__).parents[1] / "wed-journal" / "src" / "report.rs"
 UPDATE = os.environ.get("UPDATE_GOLDEN") == "1"
 
 

@@ -10,6 +10,7 @@ pub mod analysis;
 pub mod charts;
 pub mod feed;
 pub mod markets;
+pub mod tradingview;
 
 pub use wednesday_base::{Answer, Refusal};
 
