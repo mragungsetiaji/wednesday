@@ -55,7 +55,11 @@ program built with these crates, each under the MIT License or the Apache Licens
   and `sync_wrapper` (Apache-2.0); it reads the bot token from the macOS Keychain with
   `security-framework` and `core-foundation` (<https://github.com/kornelski/rust-security-framework>,
   <https://github.com/servo/core-foundation-rs>) and from Windows Credential Manager with
-  `windows-sys` (<https://github.com/microsoft/windows-rs>). The other crates it uses are
+  `windows-sys` (<https://github.com/microsoft/windows-rs>). It checks downloaded plugins
+  with `ring` (<https://github.com/briansmith/ring>; Apache-2.0 and ISC, with BoringSSL's
+  OpenSSL-style notices in its `LICENSE`) and unpacks them with `zip`
+  (<https://github.com/zip-rs/zip2>, MIT), `flate2` and `miniz_oxide` (MIT or Apache-2.0),
+  `crc32fast` and `arbitrary` (MIT or Apache-2.0). The other crates it uses are
   listed in `server-rs/Cargo.lock`.
 
 On Windows its windows are drawn by Microsoft Edge WebView2, which Windows provides.

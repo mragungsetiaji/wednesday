@@ -10,7 +10,6 @@ import asyncio
 import json
 import logging
 import os
-import sys
 import time
 from pathlib import Path
 
@@ -48,9 +47,7 @@ from .settings import SETTINGS_KEY, DataSettings, catalog, source_availability
 from .terms import Terms
 from .timeframes import TIMEFRAMES_BY_NAME, resample_ohlcv
 
-# The Windows desktop build (PyInstaller) unpacks the dashboard next to the code, under sys._MEIPASS.
-DEFAULT_UI_DIR = (Path(sys._MEIPASS) if getattr(sys, "frozen", False)
-                  else Path(__file__).resolve().parents[2]) / "web" / "dist"
+DEFAULT_UI_DIR = Path(__file__).resolve().parents[2] / "web" / "dist"
 
 
 def _unix(ts: pd.Timestamp) -> int:

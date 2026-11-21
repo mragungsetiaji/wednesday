@@ -21,3 +21,32 @@
   Pop $R1
   Pop $R0
 !macroend
+
+; A fresh start: Wednesday's data folder (%LOCALAPPDATA%\Wednesday: settings, database, journals,
+; logs) and the secrets it saved in Credential Manager go. `Wednesday.exe --forget-secrets` removes
+; the secrets (generic credentials `Wednesday`, `<name>@Wednesday`, and the old `Wednesday MT5`)
+; and exits without opening a window.
+!macro WED_FRESH_START
+  DetailPrint "Deleting Wednesday's data and saved secrets"
+  ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --forget-secrets'
+  RMDir /r "$LOCALAPPDATA\Wednesday"
+!macroend
+
+; Installer: `WednesdaySetup.exe /FRESH=1` (silent installs too) starts from scratch.
+!macro NSIS_HOOK_POSTINSTALL
+  Push $R0
+  ${GetOptions} $CMDLINE "/FRESH=" $R0
+  ${If} $R0 == "1"
+    !insertmacro WED_FRESH_START
+  ${EndIf}
+  Pop $R0
+!macroend
+
+; Uninstaller: "Delete the application data" also deletes Wednesday's data and secrets (not on
+; an update, which runs the old uninstaller with /UPDATE).
+!macro NSIS_HOOK_PREUNINSTALL
+  ${If} $DeleteAppDataCheckboxState = 1
+  ${AndIf} $UpdateMode <> 1
+    !insertmacro WED_FRESH_START
+  ${EndIf}
+!macroend

@@ -2,8 +2,8 @@
 
 Wednesday also ships as a Windows program: an installer that puts it in the Start
 menu and on the desktop, and opens the dashboard in its own window instead of a
-browser tab. It runs the same scan loop and dashboard as `wednesday --serve`;
-closing the window stops both.
+browser tab. It runs Wednesday's server (the scan loop and the dashboard) in its
+own process; closing the window stops both.
 
 ## Install
 
@@ -26,8 +26,11 @@ running, so only one Wednesday stays installed; that build's uninstaller keeps
 preferences (panel sizes, the chart's tools) start from the defaults once;
 settings, drawings and workspaces are in the database and carry over.
 
-To start from scratch, uninstall Wednesday, delete `%LOCALAPPDATA%\Wednesday`,
-and remove the `Wednesday` entries in Windows Credential Manager.
+To start from scratch, uninstall Wednesday and tick **Delete the application
+data**: that also deletes `%LOCALAPPDATA%\Wednesday` and the secrets saved in
+Windows Credential Manager. Or run the installer with `/FRESH=1`
+(`WednesdaySetup-<version>.exe /FRESH=1`), which does the same after installing.
+This can't be undone.
 
 The window is drawn by Microsoft Edge WebView2. Windows 11 has it; if a Windows 10
 PC lacks it, the installer downloads it.
@@ -42,7 +45,7 @@ preferences in `%LOCALAPPDATA%\app.wednesday.desktop`.
 | Path | What |
 | --- | --- |
 | `data\xau.db` | Settings saved from the dashboard and the M1 history |
-| `logs\screener.log` | The log, with every scan |
+| `logs\screener.log` | The server's log (starts over past 5 MB) |
 | `webview\` | The 0.3.0-and-earlier window's storage, no longer used |
 
 Everything is set in the dashboard under **Settings**; the app needs no `.env`.
@@ -62,8 +65,8 @@ visible. Named workspaces (see [Workspaces](dashboard.md#workspaces)) switch
 between saved window sets.
 
 The installer includes Node.js with the
-TradingView helper, so every source and feature works without installing Python
-or Node.
+TradingView helper, so everything works without installing Python, Rust or
+Node.
 
 ## Data source
 
@@ -80,43 +83,51 @@ The [journal](journal.md) still imports MT5's history report. Price history is
 what the TradingView feed fetches and the app stores while it runs; there is no
 import of M1 files.
 
-Only one copy runs at a time; starting a second one says it is already running.
+Only one copy runs at a time; starting a second one brings the first to the front.
 
 `WEDNESDAY_HOME` points the app at another settings folder (default
 `~/.wednesday` outside Windows).
 
 ## How it's built
 
-The app is a [Tauri v2](https://tauri.app) shell (#92, `src-tauri/`) around the
-Python server; it replaced the pywebview app in 0.3.1. The shell starts it as a sidecar (`wednesday-server`, same settings folder, lock and
-`.env`), waits for it to answer, and shows the dashboard in native windows. Pop-out
-charts are Tauri windows that can sit on any monitor. Where the windows were when
-the app closed is kept in the shell's own data folder (`windows.json`) and restored
-on the next start; a window left on an unplugged monitor comes back onto the
-first one. The server stops with the app, and by itself if the shell crashes.
+The app is a [Tauri v2](https://tauri.app) shell (#92, `src-tauri/`); it replaced
+the pywebview app in 0.3.1. Since #96 it runs Wednesday's Rust server (`server-rs/`) in
+its own process, with no Python: the scan engine (the TradingView connection, the
+minute scans, the live price), the alerts, every route the dashboard calls and the
+dashboard build, on `127.0.0.1` (port 8000 when free). It shows the dashboard in
+native windows. Pop-out charts are Tauri windows that can sit on any monitor. Where
+the windows were when the app closed is kept in the shell's own data folder
+(`windows.json`) and restored on the next start; a window left on an unplugged
+monitor comes back onto the first one. The server stops with the app.
 
-The windows don't talk to the Python server directly. The shell runs the Rust server
-(`server-rs/`, #96) on the dashboard's port, and the Python sidecar on another local
-port behind it: the Rust server answers the routes already ported to Rust and passes
-everything else through unchanged. The Rust server runs the scan engine (the TradingView
-connection, the minute scans, the live price) and the Python sidecar follows it, reading its bars
-instead of opening a second connection; Python keeps the alerts, plugins and the routes not yet
-ported. Set
-`WEDNESDAY_GATEWAY=0` to show the Python server directly, to rule the Rust one out.
+The installer's resources hold what the server needs besides itself
+(`tauri.release.conf.json`):
+
+| Path | What |
+| --- | --- |
+| `web\` | The dashboard build (`web/dist`) |
+| `tradingview\` | The TradingView helper (`feed.mjs`, its production `node_modules`) |
+| `node\` | `node.exe`, which runs the helper, and its license |
+| `LICENSE`, `DISCLAIMER.md`, `THIRD_PARTY_NOTICES.md` | The license and notices |
+
+`Wednesday.exe --forget-secrets` removes the secrets Wednesday saved in the
+credential store and exits without a window; the installer's fresh start runs it
+(`src-tauri/windows/hooks.nsh`).
 
 ```bash
-make tauri        # the shell, starting `uv run wednesday-server` from this checkout
+make tauri        # the app from this checkout (its web/dist and tradingview/)
 make test-tauri   # its Rust tests, and the Rust server's
 ```
 
-It needs Rust 1.77.2 or newer. `WEDNESDAY_HOME` and `XAU_SOURCE=synthetic` work as
-for the installed app. In a debug build, `WEDNESDAY_SELFTEST=1` makes the dashboard
+It needs Rust 1.77.2 or newer. `WEDNESDAY_HOME`, `XAU_SOURCE=synthetic` and
+`XAU_UI_DIR` work as for the installed app. In a debug build, `WEDNESDAY_SELFTEST=1` makes the dashboard
 call the shell's commands (open a chart window, read and arrange the windows) and
 print the result; `WEDNESDAY_SELFTEST=channel` checks that `BroadcastChannel`, which
 link groups and drawings use, reaches another window.
 
 The installer's hooks (`src-tauri/windows/hooks.nsh`) remove the earlier Inno
-Setup build before installing.
+Setup build before installing, and do the fresh start described under
+[Upgrading](#upgrading).
 
 ## Build and release
 
@@ -125,12 +136,10 @@ Setup build before installing.
 1. the dashboard (`npm ci && npm run build` in `web/`),
 2. the TradingView helper (`npm ci --omit=dev` in `tradingview/`) and `node.exe`
    with its license, copied into `packaging\node\`,
-3. the Python environment (`uv sync --frozen --extra desktop`),
-4. the server with PyInstaller (`packaging/wednesday.spec`,
-   output `dist\wednesday-server\`),
-5. the Tauri shell and its NSIS installer (`cargo tauri build --config
-   tauri.release.conf.json` in `src-tauri/`, which bundles the server folder),
-   copied to `dist\WednesdaySetup-<version>.exe`.
+3. the Tauri app, with the Rust server built in, and its NSIS installer
+   (`cargo tauri build --config tauri.release.conf.json` in `src-tauri/`, which
+   bundles the dashboard, the helper and node as resources), copied to
+   `dist\WednesdaySetup-<version>.exe`.
 
 To publish a release, tag main and push the tag; the version comes from the tag:
 
@@ -167,12 +176,9 @@ npm ci --omit=dev --prefix tradingview
 New-Item -ItemType Directory -Force packaging\node
 Copy-Item (Get-Command node).Source packaging\node\node.exe   # Node 22
 Copy-Item (Join-Path (Split-Path (Get-Command node).Source) LICENSE) packaging\node\LICENSE
-uv sync --frozen --extra desktop
-uv run --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 cargo install tauri-cli --version "^2" --locked
 cd src-tauri; cargo tauri build --config tauri.release.conf.json
 ```
 
-PyInstaller can't cross-compile: the Windows build has to run on Windows. The
-installed program is a few hundred MB, mostly pandas and numpy; the
-installer is compressed to a fraction of that.
+Build the installer on Windows: the NSIS bundle and the Windows `node.exe`
+come from there.

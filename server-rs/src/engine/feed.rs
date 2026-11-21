@@ -151,8 +151,8 @@ impl Feed {
 
 static BUNDLE_DIR: RwLock<Option<PathBuf>> = RwLock::new(None);
 
-/// Where the installed app keeps the sidecar's files (`<resources>/server`), set by the shell, so
-/// the helper and its node are found there.
+/// Where the installed app keeps the helper (`<resources>/tradingview`) and its node
+/// (`<resources>/node`), set by the desktop shell.
 pub fn set_bundle_dir(dir: PathBuf) {
     if let Ok(mut d) = BUNDLE_DIR.write() {
         *d = Some(dir);
@@ -167,17 +167,14 @@ fn node_name() -> &'static str {
     }
 }
 
-/// The helper's folder and the node bundled with it, from the installed app's sidecar folder.
-/// PyInstaller's onedir build puts its data under `_internal/` (6.x) or beside the exe (older).
+/// The helper's folder and the node bundled with it, from the installed app's resources.
 fn bundled(dir: &Path) -> Option<(PathBuf, Option<PathBuf>)> {
-    [dir.join("_internal"), dir.to_path_buf()].into_iter().find_map(|base| {
-        let folder = base.join("tradingview");
-        if !folder.join("feed.mjs").is_file() {
-            return None;
-        }
-        let node = base.join("node").join(node_name());
-        Some((folder, node.is_file().then_some(node)))
-    })
+    let folder = dir.join("tradingview");
+    if !folder.join("feed.mjs").is_file() {
+        return None;
+    }
+    let node = dir.join("node").join(node_name());
+    Some((folder, node.is_file().then_some(node)))
 }
 
 /// `shutil.which("node")`: the first executable `node` on PATH.

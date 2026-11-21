@@ -9,23 +9,28 @@ never commit real credentials.
 
 | Target | What it does |
 | --- | --- |
-| `make setup` | First run: check uv + Node, create `.env`, install everything, build the dashboard |
-| `make serve` | Scan loop + dashboard on `http://HOST:PORT` |
-| `make dev` | API on synthetic data (a random walk, for development) + Vite dev server with hot reload on http://localhost:5173 |
-| `make tauri` | The [desktop app](desktop.md)'s shell from this checkout (needs Rust) |
-| `make scan` | One scan in the console |
-| `make check` | Test the data feed connection |
+| `make setup` | First run: check cargo, uv + Node, create `.env`, install everything, build the dashboard |
+| `make serve` | The Rust server: scan engine + dashboard on `http://HOST:PORT`, data in this folder |
+| `make serve-py` | The Python server from source (`wednesday --serve`), the reference implementation |
+| `make dev` | The Rust server on synthetic data (a random walk, for development) + Vite dev server with hot reload on http://localhost:5173 |
+| `make tauri` | The [desktop app](desktop.md) from this checkout |
+| `make scan` | One scan in the console (Python) |
+| `make check` | Test the data feed connection (Python) |
 | `make test` / `make typecheck` | Python tests / dashboard type check |
 | `make telegram-chats` / `make telegram-test` | Find `TELEGRAM_CHAT_ID` / send a test message |
 | `make clean` | Remove build output and caches (keeps `data/` and `.env`) |
 
 Variables: `HOST`, `PORT`, and `ARGS` for extra CLI flags, e.g.
-`make serve PORT=9000 ARGS="--lookback 300"`. On Windows, run the `uv run
+`make serve-py PORT=9000 ARGS="--lookback 300"`. On Windows, run the `uv run
 wednesday ...` commands directly (see [deploy-windows.md](deploy-windows.md)).
+
+The Rust server (`make serve`, the desktop app) takes `--host`, `--port`, `--insecure`,
+`--home` (the data folder), `--db`, `--ui-dir` and `--source`; its scan settings come from
+`.env` and the dashboard (see [Development](development.md#the-rust-server-96)).
 
 ## Command line options
 
-`uv run wednesday --help` lists everything. The useful ones:
+These are Python's (`wednesday`, from source). `uv run wednesday --help` lists everything. The useful ones:
 
 | Option | Default | Meaning |
 | --- | --- | --- |

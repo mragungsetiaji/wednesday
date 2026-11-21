@@ -16,11 +16,10 @@ dependencies = [
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]>=3.1"]
-desktop = ["keyring>=25"]  # the OS credential store, for the desktop app's server
+desktop = ["keyring>=25"]  # the OS credential store, for the Telegram bot token
 
 [project.scripts]
 wednesday = "wednesday.cli:main"
-wednesday-server = "wednesday.desktop:run_sidecar"  # the Tauri shell's server (src-tauri)
 
 [dependency-groups]
 dev = [

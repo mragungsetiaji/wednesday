@@ -12,7 +12,6 @@ import os
 import queue
 import shutil
 import subprocess
-import sys
 import threading
 import time
 import urllib.error
@@ -72,22 +71,13 @@ class DataFeed(ABC):
 TRADINGVIEW_DIR = Path(__file__).resolve().parents[2] / "tradingview"  # the Node helper, beside src/
 
 
-def _bundled() -> tuple[Path, str | None]:
-    """The helper's folder and node.exe: the Windows app ships both (packaging/wednesday.spec)."""
-    base = getattr(sys, "_MEIPASS", None)
-    if getattr(sys, "frozen", False) and base:
-        node = Path(base) / "node" / ("node.exe" if sys.platform == "win32" else "node")
-        return Path(base) / "tradingview", str(node) if node.is_file() else None
-    return TRADINGVIEW_DIR, None
-
-
 def tradingview_command() -> tuple[list[str] | None, str | None]:
     """The command that starts the TradingView helper, or why it can't run here."""
-    folder, bundled_node = _bundled()
+    folder = TRADINGVIEW_DIR
     script = folder / "feed.mjs"
     if not script.is_file():
         return None, "The TradingView helper is missing from this install. Reinstall Wednesday, or run it from source."
-    node = bundled_node or shutil.which("node")
+    node = shutil.which("node")
     if node is None:
         return None, "Needs Node 20+ (nodejs.org), then: npm install --prefix tradingview"
     if not (folder / "node_modules" / "@mathieuc" / "tradingview").is_dir():

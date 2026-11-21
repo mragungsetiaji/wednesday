@@ -1,16 +1,17 @@
-//! Wednesday's server in Rust, in front of the Python one while the backend moves over (#96).
+//! Wednesday's server in Rust (#96): the scan engine, the API and the dashboard build.
 //!
-//! It listens on the dashboard's address, answers the routes ported to Rust so far ([`PORTED`])
-//! and passes every other request, unchanged, to the Python server behind it. The dashboard and
-//! the Tauri shell can't tell the difference, so routes move over one at a time and the app works
-//! at every step. When the last route is ported, the Python server goes (step 10).
+//! On its own ([`standalone`], what the desktop app and `wednesday-rs` run) it is the whole
+//! server: every route the dashboard calls, the built dashboard for the rest, FastAPI's
+//! `{"detail": "Not Found"}` for an unknown `/api` route. For development it can still sit in
+//! front of a Python server (`--backend`, [`app`]): the routes in [`PORTED`] are answered here and
+//! everything else goes to Python unchanged, to compare the two.
 //!
-//! What a ported route answers must match `tests/api_contract.json` (step 1). There is no login
-//! (the dashboard runs on the trader's machine); cross-site writes are refused as `same_site.py`
-//! refuses them, so another web page in the browser can't drive the dashboard.
+//! What a route answers must match `tests/api_contract.json`. There is no login (the dashboard
+//! runs on the trader's machine); cross-site writes are refused as `same_site.py` refuses them, so
+//! another web page in the browser can't drive the dashboard.
 //!
-//! Routes that keep their data in the database ([`store`]) are served here only when this server
-//! could open the same database as Python; otherwise they go to Python like the rest.
+//! In front of Python, routes that keep their data in the database ([`store`]) are served here
+//! only when this server could open the same database; otherwise they go to Python like the rest.
 
 pub mod alerts;
 pub mod bias;
@@ -19,13 +20,16 @@ pub mod config;
 pub mod drawings;
 pub mod engine;
 pub mod journal;
+pub mod logfile;
 pub mod notify;
+pub mod plugins;
 pub mod pyjson;
 pub mod scan;
 pub mod settings_routes;
 pub mod snapshots;
 pub mod store;
 pub mod terms;
+pub mod ui;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -75,6 +79,20 @@ pub const PORTED: &[&str] = &[
     "PATCH /api/journals/{journal_id}/entries/{entry_id}",
     "DELETE /api/journals/{journal_id}/entries/{entry_id}",
     "GET /api/journals/{journal_id}/trades.csv",
+    "GET /api/plugins",
+    "GET /api/licence",
+    "PUT /api/licence",
+    "DELETE /api/licence",
+];
+
+/// Routes for and to the plugins (plugins/). Not in `tests/api_contract.json`, which lists the
+/// Python server's routes: `/api/ee/<name>/...` is each plugin's own, and `/api/plugin-host/` is
+/// for the plugins' calls back with their token, never for the dashboard.
+pub const PLUGIN_ROUTES: &[&str] = &[
+    "ANY /api/ee/{short name}/{*path}",
+    "GET /api/plugin-host/settings/{key}",
+    "PUT /api/plugin-host/settings/{key}",
+    "DELETE /api/plugin-host/settings/{key}",
 ];
 
 /// The routes the scan engine answers when it runs here ([`app_with`]); the Python server follows
@@ -117,7 +135,10 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone)]
 struct App {
-    backend: SocketAddr,
+    /// The Python server behind this one (`--backend`, development); None when this one is the
+    /// whole server: the dashboard build is served from `ui` and unknown `/api` routes are 404.
+    backend: Option<SocketAddr>,
+    ui: Option<Arc<std::path::PathBuf>>,
     client: Client<HttpConnector, Body>,
     store: Option<Store>,
     journals: journal::service::Cache,
@@ -134,6 +155,17 @@ pub fn app(backend: SocketAddr, store: Option<Store>) -> Router {
 /// The server with the scan engine running here (`runtime`): the engine's routes are answered by
 /// it, and the Python server follows it (`WEDNESDAY_FOLLOW`).
 pub fn app_with(backend: SocketAddr, store: Option<Store>, runtime: Option<Arc<engine::Runtime>>) -> Router {
+    build(Some(backend), None, store, runtime)
+}
+
+/// The whole server, without Python: the engine's and the other ported routes, the dashboard
+/// build in `ui` for everything else, FastAPI's 404 for an unknown `/api` route.
+pub fn standalone(ui: std::path::PathBuf, store: Option<Store>, runtime: Arc<engine::Runtime>) -> Router {
+    build(None, Some(Arc::new(ui)), store, Some(runtime))
+}
+
+fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store: Option<Store>,
+         runtime: Option<Arc<engine::Runtime>>) -> Router {
     let mut connector = HttpConnector::new();
     connector.set_nodelay(true);
     let client = Client::builder(TokioExecutor::new()).build(connector);
@@ -200,9 +232,13 @@ pub fn app_with(backend: SocketAddr, store: Option<Store>, runtime: Option<Arc<e
         .route("/api/journals/{id}/trades/{trade}/images", axum::routing::post(journal_image_attach))
         .route("/api/journals/{id}/trades/{trade}/images/{sid}", axum::routing::delete(journal_image_detach))
         .route("/api/journals/{id}/entries/{entry}", axum::routing::patch(journal_entry_update).delete(journal_entry_delete))
+        .route("/api/plugins", get(plugins_list))
+        .route("/api/licence", get(licence_get).put(licence_put).delete(licence_delete))
+        .route("/api/ee/{name}/{*path}", axum::routing::any(ee_forward))
+        .route("/api/plugin-host/settings/{key}", get(plugin_host_settings).put(plugin_host_settings).delete(plugin_host_settings))
         .route_layer(axum::middleware::map_response(served_here))
         .fallback(forward)
-        .with_state(App { backend, client, store, journals: Default::default(), engine: runtime,
+        .with_state(App { backend, ui, client, store, journals: Default::default(), engine: runtime,
                           markets: Default::default() })
 }
 
@@ -234,6 +270,26 @@ pub async fn serve_with_engine(listener: tokio::net::TcpListener, backend: Socke
     axum::serve(listener, app_with(backend, store, Some(runtime))).await
 }
 
+/// Serve [`standalone`] on `listener` until the process ends.
+pub async fn serve_standalone(listener: tokio::net::TcpListener, ui: std::path::PathBuf, store: Option<Store>,
+                              runtime: Arc<engine::Runtime>) -> std::io::Result<()> {
+    // The plugins start once this listens: they call it back (plugins/).
+    let home = store.as_ref().map_or_else(config::home_dir, |s| s.home().to_path_buf());
+    let host = plugins::Host::new(plugins::Options::new(&home, listener.local_addr()?.port(), store.clone()));
+    let app = standalone(ui, store, runtime).layer(axum::Extension(host.clone()));
+    host.start();
+    let served = axum::serve(listener, app).await;
+    host.shutdown().await;
+    served
+}
+
+/// [`serve_standalone`] on a listener the caller already bound (the Tauri shell). Needs a Tokio runtime.
+pub async fn serve_std_standalone(listener: std::net::TcpListener, ui: std::path::PathBuf, store: Option<Store>,
+                                  runtime: Arc<engine::Runtime>) -> std::io::Result<()> {
+    listener.set_nonblocking(true)?;
+    serve_standalone(tokio::net::TcpListener::from_std(listener)?, ui, store, runtime).await
+}
+
 /// Serve on a listener the caller already bound (the Tauri shell binds the dashboard's port
 /// before the Python server is up, so nothing else takes it meanwhile). Needs a Tokio runtime.
 pub async fn serve_std(listener: std::net::TcpListener, backend: SocketAddr, store: Option<Store>) -> std::io::Result<()> {
@@ -244,9 +300,26 @@ pub async fn serve_std(listener: std::net::TcpListener, backend: SocketAddr, sto
 /// The scan engine with the settings and scan config the Python server in `home` would run:
 /// saved from the dashboard over the environment and `home/.env`.
 pub async fn start_engine(home: &std::path::Path, store: Option<Store>) -> Result<Arc<engine::Runtime>, String> {
+    start_engine_on(home, store, None).await
+}
+
+/// [`start_engine`] on `source` when given, over the saved settings (`wednesday --source`, as
+/// `settings.resolve` merges an explicit CLI value): `make dev` runs on synthetic data this way.
+pub async fn start_engine_on(home: &std::path::Path, store: Option<Store>, source: Option<&str>)
+                             -> Result<Arc<engine::Runtime>, String> {
     let env_file = home.join(".env");
     let env = |k: &str| config::env_setting(k, &env_file);
-    let settings = engine::resolve(store.as_ref(), &env).await;
+    let mut settings = engine::resolve(store.as_ref(), &env).await;
+    if let Some(source) = source {
+        if engine::source_info(source).is_none() {
+            return Err(format!("Unknown source {source}: use tradingview or synthetic"));
+        }
+        if source != settings.source {
+            // Don't carry one source's symbol, clock or price interval over to another.
+            (settings.symbol, settings.clock, settings.tick_seconds) = (None, None, None);
+            settings.source = source.to_string();
+        }
+    }
     let cfg = engine::scan_config(&env);
     let alerts = Arc::new(alerts::Alerts::load(store.clone(), home).await);
     let rt = engine::Runtime::start(settings, engine::Options { cfg, ..Default::default() }, store)?;
@@ -354,7 +427,13 @@ impl App {
 
     /// The store and a cleared request, or the answer to send instead (Python's, without a store).
     async fn admit(&self, req: Request) -> Result<(Store, Request), Response> {
-        let Some(store) = self.store.clone() else { return Err(forward(State(self.clone()), req).await) };
+        let Some(store) = self.store.clone() else {
+            if self.backend.is_none() {
+                return Err(detail(StatusCode::SERVICE_UNAVAILABLE,
+                                  "No database. Remove XAU_DB_URL=none (or fix it) in .env, then restart Wednesday."));
+            }
+            return Err(forward(State(self.clone()), req).await);
+        };
         match self.guard(req.method(), req.headers()) {
             Some(refused) => Err(refused),
             None => Ok((store, req)),
@@ -535,24 +614,9 @@ fn journal_answer(result: Result<Value, journal::service::Fail>) -> Response {
     }
 }
 
-/// The features the plugins provide, as Python reports them (a second journal needs one).
-async fn plugin_features(app: &App, headers: &HeaderMap) -> Result<Vec<String>, Response> {
-    let mut req = Request::new(Body::empty());
-    *req.uri_mut() = Uri::from_static("/api/plugins");
-    for name in [header::HOST, header::USER_AGENT] {
-        if let Some(v) = headers.get(&name) {
-            req.headers_mut().insert(name, v.clone());
-        }
-    }
-    let res = forward(State(app.clone()), req).await;
-    if !res.status().is_success() {
-        return Err(res);
-    }
-    let bytes = axum::body::to_bytes(res.into_body(), 4 * 1024 * 1024)
-        .await
-        .map_err(|_| detail(StatusCode::BAD_GATEWAY, "The screener isn't answering. Restart Wednesday if this stays."))?;
-    let v: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-    Ok(v["features"].as_array().map(|a| a.iter().filter_map(|f| f.as_str().map(String::from)).collect()).unwrap_or_default())
+/// The features the running plugins provide (a second journal needs one).
+fn plugin_features(req: &Request) -> Result<Vec<String>, Response> {
+    Ok(plugins::routes::features(plugin_host(req).as_ref()))
 }
 
 async fn journals_list(State(app): State<App>, req: Request) -> Response {
@@ -560,7 +624,7 @@ async fn journals_list(State(app): State<App>, req: Request) -> Response {
         Ok(ok) => ok,
         Err(res) => return res,
     };
-    let features = match plugin_features(&app, req.headers()).await {
+    let features = match plugin_features(&req) {
         Ok(f) => f,
         Err(res) => return res,
     };
@@ -572,7 +636,7 @@ async fn journal_create(State(app): State<App>, req: Request) -> Response {
         Ok(ok) => ok,
         Err(res) => return res,
     };
-    let features = match plugin_features(&app, req.headers()).await {
+    let features = match plugin_features(&req) {
         Ok(f) => f,
         Err(res) => return res,
     };
@@ -962,6 +1026,9 @@ async fn engine_settings(State(app): State<App>) -> Response {
 
 /// Tell the Python server, which follows this engine, to follow the new settings too.
 async fn python_follow(app: &App) {
+    if app.backend.is_none() {
+        return;
+    }
     let mut req = Request::new(Body::empty());
     *req.method_mut() = Method::POST;
     *req.uri_mut() = Uri::from_static("/api/settings/reconnect");
@@ -1199,6 +1266,55 @@ async fn engine_daily(State(app): State<App>, axum::extract::Query(q): axum::ext
     }
 }
 
+// ---- plugins (plugins/) ----
+
+/// The plugin host, when this server runs plugins ([`serve_standalone`] adds it to every request).
+fn plugin_host(req: &Request) -> Option<Arc<plugins::Host>> {
+    req.extensions().get::<Arc<plugins::Host>>().cloned()
+}
+
+async fn plugins_list(req: Request) -> Response {
+    plugins::routes::list(plugin_host(&req).as_ref())
+}
+
+async fn licence_get(req: Request) -> Response {
+    plugins::routes::licence_get(plugin_host(&req).as_ref()).await
+}
+
+async fn licence_put(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let host = plugin_host(&req);
+    match object_body(req).await {
+        Ok(body) => plugins::routes::licence_put(host.as_ref(), &body).await,
+        Err(res) => res,
+    }
+}
+
+async fn licence_delete(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    plugins::routes::licence_delete(plugin_host(&req).as_ref()).await
+}
+
+async fn ee_forward(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let host = plugin_host(&req);
+    plugins::routes::forward(host.as_ref(), req).await
+}
+
+async fn plugin_host_settings(State(app): State<App>, Path(key): Path<String>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let host = plugin_host(&req);
+    plugins::routes::settings(host.as_ref(), &key, req).await
+}
+
 async fn health() -> Json<serde_json::Value> {
     Json(json!({"ok": true, "version": VERSION}))
 }
@@ -1229,8 +1345,13 @@ fn strip_hop_by_hop(headers: &mut axum::http::HeaderMap) {
 /// Pass the request to the Python server and stream its answer back (the event stream included).
 /// The Host header is kept, so the login's same-origin check sees the address the page came from.
 async fn forward(State(backend): State<App>, mut req: Request) -> Response {
+    let Some(python) = backend.backend else {
+        // The whole server: the dashboard build, or FastAPI's 404 under /api.
+        let ui = backend.ui.as_deref().cloned().unwrap_or_default();
+        return ui::serve(&ui, req.method(), req.uri().path(), req.uri().query(), req.headers()).await;
+    };
     let path = req.uri().path_and_query().map(|p| p.as_str()).unwrap_or("/");
-    let uri: Uri = match format!("http://{}{}", backend.backend, path).parse() {
+    let uri: Uri = match format!("http://{}{}", python, path).parse() {
         Ok(u) => u,
         Err(_) => return (StatusCode::BAD_REQUEST, "bad request path").into_response(),
     };

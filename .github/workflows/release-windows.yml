@@ -2,9 +2,10 @@
 # Push a tag like v0.3.1 to publish it on a GitHub release; run it by hand
 # (Actions > Release Windows > Run workflow) for a test build kept as a workflow artifact.
 #
-# The shell (src-tauri) starts the Python server as a sidecar: PyInstaller builds it as
-# dist/wednesday-server/ (packaging/wednesday.spec), and
-# tauri.release.conf.json bundles that folder into the NSIS installer's resources.
+# The shell (src-tauri) runs Wednesday's Rust server (server-rs) in its own process; there is no
+# Python in the installer. tauri.release.conf.json bundles the dashboard build (web/dist), the
+# TradingView helper (tradingview/, production dependencies only) and node.exe (packaging/node)
+# into the NSIS installer's resources.
 #
 # After a tagged build, the bump-main job writes the tag's version into every file that carries
 # it on main (scripts/set_version.py).
@@ -54,7 +55,7 @@ jobs:
           npm ci
           npm run build
 
-      # The TradingView data source: its helper and the node.exe that runs it ship with the server.
+      # The TradingView data source: its helper and the node.exe that runs it ship with the app.
       - name: Bundle Node and the TradingView helper
         shell: pwsh
         run: |
@@ -70,14 +71,6 @@ jobs:
             Invoke-WebRequest "https://raw.githubusercontent.com/nodejs/node/$(node -v)/LICENSE" -OutFile packaging\node\LICENSE
           }
           & packaging\node\node.exe -v
-
-      - uses: astral-sh/setup-uv@v6
-
-      - name: Install Python dependencies
-        run: uv sync --frozen --no-dev --extra desktop
-
-      - name: Build the server (PyInstaller)
-        run: uv run --frozen --no-dev --with pyinstaller pyinstaller packaging/wednesday.spec --noconfirm
 
       - uses: dtolnay/rust-toolchain@stable
 

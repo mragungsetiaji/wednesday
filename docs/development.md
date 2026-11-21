@@ -5,28 +5,34 @@ Run from source (macOS, Linux or Windows):
 ```bash
 git clone https://github.com/mragungsetiaji/wednesday.git
 cd wednesday
-make setup       # checks uv + Node, creates .env, installs everything, builds the dashboard
-make serve       # dashboard on http://127.0.0.1:8000 (TradingView data)
-make tauri       # the desktop app from this checkout (needs Rust)
+make setup       # checks cargo, uv + Node, creates .env, installs everything, builds the dashboard
+make serve       # the Rust server: dashboard on http://127.0.0.1:8000 (TradingView data)
+make tauri       # the desktop app from this checkout
 make             # list every target
 ```
 
-Extra flags go through `ARGS`, e.g. `make serve PORT=9000 ARGS="--lookback 300"`.
-On Windows without make, run the `uv` commands directly: see
-[Windows and VPS](deploy-windows.md).
+The server is Rust (`server-rs/`). Python stays in the repository as the reference: it
+writes the golden files the Rust tests read (`make test`), and runs from source as
+`make serve-py` (`wednesday --serve`), `make scan` and `make check`. Extra flags go
+through `ARGS`: `make serve ARGS="--source synthetic"` for the Rust server,
+`make serve-py PORT=9000 ARGS="--lookback 300"` for Python's. On Windows without make,
+see [Windows and VPS](deploy-windows.md).
 
 ```bash
-make install     # Python deps (uv) + dashboard deps (npm)
-make test        # pytest
+make install     # Python deps (uv) + dashboard and TradingView helper deps (npm)
+make test        # pytest (and the golden files)
+make test-tauri  # the Rust tests: the shell and the server
 make typecheck   # TypeScript
-make dev         # API on synthetic data (random walk) + Vite hot reload on http://localhost:5173
+make dev         # the Rust server on synthetic data (random walk) + Vite hot reload on http://localhost:5173
 ```
 
-Needs [uv](https://docs.astral.sh/uv/) and Node 20+. Without make:
+Needs Rust 1.77.2 or newer ([rustup](https://rustup.rs)), [uv](https://docs.astral.sh/uv/)
+and Node 20+. Without make:
 
 ```bash
 uv sync && uv run pytest
-cd web && npm install && npm run dev
+cd server-rs && cargo run -- --source synthetic --home ..   # API on :8000
+cd web && npm install && npm run dev                         # Vite on :5173, /api proxied to :8000
 ```
 
 ## Project layout
@@ -54,8 +60,8 @@ src/wednesday/
   plugins.py      loads plugins (entry point group wednesday.plugins): routes, hooks, jobs
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)
-src-tauri/        the Tauri desktop shell (#92)
-server-rs/        the Rust server in front of the Python one (#96)
+src-tauri/        the Tauri desktop shell (#92), with the Rust server in its process
+server-rs/        the server: scan engine, API and dashboard build (#96)
 scripts/          Windows VPS: auto-restart wrapper + Task Scheduler installer
 docs/             these docs
 tests/
@@ -80,18 +86,25 @@ The scan's own output is kept the same way in `tests/golden/` (see
 
 ## The Rust server (#96)
 
-The backend moves to Rust a route at a time. `server-rs/` is a small
-[axum](https://github.com/tokio-rs/axum) server that sits on the dashboard's address,
-answers the routes listed in `PORTED` (`server-rs/src/lib.rs`) and passes every other
-request to the Python server, streaming the answer back. The Tauri shell runs it in
-front of the sidecar, so the app works the same at every step. Each answer carries
-`x-wednesday-server: rust` or `python`, to see which one served it.
+The backend moved to Rust a route at a time; `server-rs/` is now the server. It is an
+[axum](https://github.com/tokio-rs/axum) server that runs the scan engine, answers every route
+the dashboard calls and serves the dashboard build (`web/dist`, or `XAU_UI_DIR`; `ui.rs` does what
+Starlette's `StaticFiles(html=True)` did). An unknown `/api` route is FastAPI's 404,
+`{"detail": "Not Found"}`. The desktop app runs it in its own process; there is no Python in the
+installer.
 
-Ported so far: everything but the plugins. `/api/health`, workspaces, drawing templates, terms,
-the bias, chart snapshots and the journal (`PORTED`), and with the engine the scan, charts,
-analysis, other markets, drawings, alerts, the calendar and writing a journal entry
-(`ENGINE_ROUTES`). Python still hosts the plugins (`/api/plugins`, `/api/licence`, `/api/ee/...`),
-following the Rust engine; how plugins run without Python is decided before step 10.
+```bash
+cd server-rs && cargo run -- [--host 127.0.0.1] [--port 8000] [--home DIR] [--db URL] [--ui-dir DIR] [--source synthetic]
+```
+
+`--home` is the data folder (its `.env`, and `data/xau.db` by default; `make serve` and `make dev`
+use the checkout). Like `wednesday --serve`, it refuses a host that isn't loopback unless
+`--insecure`: the dashboard has no login. `XAU_HOST` and `XAU_PORT` work as for Python.
+
+For comparing the two, `--backend <port>` puts it back in front of a Python server
+(`make serve-rs`): it answers the routes in `PORTED` and `ENGINE_ROUTES` and passes every other
+request to Python, streaming the answer back. Each answer then carries
+`x-wednesday-server: rust` or `python`.
 
 - **The database.** `server-rs/src/store.rs` opens the same database as Python
   (`XAU_DB_URL` from the environment or the home folder's `.env`, else
@@ -117,7 +130,8 @@ following the Rust engine; how plugins run without Python is decided before step
   `tests/test_journal_golden.py`; the stats files match Python 3.11's `sum()`). Writing an entry
   (`POST .../entries`, with the engine) freezes the market of the moment (`journal/market.rs`:
   the last scan, the active bias, the price and the coming news; `tests/golden/market/`).
-  A second journal needs the `journal.multi` feature, which Rust asks Python's `/api/plugins` for.
+  A second journal needs the `journal.multi` feature, read from the plugin host's registry
+  (`server-rs/src/plugins/`, see `docs/plugins.md`).
 - **The engine** runs in Rust (`server-rs/src/engine/`): the feed (`feed.rs`: the TradingView
   helper, synthetic data), the M1 buffer stored in `m1_bars`, the scan after each minute close,
   the live price and the forming candle. It answers `/api/status`, `/api/scan`, `/api/tick`,
@@ -131,9 +145,8 @@ following the Rust engine; how plugins run without Python is decided before step
   TradingView, so its plugins see what Rust scanned. It sends no alerts itself. A settings
   change saved through Rust tells Python to follow (`POST /api/settings/reconnect`).
   From a checkout: `make serve-rs ARGS=--engine` (Rust on 8000), then
-  `WEDNESDAY_FOLLOW=http://127.0.0.1:8000 make serve PORT=8001`; `conformance.rs` checks the follower's
-  answers against Rust's. Without the gateway (`WEDNESDAY_GATEWAY=0`, `make dev`) Python runs
-  its own feed as before.
+  `WEDNESDAY_FOLLOW=http://127.0.0.1:8000 make serve-py PORT=8001`; `conformance.rs` checks the follower's
+  answers against Rust's. Python on its own (`make serve-py`) runs its own feed.
 - **The calendar** is ported in `server-rs/src/calendar/`: the settings, the weekly
   ForexFactory fetch (`Calendar`, at most hourly, retried ten minutes after a failure, the last
   good week kept in `calendar_cache`), the history (`calendar_events`), the past reactions on the
@@ -147,18 +160,18 @@ following the Rust engine; how plugins run without Python is decided before step
   into the binary; `TERMS_VERSION` must equal `terms.py`'s (a unit test checks). The bias is
   only ever what the trader sent; the Python follower reads it from the database.
 
-To port a route:
+To add or change a route:
 
-1. Add its handler to `app()` in `server-rs/src/lib.rs` and the route to `PORTED`.
+1. Add its handler in `server-rs/src/lib.rs` and the route to `PORTED` (or `ENGINE_ROUTES`).
 2. Its answer must have the shape `tests/api_contract.json` gives it; the Rust tests
-   check every ported GET route against that file. A route that scans must also
-   match `tests/golden/`.
+   check every GET route listed there. A route that scans must also match
+   `tests/golden/`. Python's server is the reference: change it the same way.
 3. Add its requests to `server-rs/tests/conformance.rs`, which sends each one to the
    real Python server and to Rust and compares the answers (status and JSON).
 
 ```bash
 make test-tauri                 # the shell's and the Rust server's tests
-make serve PORT=8001            # the Python server ...
+make serve-py PORT=8001         # the Python server ...
 make serve-rs PORT=8000         # ... and the Rust one in front, on http://127.0.0.1:8000
 ```
 
@@ -168,12 +181,9 @@ and what one writes the other reads. It runs on SQLite, and on PostgreSQL when
 databases (`postgresql://postgres@127.0.0.1:5432/postgres`); otherwise it says
 PostgreSQL was skipped.
 
-The scan is ported (`server-rs/src/scan/`: resampling, structure, the detectors,
-setups, session levels and quarters) and gives the same output as Python's on
-`tests/golden/`, but no route serves it yet: the scan routes need the engine's
-state (the live M1 buffer and the feed), which move with the engine.
-
-The Rust server only listens on `127.0.0.1`: the dashboard has no login.
+The scan exists twice (`server-rs/src/scan/` and `src/wednesday/`: resampling, structure,
+the detectors, setups, session levels and quarters) and both give the same output on
+`tests/golden/`. A change to one goes into the other.
 
 ## How a scan flows
 

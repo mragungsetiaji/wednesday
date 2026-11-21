@@ -57,7 +57,7 @@ and its stats count how often each one closed green or red, so you can check it 
    `OANDA:XAUUSD`, goes in **Settings > Data source**.
 4. Upgrading? Run the new installer: your data and settings stay.
 
-From source (macOS, Linux, Windows with uv and Node 20+):
+From source (macOS, Linux, Windows with Rust, uv and Node 20+):
 
 ```bash
 make setup   # installs everything and builds the dashboard

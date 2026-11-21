@@ -7,7 +7,6 @@ change to them asks again.
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,7 +18,7 @@ TERMS_VERSION = "2026-09-26"
 
 
 def _root() -> Path:
-    return Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[2]
 
 
 def disclaimer_text() -> str:

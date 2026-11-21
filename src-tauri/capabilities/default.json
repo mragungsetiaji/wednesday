@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The dashboard (served by the local Python sidecar on 127.0.0.1) may call the shell's commands.",
+  "description": "The dashboard (served by the app's own server on 127.0.0.1) may call the shell's commands.",
   "windows": [
     "main",
     "chart-*"

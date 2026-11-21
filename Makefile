@@ -1,4 +1,6 @@
-# Wednesday: common tasks on macOS and Linux. Needs uv and Node 20+.
+# Wednesday: common tasks on macOS and Linux. Needs Rust (cargo), Node 20+ and uv.
+# The server is Rust (server-rs); Python stays as the reference that writes tests/golden/ and as
+# `wednesday --serve` / `make scan` from source.
 # `make` lists the targets. Pass extra CLI flags with ARGS, e.g. make scan ARGS="--source synthetic".
 
 SHELL := /bin/bash
@@ -14,15 +16,16 @@ WEB  := web
 UI_BUILD   := $(WEB)/dist/index.html
 UI_SOURCES := $(shell find $(WEB)/src -type f 2>/dev/null) $(WEB)/index.html $(WEB)/vite.config.ts $(WEB)/package.json
 
-.PHONY: help doctor setup install ui serve dev dev-api dev-ui scan check test test-ui typecheck telegram-chats telegram-test clean release tauri test-tauri serve-rs
+.PHONY: help doctor setup install ui serve serve-py dev dev-api dev-ui scan check test test-ui typecheck telegram-chats telegram-test clean release tauri test-tauri serve-rs
 
 help: ## Show the targets
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*## / {printf "  %-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-doctor: ## Check that uv and Node are installed
+doctor: ## Check that cargo, uv and Node are installed
+	@command -v cargo >/dev/null || { echo "cargo not found. Install Rust: https://rustup.rs"; exit 1; }
 	@command -v $(UV) >/dev/null || { echo "uv not found. Install: curl -LsSf https://astral.sh/uv/install.sh | sh"; exit 1; }
 	@command -v node >/dev/null || { echo "Node not found. Install Node 20+ (macOS: brew install node)"; exit 1; }
-	@echo "uv $$($(UV) --version | cut -d' ' -f2), node $$(node --version)"
+	@echo "$$(cargo --version), uv $$($(UV) --version | cut -d' ' -f2), node $$(node --version)"
 
 setup: doctor .env install ui ## First run: create .env, install dependencies, build the dashboard
 
@@ -46,35 +49,38 @@ ui: $(UI_BUILD) ## Build the dashboard (only when its sources changed)
 $(UI_BUILD): $(WEB)/node_modules $(UI_SOURCES)
 	cd $(WEB) && $(NPM) run build
 
-serve: $(UI_BUILD) ## Scan loop + dashboard on http://HOST:PORT (source from Settings or .env)
+serve: $(UI_BUILD) ## The Rust server: scan engine + dashboard on http://HOST:PORT (data in this folder, source from Settings or .env)
+	cd server-rs && cargo run --release -- --host $(HOST) --port $(PORT) --home $(CURDIR) --ui-dir $(CURDIR)/$(WEB)/dist $(ARGS)
+
+serve-py: $(UI_BUILD) ## The Python server from source (wednesday --serve), the reference implementation
 	$(UV) run wednesday --serve --host $(HOST) --port $(PORT) $(ARGS)
 
-dev: $(WEB)/node_modules ## Synthetic-data API + Vite dev server with hot reload on http://localhost:5173
+dev: $(WEB)/node_modules ## Rust server on synthetic data + Vite dev server with hot reload on http://localhost:5173
 	$(MAKE) -j2 dev-api dev-ui
 
 dev-api:
-	$(UV) run wednesday --serve --source synthetic --port $(PORT) $(ARGS)
+	cd server-rs && cargo run -- --source synthetic --port $(PORT) --home $(CURDIR) $(ARGS)
 
 dev-ui:
 	cd $(WEB) && XAU_API=http://127.0.0.1:$(PORT) $(NPM) run dev
 
-tauri: $(UI_BUILD) ## The Tauri desktop shell (src-tauri, #92) with the Python server as its sidecar
+tauri: $(UI_BUILD) ## The Tauri desktop app (src-tauri), with the Rust server in its process
 	cd src-tauri && cargo run
 
-test-tauri: ## Run the Rust tests: the Tauri shell and the Rust server in front of Python (server-rs, #96)
+test-tauri: ## Run the Rust tests: the Tauri shell and the Rust server (server-rs), against tests/golden
 	cd src-tauri && cargo test
 	cd server-rs && cargo test
 
-serve-rs: ## The Rust server on PORT in front of a running Python one on PORT+1 (make serve PORT=8001 first; ARGS=--engine runs the engine)
+serve-rs: ## Compare: the Rust server on PORT in front of a running Python one on PORT+1 (make serve-py PORT=8001 first; ARGS=--engine runs the engine)
 	cd server-rs && cargo run -- --port $(PORT) --backend $$(( $(PORT) + 1 )) --home $(CURDIR) $(ARGS)
 
-scan: ## One scan in the console
+scan: ## One scan in the console (Python, from source)
 	$(UV) run wednesday --once $(ARGS)
 
-check: ## Test the data feed connection
+check: ## Test the data feed connection (Python, from source)
 	$(UV) run wednesday --check $(ARGS)
 
-test: ## Run the Python tests
+test: ## Run the Python tests (they also write and check tests/golden, which the Rust tests read)
 	$(UV) run pytest -q
 
 test-ui: $(WEB)/node_modules ## Run the dashboard unit tests (Node 22.18+)

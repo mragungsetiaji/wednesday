@@ -1,7 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// In dev, API calls go to the Python server (uv run wednesday --serve).
+// In dev, API calls go to the local server (make dev-api: the Rust server on synthetic data).
 export default defineConfig({
   plugins: [react()],
   server: {

@@ -24,6 +24,34 @@ pub const TELEGRAM_BOT_TOKEN: &str = "telegram_bot_token";
 /// The secrets set from Settings, with the environment variable each falls back to (`APP_SECRETS`).
 pub const APP_SECRETS: &[(&str, &str)] = &[(TELEGRAM_BOT_TOKEN, "TELEGRAM_BOT_TOKEN")];
 
+/// Services of older versions, removed by [`forget_all`]: the old MT5 password.
+pub const OLD_SERVICES: &[&str] = &["Wednesday MT5"];
+/// Secrets of removed features (the LLM news brief), still cleared by [`forget_all`].
+pub const OLD_SECRETS: &[&str] = &["anthropic_api_key", "openai_api_key"];
+
+/// Remove every secret Wednesday saved in the OS credential store: the installer's fresh install
+/// (`Wednesday.exe --forget-secrets`, `secret_store.forget_all`). Known names go first; on Windows,
+/// Credential Manager is also searched for any other entry of these services (plugin secrets, the
+/// old MT5 password). How many went.
+pub fn forget_all() -> usize {
+    let gone = forget_known(&OsKeyring);
+    #[cfg(windows)]
+    let gone = {
+        let services: Vec<&str> = std::iter::once(SERVICE).chain(OLD_SERVICES.iter().copied()).collect();
+        gone + winvault::forget_services(&services)
+    };
+    gone
+}
+
+/// The app's known secrets, removed from `keyring`; how many were there.
+pub fn forget_known(keyring: &dyn Keyring) -> usize {
+    let names = APP_SECRETS.iter().map(|(n, _)| *n).chain(OLD_SECRETS.iter().copied());
+    names
+        .filter(|name| matches!(keyring.get(SERVICE, name), Ok(Some(_))))
+        .filter(|name| keyring.delete(SERVICE, name).is_ok())
+        .count()
+}
+
 /// A credential store. `Err` is "no usable store" (or a broken one), treated as nothing saved.
 pub trait Keyring: Send + Sync {
     fn get(&self, service: &str, account: &str) -> Result<Option<String>, String>;
@@ -300,6 +328,33 @@ mod winvault {
         Ok(())
     }
 
+    /// Delete the generic credentials named `<service>` or `<account>@<service>` (keyring's
+    /// naming) for any of `services`; how many went (`_forget_windows_credentials`).
+    pub fn forget_services(services: &[&str]) -> usize {
+        use windows_sys::Win32::Security::Credentials::CredEnumerateW;
+        let mut count: u32 = 0;
+        let mut list: *mut *mut CREDENTIALW = std::ptr::null_mut();
+        let mut targets = Vec::new();
+        unsafe {
+            // No filter: Windows only takes a wildcard at the end of one, so match here.
+            if CredEnumerateW(std::ptr::null(), 0, &mut count, &mut list) == 0 {
+                return 0; // nothing saved at all
+            }
+            for i in 0..count as usize {
+                let c = &**list.add(i);
+                if c.Type != CRED_TYPE_GENERIC {
+                    continue;
+                }
+                let target = from_wide(c.TargetName);
+                if services.iter().any(|s| target == *s || target.ends_with(&format!("@{s}"))) {
+                    targets.push(target);
+                }
+            }
+            CredFree(list as *const _);
+        }
+        targets.iter().filter(|t| delete(t).is_ok()).count()
+    }
+
     pub fn delete(target: &str) -> Result<(), String> {
         let name = wide(target);
         unsafe {
@@ -365,6 +420,18 @@ mod tests {
         assert!(s.update_secrets(&body(serde_json::json!({"forget_telegram_bot_token": true})), &[TELEGRAM_BOT_TOKEN]));
         assert_eq!(s.get_secret(TELEGRAM_BOT_TOKEN), (Some("from-env".into()), Some("env")));
         assert!(kr.items.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn forget_known_clears_the_app_and_old_secrets() {
+        let kr = FakeKeyring::default();
+        for name in ["telegram_bot_token", "openai_api_key"] {
+            kr.set(SERVICE, name, "x").unwrap();
+        }
+        kr.set("Other", "telegram_bot_token", "keep").unwrap();
+        assert_eq!(forget_known(&kr), 2);
+        assert_eq!(kr.items.lock().unwrap().len(), 1); // another service's entry stays
+        assert_eq!(forget_known(&kr), 0);
     }
 
     #[test]

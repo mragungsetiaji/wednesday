@@ -1,11 +1,11 @@
 # Dashboard
 
 ```bash
-make serve          # or: uv run wednesday --serve
+make serve          # the Rust server; or the Python one: make serve-py
 ```
 
 Opens on http://127.0.0.1:8000. It refreshes every few seconds; the server
-rescans once a minute. API docs live at `/api/docs`.
+rescans once a minute. With the Python server (`make serve-py`), API docs live at `/api/docs`.
 
 ![Dashboard: 30M chart with the top bar, EMA 20 and 50, a fib retracement and an XABCD pattern, the drawing tools, the rail and the dock](images/dashboard.png)
 
@@ -570,9 +570,9 @@ another machine, use an SSH tunnel or a VPN; see
 ## UI development
 
 ```bash
-make dev    # API on :8000 + Vite with hot reload on http://localhost:5173
+make dev    # the Rust server on synthetic data on :8000 + Vite with hot reload on http://localhost:5173
 ```
 
 The UI is React 19 + TypeScript + Vite with
 [lightweight-charts](https://github.com/tradingview/lightweight-charts) in `web/`.
-`make ui` rebuilds `web/dist`, which the Python server serves.
+`make ui` rebuilds `web/dist`, which the server serves.

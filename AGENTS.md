@@ -1,7 +1,8 @@
 # AGENTS.md
 
-Wednesday is a Smart Money Concepts screener for XAUUSD (gold): a Python scan loop
-(FastAPI, SQLAlchemy) and a React + Vite + TypeScript dashboard in `web/`. A single
+Wednesday is a Smart Money Concepts screener for XAUUSD (gold): a Rust server with the
+scan engine (`server-rs/`, axum), a Python reference implementation of it (`src/wednesday/`,
+FastAPI, SQLAlchemy) and a React + Vite + TypeScript dashboard in `web/`. A single
 discretionary trader runs it, usually as the Windows desktop app, and acts on
 its levels by hand. It suggests; it never places trades.
 
@@ -12,10 +13,12 @@ make install     # uv sync, plus npm install in web/
 make test        # uv run pytest -q
 make typecheck   # tsc -b in web/
 make test-ui     # node --test on web/src/*.test.ts (Node 22.18+)
-make dev         # synthetic API + Vite hot reload on http://localhost:5173 (no market data needed)
-make scan ARGS="--source synthetic"   # one scan in the console
-make tauri       # the Tauri desktop shell (src-tauri) with the server as a sidecar
-make test-tauri  # its Rust tests (cargo test)
+make dev         # Rust server on synthetic data + Vite hot reload on http://localhost:5173 (no market data needed)
+make serve       # the Rust server and the built dashboard on http://127.0.0.1:8000
+make serve-py    # the Python server from source (wednesday --serve), the reference
+make scan ARGS="--source synthetic"   # one scan in the console (Python)
+make tauri       # the Tauri desktop app (src-tauri), the Rust server in its process
+make test-tauri  # the Rust tests (cargo test in src-tauri and server-rs)
 make release v0.3.2   # tag main and push: CI builds and publishes the Windows installer
 ```
 
@@ -39,22 +42,25 @@ the dashboard, its screenshot reference if the layout changed.
 `src/xau_screener/` holds only stale `__pycache__` from the project's old name; the
 package is `src/wednesday/`.
 
-The desktop app is moving to Tauri v2 (#92): `src-tauri/` is the shell, which starts
-the Python server as a sidecar (`wednesday-server`, `run_sidecar` in `desktop.py`) and
-exposes the commands `web/src/desktop.ts` calls. Its commands must be listed in
-`src-tauri/build.rs` and granted in `src-tauri/capabilities/default.json`, since the
-page comes from `http://127.0.0.1:<port>`. Run `make test-tauri` after changes there.
+The desktop app is a Tauri v2 shell (`src-tauri/`, #92). It runs the Rust server in its
+own process (no Python in the installer) and exposes the commands `web/src/desktop.ts`
+calls. Its commands must be listed in `src-tauri/build.rs` and granted in
+`src-tauri/capabilities/default.json`, since the page comes from `http://127.0.0.1:<port>`.
+The installer bundles the dashboard build, the TradingView helper and node as resources
+(`tauri.release.conf.json`); `Wednesday.exe --forget-secrets` is the installer's fresh start.
+Run `make test-tauri` after changes there.
 
-The backend is moving to Rust route by route (#96). `server-rs/` is the Rust server: the
-shell runs it on the dashboard's port, it answers the routes in `PORTED` and passes the rest
-to the Python sidecar on another local port (`WEDNESDAY_GATEWAY=0` turns it off). The Rust server also runs the scan engine
-(`server-rs/src/engine/`, the TradingView feed); the Python server follows it (`FollowFeed`,
-`WEDNESDAY_FOLLOW`) for the alerts, plugins and routes still in Python. A ported
-route must answer as `tests/api_contract.json` says and match `tests/golden/` where it
-scans, and refuses cross-site writes as `same_site.py` does. The scan itself
-(resampling, structure, detectors, setups, sessions, quarters) exists twice for now,
-`src/wednesday/` and `server-rs/src/scan/`: a change to one must go into the other, and
-both `make test` and `make test-tauri` check them against the same `tests/golden/`.
+The server is Rust (`server-rs/`, #96): the scan engine (`server-rs/src/engine/`, the
+TradingView feed), the alerts, every dashboard route and the dashboard build (`ui.rs`).
+Python stays in the repository as the reference: it writes `tests/golden/`, defines
+`tests/api_contract.json`, and runs from source as `wednesday --serve` (`make serve-py`).
+`wednesday-rs --backend <port>` (`make serve-rs`) still puts Rust in front of a Python server
+to compare them, with Python following the Rust engine (`FollowFeed`, `WEDNESDAY_FOLLOW`). A
+route must answer as `tests/api_contract.json` says and match `tests/golden/` where it scans,
+and refuses cross-site writes as `same_site.py` does. The scan itself (resampling, structure,
+detectors, setups, sessions, quarters) exists twice, `src/wednesday/` and
+`server-rs/src/scan/`: a change to one must go into the other, and both `make test` and
+`make test-tauri` check them against the same `tests/golden/`.
 
 ## Rules that matter here
 
@@ -81,7 +87,7 @@ both `make test` and `make test-tauri` check them against the same `tests/golden
   carries both (the charts set `attributionLogo: false`), so keep it visible,
   full screen included.
 - **There is no login; the dashboard stays local.** Keep the default host
-  `127.0.0.1`; a non-loopback host is refused unless `--insecure`. Cross-site
+  `127.0.0.1`; a non-loopback host is refused unless `--insecure` (both servers). Cross-site
   writes to `/api` are refused (`same_site.py`, and `cross_site` in `server-rs`), so
   another web page can't drive the dashboard. Don't add endpoints that expose
   secrets or files outside `data/`.

@@ -1,23 +1,28 @@
-//! Wednesday's desktop shell (phase 2 of the Tauri migration, #92).
+//! Wednesday's desktop shell (Tauri, #92).
 //!
-//! The shell starts the Python server as a sidecar (`wednesday-server`), waits for it to
-//! answer, and shows the dashboard it serves in native windows: the main one, and a window per
-//! popped-out chart, so each can sit on its own monitor. The page calls the shell through four
-//! commands (see `web/src/desktop.ts`): open a chart
-//! window, report and arrange the windows (workspaces), and save a chart snapshot.
+//! The shell runs Wednesday's server (`server-rs`, #96) in this process: the scan engine with the
+//! TradingView feed, the API and the dashboard build, on 127.0.0.1 (port 8000 when free). It shows
+//! the dashboard in native windows: the main one, and a window per popped-out chart, so each can
+//! sit on its own monitor. The page calls the shell through four commands (see
+//! `web/src/desktop.ts`): open a chart window, report and arrange the windows (workspaces), and
+//! save a chart snapshot.
 //!
 //! Where the windows were when the app last closed is kept in `windows.json` in the app's data
 //! folder and restored on the next start. Closing the main window closes everything and stops
-//! the server; the server also stops by itself if the shell dies (`--parent-pid`).
+//! the server with the process.
 //!
-//! The windows show the Rust server (`server-rs`, #96) on the dashboard's port. It answers the
-//! routes ported to Rust and passes the rest to the Python server on another local port.
+//! The installer bundles the dashboard build (`web/`), the TradingView helper (`tradingview/`) and
+//! the node that runs it (`node/`) in the app's resources (`tauri.release.conf.json`); a
+//! development build uses this checkout's `web/dist` and `tradingview/`.
+//!
+//! `--forget-secrets` removes the secrets Wednesday saved in the OS credential store and exits:
+//! the installer runs it for a fresh install.
 
 mod screens;
-mod server;
 
 use std::fs;
-use std::path::PathBuf;
+use std::net::TcpListener;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
@@ -53,7 +58,6 @@ pub struct Geometry {
 #[derive(Default)]
 struct Shell {
     base: Mutex<Option<String>>, // http://127.0.0.1:<port>, once the server answers
-    server: Mutex<Option<server::Server>>,
     next_chart: AtomicU32,
 }
 
@@ -317,6 +321,32 @@ fn show_failure(app: &AppHandle, message: &str) {
     }
 }
 
+/// The dashboard's address: `preferred` when it's free (the layout is kept per address), else any
+/// free local port.
+fn bind_front(preferred: u16) -> std::io::Result<TcpListener> {
+    TcpListener::bind(("127.0.0.1", preferred)).or_else(|_| TcpListener::bind(("127.0.0.1", 0)))
+}
+
+/// The dashboard build: `XAU_UI_DIR`, else the one the installer bundles (`<resources>/web`), else
+/// this checkout's `web/dist` (development).
+fn ui_dir(resources: Option<&Path>, home: &Path) -> PathBuf {
+    let set = wednesday_rs::config::env_setting("XAU_UI_DIR", &home.join(".env")).is_some();
+    match resources.map(|r| r.join("web")).filter(|w| !set && w.join("index.html").is_file()) {
+        Some(bundled) => bundled,
+        None => wednesday_rs::ui::ui_dir(home),
+    }
+}
+
+/// `--forget-secrets` (the installer's fresh install): remove the saved secrets; true when given.
+pub fn forget_secrets(args: &[String]) -> bool {
+    if !args.iter().any(|a| a == "--forget-secrets") {
+        return false;
+    }
+    let gone = wednesday_rs::alerts::secrets::forget_all();
+    println!("removed {gone} saved secret(s)");
+    true
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         // A second copy would scan twice into the same database: bring the first one forward instead.
@@ -353,67 +383,49 @@ pub fn run() {
                 _ => {}
             });
 
-            // The dashboard's address: the Rust server there answers what's ported and passes the
-            // rest to the Python server on a port of its own (#96). Without it, Python's is the address.
-            let front = if server::gateway_enabled() {
-                match server::bind_front(8000).and_then(|l| l.local_addr().map(|a| (l, a.port()))) {
-                    Ok(f) => Some(f),
-                    Err(e) => {
-                        show_failure(&handle, &format!("Couldn't open a local port for the dashboard ({e})."));
-                        return Ok(());
-                    }
-                }
-            } else {
-                None
-            };
-            let port = match &front {
-                Some(_) => server::free_port().unwrap_or(8001),
-                None => server::pick_port(8000),
-            };
-            // The Rust server runs the scan engine (the TradingView feed) and Python follows it, so
-            // Rust starts first: Python waits for it.
-            let resources = handle.path().resource_dir().ok();
-            let follow = front.as_ref().map(|(_, p)| format!("http://127.0.0.1:{p}"));
-            let shown = match front {
-                Some((listener, front_port)) => {
-                    if let Some(r) = &resources {
-                        wednesday_rs::engine::feed::set_bundle_dir(r.join("server"));
-                    }
-                    let backend = std::net::SocketAddr::from(([127, 0, 0, 1], port));
-                    tauri::async_runtime::spawn(async move {
-                        // The same database as the Python server (same home folder and .env);
-                        // without it, Python serves the routes that need it.
-                        let home = wednesday_rs::config::home_dir();
-                        let store = wednesday_rs::open_store(&home).await;
-                        let served = match wednesday_rs::start_engine(&home, store.clone()).await {
-                            Ok(rt) => wednesday_rs::serve_std_with_engine(listener, backend, store, rt).await,
-                            Err(e) => {
-                                log::error!("the scan engine didn't start ({e}); the Python server runs it");
-                                wednesday_rs::serve_std(listener, backend, store).await
-                            }
-                        };
-                        if let Err(e) = served {
-                            log::error!("the Rust server stopped: {e}");
-                        }
-                    });
-                    front_port
-                }
-                None => port,
-            };
-            match server::Server::start(port, resources, follow) {
-                Ok(s) => *handle.state::<Shell>().server.lock().unwrap() = Some(s),
+            // The dashboard's address, bound now so it stays ours while the engine starts.
+            let listener = match bind_front(8000) {
+                Ok(l) => l,
                 Err(e) => {
-                    show_failure(&handle, &e);
+                    show_failure(&handle, &format!("Couldn't open a local port for the dashboard ({e})."));
                     return Ok(());
                 }
+            };
+            let port = listener.local_addr().map(|a| a.port()).unwrap_or(8000);
+            let resources = handle.path().resource_dir().ok();
+            if let Some(r) = resources.as_ref().filter(|r| r.join("tradingview").join("feed.mjs").is_file()) {
+                wednesday_rs::engine::feed::set_bundle_dir(r.clone());
             }
-            std::thread::spawn(move || {
-                let shell = handle.state::<Shell>();
-                if let Err(e) = server::wait_ready(port, &shell.server) {
-                    show_failure(&handle, &e);
+            let home = wednesday_rs::config::home_dir();
+            wednesday_rs::logfile::init(Some(&home.join("logs").join("screener.log")));
+            let ui = ui_dir(resources.as_deref(), &home);
+            let (ready, started) = std::sync::mpsc::channel::<Result<(), String>>();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = fs::create_dir_all(&home) {
+                    let _ = ready.send(Err(format!("Couldn't create the data folder {} ({e}).", home.display())));
                     return;
                 }
-                let base = format!("http://127.0.0.1:{shown}");
+                let store = wednesday_rs::open_store(&home).await;
+                let rt = match wednesday_rs::start_engine(&home, store.clone()).await {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        let _ = ready.send(Err(format!("The screener couldn't start:\n\n{e}")));
+                        return;
+                    }
+                };
+                let _ = ready.send(Ok(()));
+                if let Err(e) = wednesday_rs::serve_std_standalone(listener, ui, store, rt).await {
+                    log::error!("the server stopped: {e}");
+                }
+            });
+            std::thread::spawn(move || {
+                let shell = handle.state::<Shell>();
+                match started.recv() {
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => return show_failure(&handle, &e),
+                    Err(_) => return show_failure(&handle, "The screener stopped while starting. Restart Wednesday."),
+                }
+                let base = format!("http://127.0.0.1:{port}");
                 *shell.base.lock().unwrap() = Some(base.clone());
                 if let (Some(main), Ok(url)) = (handle.get_webview_window(MAIN), tauri::Url::parse(&base)) {
                     let _ = main.navigate(url);
@@ -436,11 +448,6 @@ pub fn run() {
     app.run(|app, event| {
         if let RunEvent::ExitRequested { .. } = event {
             save_session(app); // quitting (Cmd+Q) skips the main window's CloseRequested
-        }
-        if let RunEvent::Exit = event {
-            if let Some(mut s) = app.state::<Shell>().server.lock().unwrap().take() {
-                s.stop();
-            }
         }
     });
 }

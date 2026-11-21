@@ -99,7 +99,7 @@ async fn a_ported_route_is_answered_in_rust() {
 #[tokio::test]
 async fn the_rest_reaches_python_unchanged() {
     let addr = front(listen(python()).await).await;
-    let req = axum::http::Request::post(format!("http://{addr}/api/licence?x=1&y=two"))
+    let req = axum::http::Request::post(format!("http://{addr}/api/not-ported?x=1&y=two"))
         .header("cookie", "wed_session=abc")
         .header("connection", "keep-alive, x-hop")
         .header("x-hop", "1")
@@ -109,7 +109,7 @@ async fn the_rest_reaches_python_unchanged() {
     assert_eq!(res.status(), 201);
     assert_eq!(res.headers()["set-cookie"], "wed=1; HttpOnly");
     let got: serde_json::Value = serde_json::from_str(&text(res).await).unwrap();
-    assert_eq!(got["line"], "POST /api/licence?x=1&y=two");
+    assert_eq!(got["line"], "POST /api/not-ported?x=1&y=two");
     assert_eq!(got["host"], addr.to_string(), "the page's address, for the login's same-origin check");
     assert_eq!(got["cookie"], "wed_session=abc");
     assert_eq!(got["hop"], false, "a header the Connection header names stays with this hop");

@@ -25,8 +25,14 @@ log = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite", "postgres"] }
-tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = "0.1"
+ring = "0.17"
+base64 = "0.22"
+# Downloaded plugins (plugins/install.rs): Ed25519 and SHA-256 from ring (already here for rustls),
+# zip archives read with flate2's pure-Rust backend.
+zip = { version = "4.2.0", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
 # The OS credential store, where Python's keyring keeps the Telegram bot token (alerts/secrets.rs).
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -37,5 +43,5 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 
 [dev-dependencies]
 flate2 = "1"
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
 tokio-stream = "0.1"
