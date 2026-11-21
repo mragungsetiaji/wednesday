@@ -7,7 +7,7 @@ resolver = "2"
 members = ["wed-alerts", "wed-base", "wed-calendar", "wed-drawings", "wed-engine", "wed-journal", "wed-plugins", "wed-scan", "wed-server", "src-tauri", "wed-store"]
 
 [workspace.package]
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.77.2"
 license-file = "LICENSE"
