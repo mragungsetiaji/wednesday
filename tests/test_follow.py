@@ -93,3 +93,35 @@ def test_following_rust_sends_no_alerts_and_tells_plugins_what_rust_sent(rust, m
     runtime._followed_alerts(runtime.engine, None)
     runtime._followed_alerts(runtime.engine, None)  # heard once
     assert heard == [["ob"]]
+
+
+def test_following_rust_reads_the_bias_from_the_database(rust, monkeypatch, tmp_path):
+    """A bias set through the Rust server (it writes the setting) is the one Python's plugins see."""
+    from wednesday.bias import BIAS_KEY, TradeBias
+    from wednesday.engine import Runtime
+    from wednesday.scanner import ScanConfig
+    from wednesday.storage import Store
+
+    base, _ = rust
+    monkeypatch.setenv(feeds.FOLLOW_ENV, base)
+    store = Store(f"sqlite:///{tmp_path / 'w.db'}")
+    runtime = Runtime(ScanConfig(), DataSettings(source="tradingview"), store)
+    assert runtime.following and runtime.bias is None and runtime.active_bias() is None
+    store.set_setting(BIAS_KEY, TradeBias("bearish", "CPI hot", "none").stamped().to_dict())  # as Rust saves it
+    assert runtime.bias.direction == "bearish" and runtime.active_bias().note == "CPI hot"
+    store.delete_setting(BIAS_KEY)
+    assert runtime.bias is None
+
+
+def test_not_following_keeps_the_bias_it_was_given(monkeypatch, tmp_path):
+    from wednesday.bias import BIAS_KEY, TradeBias
+    from wednesday.engine import Runtime
+    from wednesday.scanner import ScanConfig
+    from wednesday.storage import Store
+
+    monkeypatch.delenv(feeds.FOLLOW_ENV, raising=False)
+    store = Store(f"sqlite:///{tmp_path / 'w.db'}")
+    runtime = Runtime(ScanConfig(), DataSettings(source="synthetic"), store)
+    runtime.set_bias(TradeBias("bullish").stamped())
+    store.delete_setting(BIAS_KEY)
+    assert runtime.bias.direction == "bullish"

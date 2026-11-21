@@ -734,13 +734,16 @@ pub struct Runtime {
     pub alerts: std::sync::OnceLock<Arc<crate::alerts::Alerts>>,
     /// The alerts on the trader's drawings, checked after each scan and on each tick.
     pub drawing_alerts: Arc<crate::drawings::DrawingAlerts>,
+    /// The economic calendar, set by [`crate::start_engine`]; without it the calendar routes go
+    /// to Python.
+    pub calendar: std::sync::OnceLock<Arc<crate::calendar::Calendar>>,
 }
 
 impl Runtime {
     pub fn start(settings: DataSettings, opts: Options, store: Option<Store>) -> Result<Arc<Runtime>, String> {
         let engine = start(&settings, &opts, store.clone())?;
         Ok(Arc::new(Runtime { store, opts, current: Mutex::new((settings, engine)), alerts: Default::default(),
-                             drawing_alerts: Default::default() }))
+                             drawing_alerts: Default::default(), calendar: Default::default() }))
     }
 
     pub fn engine(&self) -> Arc<Engine> {

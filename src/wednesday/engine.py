@@ -344,7 +344,7 @@ class Runtime:
         self.calendar = calendar  # news.Calendar or None
         self.journals = journals  # journal.service.Journals or None (needs a database)
         self.hooks = Hooks()  # filled by plugins (see plugins.py)
-        self.bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
+        self._bias = TradeBias.from_dict(store.get_setting(BIAS_KEY)) if store else None
         self._lock = threading.Lock()
         self.settings = settings
         self.engine = self._build(settings)
@@ -355,6 +355,21 @@ class Runtime:
                         poll=self.poll)
         engine.on_tick = lambda price, at: self._on_tick(engine, price, at)
         return engine
+
+    @property
+    def bias(self) -> TradeBias | None:
+        """The trader's bias. Following Rust, it is read from the database each time: the bias may
+        have been set through the Rust server, and the plugins must see that one."""
+        if self.following and self.store is not None:
+            try:
+                return TradeBias.from_dict(self.store.get_setting(BIAS_KEY))
+            except Exception:  # noqa: BLE001 - a database hiccup falls back to the last one set here
+                log.exception("reading the bias failed")
+        return self._bias
+
+    @bias.setter
+    def bias(self, value: TradeBias | None) -> None:
+        self._bias = value
 
     def active_bias(self) -> TradeBias | None:
         """The trader's bias, unless it has expired."""

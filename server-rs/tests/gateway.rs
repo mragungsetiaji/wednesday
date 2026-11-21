@@ -99,7 +99,7 @@ async fn a_ported_route_is_answered_in_rust() {
 #[tokio::test]
 async fn the_rest_reaches_python_unchanged() {
     let addr = front(listen(python()).await).await;
-    let req = axum::http::Request::post(format!("http://{addr}/api/bias?x=1&y=two"))
+    let req = axum::http::Request::post(format!("http://{addr}/api/licence?x=1&y=two"))
         .header("cookie", "wed_session=abc")
         .header("connection", "keep-alive, x-hop")
         .header("x-hop", "1")
@@ -109,7 +109,7 @@ async fn the_rest_reaches_python_unchanged() {
     assert_eq!(res.status(), 201);
     assert_eq!(res.headers()["set-cookie"], "wed=1; HttpOnly");
     let got: serde_json::Value = serde_json::from_str(&text(res).await).unwrap();
-    assert_eq!(got["line"], "POST /api/bias?x=1&y=two");
+    assert_eq!(got["line"], "POST /api/licence?x=1&y=two");
     assert_eq!(got["host"], addr.to_string(), "the page's address, for the login's same-origin check");
     assert_eq!(got["cookie"], "wed_session=abc");
     assert_eq!(got["hop"], false, "a header the Connection header names stays with this hop");
@@ -215,7 +215,7 @@ async fn ported_answers_have_the_contract_shape() {
     assert_eq!(send(req("PUT", addr, "/api/drawing-templates/line/H1", "", Some(tpl))).await.status(), 200);
     // A journal's own routes need an imported report and its prices: conformance.rs checks those
     // against the real Python server.
-    for route in wednesday_rs::PORTED.iter().filter(|r| r.starts_with("GET ") && !r.contains("{journal_id}")) {
+    for route in wednesday_rs::PORTED.iter().filter(|r| r.starts_with("GET ") && !r.contains("{journal_id}") && !r.contains("{snapshot_id}")) {
         let path = route[4..].replace("{name}", "Contract");
         let res = send(req("GET", addr, &path, "", None)).await;
         assert_eq!(res.status(), 200, "{route}");
@@ -247,6 +247,8 @@ async fn engine_routes_have_the_contract_shape() {
     let alerts = wednesday_rs::alerts::Alerts::new(Some(store.clone()), secrets, std::sync::Arc::new(|_: &str| None),
                                                    "http://127.0.0.1:9", Default::default());
     let _ = rt.alerts.set(std::sync::Arc::new(alerts));
+    // The calendar without its fetch task (no network in a test).
+    let _ = rt.calendar.set(wednesday_rs::calendar::Calendar::new(Some(store.clone())).await);
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = l.local_addr().unwrap();
     tokio::spawn(wednesday_rs::serve_with_engine(l, listen(python()).await, Some(store), rt.clone()));

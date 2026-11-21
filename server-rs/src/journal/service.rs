@@ -510,15 +510,11 @@ pub async fn delete(store: &Store, cache: &Cache, id: &str) -> Result<Value, Fai
 // ---- chart snapshots (snapshots.py) ----
 
 fn snapshot_path(store: &Store, sid: &str) -> Option<PathBuf> {
-    let valid = sid.len() == 32 && sid.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
-    let p = store.home().join("data").join("snapshots").join(format!("{sid}.png"));
-    (valid && p.is_file()).then_some(p)
+    crate::snapshots::path(&crate::snapshots::dir(store.home()), sid)
 }
 
 fn delete_snapshot(store: &Store, sid: &str) {
-    if let Some(p) = snapshot_path(store, sid) {
-        let _ = std::fs::remove_file(p);
-    }
+    crate::snapshots::delete(&crate::snapshots::dir(store.home()), sid)
 }
 
 // ---- import ----
@@ -638,6 +634,37 @@ fn clean_entry(text: Option<&Value>, tags: Option<&Value>, mood: Option<&Value>)
         }
     };
     Ok((text, tags, mood))
+}
+
+/// `POST .../entries` (`Journals.add_entry`): a note, a session review, or a setup from the
+/// ladder, with `market` (the market now, [`super::market::freeze`]) frozen into it.
+pub async fn add_entry(store: &Store, id: &str, body: &Map<String, Value>, market: Option<Value>) -> Result<Value, Fail> {
+    get(store, id).await?;
+    let kind = if truthy(body.get("kind")) { py_str(&body["kind"]) } else { "note".into() };
+    if !entry_kind_ok(&kind) {
+        return fail(422, format!("An entry is one of {}", ENTRY_KINDS.join(", ")));
+    }
+    let (text, tags, mood) = clean_entry(body.get("text"), body.get("tags"), body.get("mood"))?;
+    if kind != "setup" && text.is_empty() {
+        return fail(422, "Write something first");
+    }
+    let setup = body.get("setup").cloned().unwrap_or(Value::Null);
+    if kind == "setup" && !setup.is_object() {
+        return fail(422, "Journal a setup from a row of the ladder");
+    }
+    let mut row = Map::new();
+    row.insert("id".into(), random_hex(12).into());
+    row.insert("journal_id".into(), id.into());
+    row.insert("kind".into(), kind.into());
+    row.insert("created_at".into(), crate::engine::py_iso_utc(chrono::Utc::now()).into());
+    row.insert("updated_at".into(), Value::Null);
+    row.insert("text".into(), text.into());
+    row.insert("tags".into(), json!(tags));
+    row.insert("mood".into(), json!(mood));
+    row.insert("setup".into(), setup);
+    row.insert("market".into(), market.unwrap_or(Value::Null));
+    entry_put(store, &row).await?;
+    Ok(Value::Object(row))
 }
 
 pub async fn list_entries(store: &Store, id: &str) -> Result<Value, Fail> {

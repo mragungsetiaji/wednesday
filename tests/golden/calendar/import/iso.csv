@@ -1,0 +1,6 @@
+﻿datetime,currency,event,impact,actual,forecast,previous
+2026-01-09T08:30:00-05:00,usd,NFP,HIGH,256K,164K,212K
+
+2026-01-09T13:30:00Z,USD,NFP again,,,,
+2026-01-10 08:30,EUR,Naive in UTC,Medium,  1.5% , 1.4% ,
+2026-01-10 08:30:15.75,EUR,Fraction,Low,,,

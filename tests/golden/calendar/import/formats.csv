@@ -1,0 +1,13 @@
+datetime,currency,title
+01/09/2026 8:30am,USD,slashes
+1/9/26 8:30 PM,USD,short year
+13/01/2026 08:30,USD,day first
+"Jan 9, 2026 8:30 am",USD,month name
+9 January 2026 08:30,USD,long month
+"Friday, January 9, 2026 8:30am",USD,weekday
+2026.01.09 08:30,USD,dots
+20260109 08:30,USD,compact
+2026-01-09T08:30:00+0530,USD,offset
+2026-01-09 08:30 GMT,USD,gmt
+Jan 9th 2026 8am,USD,ordinal
+2026-01-09 12 pm,USD,noon

@@ -13,6 +13,7 @@
 //! could open the same database as Python; otherwise they go to Python like the rest.
 
 pub mod alerts;
+pub mod bias;
 pub mod calendar;
 pub mod config;
 pub mod drawings;
@@ -22,7 +23,9 @@ pub mod notify;
 pub mod pyjson;
 pub mod scan;
 pub mod settings_routes;
+pub mod snapshots;
 pub mod store;
+pub mod terms;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -53,6 +56,12 @@ pub const PORTED: &[&str] = &[
     "PUT /api/drawing-templates/{family}/{name}",
     "DELETE /api/drawing-templates/{family}/{name}",
     "PUT /api/calendar",
+    "GET /api/terms",
+    "POST /api/terms/accept",
+    "GET /api/bias",
+    "PUT /api/bias",
+    "POST /api/snapshots",
+    "GET /api/snapshots/{snapshot_id}.png",
     "GET /api/journals",
     "POST /api/journals",
     "GET /api/journals/{journal_id}",
@@ -95,6 +104,10 @@ pub const ENGINE_ROUTES: &[&str] = &[
     "PUT /api/alerts",
     "GET /api/alerts/chats",
     "POST /api/alerts/test",
+    "GET /api/calendar",
+    "GET /api/calendar/reactions",
+    "POST /api/calendar/import",
+    "POST /api/journals/{journal_id}/entries",
     "GET /api/markets/candles",
     "GET /api/markets/tick",
 ];
@@ -149,6 +162,19 @@ pub fn app_with(backend: SocketAddr, store: Option<Store>, runtime: Option<Arc<e
             .route("/api/drawings/{id}", axum::routing::put(drawing_put).delete(drawing_delete))
             .route("/api/drawings/{id}/alert", axum::routing::put(drawing_alert_put).delete(drawing_alert_delete));
     }
+    let has_calendar = runtime.as_ref().is_some_and(|rt| rt.calendar.get().is_some());
+    if has_calendar {
+        router = router
+            .route("/api/calendar", get(calendar_get).put(calendar_put_here))
+            .route("/api/calendar/reactions", get(calendar_reactions))
+            .route("/api/calendar/import", axum::routing::post(calendar_import))
+            // Writing an entry freezes the market of the moment: the engine's scan, price, bias and news.
+            .route("/api/journals/{id}/entries", get(journal_entries).post(journal_entry_add));
+    } else {
+        router = router
+            .route("/api/calendar", axum::routing::put(calendar_put).fallback(forward))
+            .route("/api/journals/{id}/entries", get(journal_entries).fallback(forward));
+    }
     if runtime.as_ref().is_some_and(|rt| rt.alerts.get().is_some()) {
         router = router
             .route("/api/alerts", get(alerts_get).put(alerts_put))
@@ -161,7 +187,11 @@ pub fn app_with(backend: SocketAddr, store: Option<Store>, runtime: Option<Arc<e
         .route("/api/workspaces/{name}", get(workspace_get).put(workspace_put).delete(workspace_delete))
         .route("/api/drawing-templates", get(templates_list))
         .route("/api/drawing-templates/{family}/{name}", axum::routing::put(template_put).delete(template_delete))
-        .route("/api/calendar", axum::routing::put(calendar_put).fallback(forward))
+        .route("/api/terms", get(terms_get))
+        .route("/api/terms/accept", axum::routing::post(terms_accept))
+        .route("/api/bias", get(bias_get).put(bias_put))
+        .route("/api/snapshots", axum::routing::post(snapshot_upload))
+        .route("/api/snapshots/{file}", get(snapshot_get))
         .route("/api/journals", get(journals_list).post(journal_create))
         .route("/api/journals/{id}", get(journal_stats).patch(journal_update).delete(journal_delete))
         .route("/api/journals/{id}/import", axum::routing::post(journal_import))
@@ -169,8 +199,6 @@ pub fn app_with(backend: SocketAddr, store: Option<Store>, runtime: Option<Arc<e
         .route("/api/journals/{id}/trades/{trade}/note", axum::routing::put(journal_note))
         .route("/api/journals/{id}/trades/{trade}/images", axum::routing::post(journal_image_attach))
         .route("/api/journals/{id}/trades/{trade}/images/{sid}", axum::routing::delete(journal_image_detach))
-        // Writing an entry freezes the market of the moment, which the Python engine still holds.
-        .route("/api/journals/{id}/entries", get(journal_entries).fallback(forward))
         .route("/api/journals/{id}/entries/{entry}", axum::routing::patch(journal_entry_update).delete(journal_entry_delete))
         .route_layer(axum::middleware::map_response(served_here))
         .fallback(forward)
@@ -223,6 +251,7 @@ pub async fn start_engine(home: &std::path::Path, store: Option<Store>) -> Resul
     let alerts = Arc::new(alerts::Alerts::load(store.clone(), home).await);
     let rt = engine::Runtime::start(settings, engine::Options { cfg, ..Default::default() }, store)?;
     let _ = rt.alerts.set(alerts);
+    let _ = rt.calendar.set(calendar::Calendar::start(rt.store.clone()).await);
     tokio::spawn(watch_alerts(rt.clone()));
     Ok(rt)
 }
@@ -456,6 +485,43 @@ async fn calendar_put(State(app): State<App>, req: Request) -> Response {
     res
 }
 
+/// The calendar with the engine here: settings, the week's events, reactions, imports.
+fn calendar_of(app: &App) -> (&Arc<engine::Runtime>, &Arc<calendar::Calendar>) {
+    let rt = runtime_of(app);
+    (rt, rt.calendar.get().expect("calendar routes are only mounted with a calendar"))
+}
+
+async fn calendar_get(State(app): State<App>) -> Response {
+    let (rt, cal) = calendar_of(&app);
+    engine_answer(calendar::get(cal, rt).await)
+}
+
+async fn calendar_put_here(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
+    let (rt, cal) = calendar_of(&app);
+    engine_answer(calendar::put(cal, rt, &body).await)
+}
+
+async fn calendar_reactions(State(app): State<App>) -> Response {
+    let (rt, cal) = calendar_of(&app);
+    engine_answer(calendar::reactions(cal, rt).await)
+}
+
+async fn calendar_import(State(app): State<App>, axum::extract::Query(q): Query, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let body = match axum::body::to_bytes(req.into_body(), 16 * 1024 * 1024).await {
+        Ok(b) => b,
+        Err(_) => return detail(StatusCode::PAYLOAD_TOO_LARGE, "The request is too large"),
+    };
+    let (_, cal) = calendar_of(&app);
+    engine_answer(calendar::import(cal, q.get("zone").map(String::as_str), &body).await)
+}
+
 // ---- the journal (journal/service.rs) ----
 
 /// A journal answer: the value, or Python's status and detail.
@@ -592,11 +658,87 @@ async fn journal_image_detach(State(app): State<App>, Path((id, trade, sid)): Pa
     }
 }
 
+// ---- terms, bias, chart snapshots ----
+
+async fn terms_get(State(app): State<App>, req: Request) -> Response {
+    match app.admit(req).await {
+        Ok((store, _)) => engine_answer(terms::status(&store).await),
+        Err(res) => res,
+    }
+}
+
+async fn terms_accept(State(app): State<App>, req: Request) -> Response {
+    match app.admit(req).await {
+        Ok((store, _)) => engine_answer(terms::accept(&store).await),
+        Err(res) => res,
+    }
+}
+
+async fn bias_get(State(app): State<App>, req: Request) -> Response {
+    match app.admit(req).await {
+        Ok((store, _)) => engine_answer(bias::get(Some(&store)).await),
+        Err(res) => res,
+    }
+}
+
+/// The trader sets the bias by hand; this only saves what they sent.
+async fn bias_put(State(app): State<App>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    match object_body(req).await {
+        Ok(body) => engine_answer(bias::put(&store, &body).await),
+        Err(res) => res,
+    }
+}
+
+async fn snapshot_upload(State(app): State<App>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    // One byte over the limit is enough to say it's too large.
+    let data = match axum::body::to_bytes(req.into_body(), snapshots::MAX_BYTES + 1).await {
+        Ok(b) => b,
+        Err(_) => return detail(StatusCode::UNPROCESSABLE_ENTITY, "The image is larger than 12 MB"),
+    };
+    engine_answer(snapshots::save(&snapshots::dir(store.home()), &data))
+}
+
+async fn snapshot_get(State(app): State<App>, Path(file): Path<String>, req: Request) -> Response {
+    let (store, _) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    let Some(sid) = file.strip_suffix(".png") else { return detail(StatusCode::NOT_FOUND, "Not Found") };
+    match snapshots::read(&snapshots::dir(store.home()), sid) {
+        Ok(bytes) => {
+            let mut res = Response::new(Body::from(bytes));
+            res.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("image/png"));
+            res.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static(snapshots::CACHE_CONTROL));
+            res
+        }
+        Err(refusal) => engine_answer(Err(refusal)),
+    }
+}
+
 async fn journal_entries(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
     match app.admit(req).await {
         Ok((store, _)) => journal_answer(journal::service::list_entries(&store, &id).await),
         Err(res) => res,
     }
+}
+
+async fn journal_entry_add(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
+    let (rt, cal) = calendar_of(&app);
+    let market = journal::market::market_now(rt, Some(&store), &cal.upcoming().await).await;
+    journal_answer(journal::service::add_entry(&store, &id, &body, Some(market)).await)
 }
 
 async fn journal_entry_update(State(app): State<App>, Path((id, entry)): Path<(String, String)>, req: Request) -> Response {

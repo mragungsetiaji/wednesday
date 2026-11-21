@@ -572,6 +572,95 @@ impl Store {
     }
 }
 
+// ---- the economic calendar's history (calendar/, `calendar_events`) ----
+
+impl Store {
+    /// Add or update past and coming releases (`calendar_put`); a known figure isn't wiped by a
+    /// row without it. A key given twice ends as Python's one-row-at-a-time upserts leave it.
+    pub async fn calendar_put(&self, rows: &[crate::calendar::CalRow]) -> Result<(), String> {
+        let mut merged: Vec<crate::calendar::CalRow> = Vec::with_capacity(rows.len());
+        let mut at: std::collections::HashMap<(i64, &str, &str), usize> = Default::default();
+        for r in rows {
+            match at.get(&(r.time, r.currency.as_str(), r.title.as_str())) {
+                Some(&i) => {
+                    let old = &merged[i];
+                    let keep = |new: &Option<String>, old: &Option<String>| new.clone().or_else(|| old.clone());
+                    merged[i] = crate::calendar::CalRow { forecast: keep(&r.forecast, &old.forecast),
+                                                          previous: keep(&r.previous, &old.previous),
+                                                          actual: keep(&r.actual, &old.actual), ..r.clone() };
+                }
+                None => {
+                    at.insert((r.time, r.currency.as_str(), r.title.as_str()), merged.len());
+                    merged.push(r.clone());
+                }
+            }
+        }
+        let names = ["time", "currency", "title", "impact", "forecast", "previous", "actual", "source"];
+        let one = format!("({})", vec!["?"; names.len()].join(", "));
+        let stmts = merged
+            .chunks(900 / names.len())
+            .map(|chunk| {
+                let sql = format!(
+                    "INSERT INTO calendar_events ({}) VALUES {} ON CONFLICT (\"time\", currency, title) DO UPDATE SET \
+                     impact = excluded.impact, forecast = COALESCE(excluded.forecast, calendar_events.forecast), \
+                     previous = COALESCE(excluded.previous, calendar_events.previous), \
+                     actual = COALESCE(excluded.actual, calendar_events.actual), source = excluded.source",
+                    names.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", "),
+                    vec![one.as_str(); chunk.len()].join(", "));
+                let args = chunk
+                    .iter()
+                    .flat_map(|r| [Arg::Int(Some(r.time)), Arg::Str(Some(r.currency.clone())), Arg::Str(Some(r.title.clone())),
+                                   Arg::Str(r.impact.clone()), Arg::Str(r.forecast.clone()), Arg::Str(r.previous.clone()),
+                                   Arg::Str(r.actual.clone()), Arg::Str(Some(r.source.clone()))])
+                    .collect();
+                (sql, args)
+            })
+            .collect();
+        self.transaction(stmts).await
+    }
+
+    /// Stored releases, newest first (`calendar_history`); an imported release without an impact
+    /// counts under any. Empty lists don't filter.
+    pub async fn calendar_history(&self, currencies: &[String], impacts: &[String], before: Option<i64>)
+        -> Result<Vec<crate::calendar::CalRow>, String> {
+        let mut sql = String::from("SELECT * FROM calendar_events WHERE 1 = 1");
+        let mut args = Vec::new();
+        let marks = |n: usize| vec!["?"; n].join(", ");
+        if !currencies.is_empty() {
+            sql += &format!(" AND currency IN ({})", marks(currencies.len()));
+            args.extend(currencies.iter().map(|c| Arg::Str(Some(c.clone()))));
+        }
+        if !impacts.is_empty() {
+            sql += &format!(" AND (impact IN ({}) OR impact IS NULL)", marks(impacts.len()));
+            args.extend(impacts.iter().map(|c| Arg::Str(Some(c.clone()))));
+        }
+        if let Some(b) = before {
+            sql += " AND \"time\" < ?";
+            args.push(Arg::Int(Some(b)));
+        }
+        sql += " ORDER BY \"time\" DESC";
+        let rows = self.rows("calendar_events", &sql, args).await?;
+        Ok(rows.iter().filter_map(crate::calendar::CalRow::from_json).collect())
+    }
+
+    /// Stored releases: count, first and last time (unix seconds), as `calendar_bounds`.
+    pub async fn calendar_bounds(&self) -> Result<(i64, Option<i64>, Option<i64>), String> {
+        let sql = "SELECT COUNT(*), MIN(\"time\"), MAX(\"time\") FROM calendar_events";
+        let err = |e: sqlx::Error| e.to_string();
+        macro_rules! go {
+            ($pool:expr) => {{
+                let r = sqlx::query(sql).fetch_one($pool).await.map_err(err)?;
+                Ok((r.try_get::<i64, _>(0).map_err(err)?, r.try_get::<Option<i64>, _>(1).map_err(err)?,
+                    r.try_get::<Option<i64>, _>(2).map_err(err)?))
+            }};
+        }
+        match &self.pool {
+            Pool::Sqlite(p) => go!(p),
+            Pool::Postgres(p) => go!(p),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
