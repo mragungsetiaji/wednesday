@@ -18,9 +18,9 @@ use serde_json::{json, Map, Value};
 
 use super::feed::{tradingview_command, FeedError, NodeHelper};
 use super::{Answer, Refusal, Runtime};
-use crate::calendar::py_repr;
-use crate::scan::clock::{localize, NEW_YORK};
-use crate::scan::{Clock, Time, TIMEFRAMES};
+use wednesday_base::py::py_repr;
+use wednesday_scan::clock::{localize, NEW_YORK};
+use wednesday_scan::{Clock, Time, TIMEFRAMES};
 
 /// Panes on the same symbol and timeframe within this share one request.
 pub const CACHE_SECONDS: f64 = 5.0;

@@ -1,6 +1,6 @@
 """Other-symbol panes (/api/markets/*): Python's answers to tests/golden/markets/cases.json.
 
-The Rust port (server-rs/src/engine/markets.rs) must answer the same: server-rs/tests/it/engine_markets.rs
+The Rust port (engine-rs/src/markets.rs) must answer the same: server-rs/tests/it/engine_markets.rs
 runs the same cases against the same fake helper (tests/golden/markets/fake_feed.mjs) and compares
 with answers.json. After a deliberate change, rewrite it with
 ``UPDATE_MARKETS_GOLDEN=1 uv run pytest tests/test_markets_parity.py``. Needs Node; skipped without it.

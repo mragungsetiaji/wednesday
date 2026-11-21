@@ -14,9 +14,9 @@ use chrono::{DateTime, LocalResult, NaiveDate, NaiveDateTime, NaiveTime, TimeZon
 use serde_json::{json, Value};
 
 use super::{py_iso_naive, Answer, Engine, Refusal, Runtime};
-use crate::calendar::py_repr;
-use crate::scan::{scan, unix, Bar, Clock, ScanConfig, Timeframe, TIMEFRAMES};
-use crate::store::{Arg, Store};
+use wednesday_base::py::py_repr;
+use wednesday_scan::{scan, unix, Bar, Clock, ScanConfig, Timeframe, TIMEFRAMES};
+use wednesday_store::{Arg, Store};
 
 /// Replay views kept, so stepping back and forth doesn't rescan (`replay.CACHE_SIZE`).
 pub const CACHE_SIZE: usize = 64;
@@ -117,7 +117,7 @@ fn timeframe(tf: &str) -> Result<Timeframe, Refusal> {
 
 // ---- candles ----
 
-/// `resample_ohlcv(m1, tf, drop_incomplete=False)`: like [`crate::scan::resample`], but keeping
+/// `resample_ohlcv(m1, tf, drop_incomplete=False)`: like [`wednesday_scan::resample`], but keeping
 /// the still-forming last candle, so the chart matches the live price.
 pub fn resample_all(m1: &[Bar], tf: Timeframe) -> Vec<Bar> {
     let step = tf.minutes * 60;
@@ -155,7 +155,7 @@ pub fn candle_rows(candles: &[Bar]) -> Value {
 }
 
 /// The active levels and the labelled swings of `tf` in a scan (empty when it didn't scan `tf`).
-fn levels_and_swings(result: &crate::scan::ScanResult, tf: Timeframe) -> (Value, Value) {
+fn levels_and_swings(result: &wednesday_scan::ScanResult, tf: Timeframe) -> (Value, Value) {
     match result.results.iter().find(|r| r.timeframe.name == tf.name) {
         Some(r) => (
             Value::Array(r.sets.iter().flat_map(|(_, s)| s.active.iter().map(|lv| lv.to_json())).collect()),
@@ -284,7 +284,7 @@ pub async fn candles_before(m1: &[Bar], stream: Option<Stream<'_>>, tf: Timefram
 
 /// [`candles`] without `before`: the latest candles, the forming one included so the chart
 /// matches the live price, with the scan's levels and swings on `tf`.
-pub fn latest_candles(m1: &[Bar], result: Option<&crate::scan::ScanResult>, tf: Timeframe, limit: usize) -> Answer {
+pub fn latest_candles(m1: &[Bar], result: Option<&wednesday_scan::ScanResult>, tf: Timeframe, limit: usize) -> Answer {
     let Some(result) = result else { return Err(Refusal::new(503, "no data yet")) };
     let all = resample_all(m1, tf);
     let (levels, swings) = levels_and_swings(result, tf);
@@ -579,14 +579,14 @@ pub fn parse_wall(text: &str) -> Result<Wall, ()> {
 /// `tz_localize("America/New_York", ambiguous=True, nonexistent="shift_forward")`: a repeated
 /// wall time takes its first occurrence, a skipped one the instant of the change.
 fn localize_new_york(wall: NaiveDateTime) -> Option<DateTime<chrono::Utc>> {
-    let tz = crate::scan::clock::NEW_YORK;
+    let tz = wednesday_scan::clock::NEW_YORK;
     match tz.from_local_datetime(&wall) {
         LocalResult::Single(d) => Some(d.with_timezone(&chrono::Utc)),
         LocalResult::Ambiguous(a, b) => Some(a.min(b).with_timezone(&chrono::Utc)),
         LocalResult::None => {
             // The change is on a whole minute: the first wall minute after the gap is its instant.
             let minute = wall.with_second(0)?.with_nanosecond(0)?;
-            crate::scan::clock::localize(tz, minute, true)
+            wednesday_scan::clock::localize(tz, minute, true)
         }
     }
 }

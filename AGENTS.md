@@ -50,7 +50,7 @@ The installer bundles the dashboard build, the TradingView helper and node as re
 (`tauri.release.conf.json`); `Wednesday.exe --forget-secrets` is the installer's fresh start.
 Run `make test-tauri` after changes there.
 
-The server is Rust (`server-rs/`, #96): the scan engine (`server-rs/src/engine/`, the
+The server is Rust (`server-rs/`, #96): the scan engine (`engine-rs/src/`, the
 TradingView feed), the alerts, every dashboard route and the dashboard build (`ui.rs`).
 Python stays in the repository as the reference: it writes `tests/golden/`, defines
 `tests/api_contract.json`, and runs from source as `wednesday --serve` (`make serve-py`).

@@ -22,10 +22,10 @@ use chrono::{Datelike, Duration, NaiveDate};
 use serde_json::{json, Value};
 
 use super::{load_bars, Answer, Command, Engine, Refusal, Runtime};
-use crate::scan::quarters::{quarter_blocks, quarters_payload, Block, SESSIONS, WEEKDAYS};
-use crate::scan::sessions::{reference_levels, MAX_DAYS};
-use crate::scan::{unix, Bar, Clock, Time};
-use crate::store::Store;
+use wednesday_scan::quarters::{quarter_blocks, quarters_payload, Block, SESSIONS, WEEKDAYS};
+use wednesday_scan::sessions::{reference_levels, MAX_DAYS};
+use wednesday_scan::{unix, Bar, Clock, Time};
+use wednesday_store::Store;
 
 /// Seconds the stored history's periods are kept; the live buffer's are fresh.
 pub const DIST_TTL: StdDuration = StdDuration::from_secs(6 * 3600);
@@ -1012,8 +1012,8 @@ mod tests {
             .map(|i| Bar { time: chrono::DateTime::from_timestamp(t0 + i * 60, 0).unwrap().naive_utc(),
                            open: i as f64, high: i as f64 + 1.0, low: i as f64 - 1.0, close: i as f64, volume: 0.0 })
             .collect();
-        super::super::save_bars(&store, "tradingview", "FX:XAUUSD", &bars).await.unwrap();
-        super::super::save_bars(&store, "tradingview", "OANDA:XAUUSD", &bars[..5]).await.unwrap();
+        crate::save_bars(&store, "tradingview", "FX:XAUUSD", &bars).await.unwrap();
+        crate::save_bars(&store, "tradingview", "OANDA:XAUUSD", &bars[..5]).await.unwrap();
         let opens = |v: Vec<Bar>| v.iter().map(|b| b.open as i64).collect::<Vec<_>>();
         for chunk in [7, 10, 103, 1000] {
             let latest = latest_stored(&store, "tradingview", "FX:XAUUSD", 25, chunk).await.unwrap();

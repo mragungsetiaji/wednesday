@@ -5420,6 +5420,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "wednesday-engine"
+version = "0.3.2"
+dependencies = [
+ "chrono",
+ "log",
+ "serde_json",
+ "tokio",
+ "wednesday-base",
+ "wednesday-scan",
+ "wednesday-store",
+]
+
+[[package]]
 name = "wednesday-journal"
 version = "0.3.2"
 dependencies = [
@@ -5452,6 +5465,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "wednesday-base",
+ "wednesday-engine",
  "wednesday-journal",
  "wednesday-scan",
  "wednesday-store",

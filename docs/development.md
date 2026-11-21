@@ -98,7 +98,7 @@ The Rust crates form one Cargo workspace (`Cargo.toml` at the root): one `Cargo.
 builds keep only line tables for our code and no debug info for dependencies, and
 `.cargo/config.toml` limits builds to two jobs (CI sets `CARGO_BUILD_JOBS`).
 The crates, each a folder at the root: `base-rs` (`wednesday-base`: Python-identical JSON and
-text, `.env` settings, a route's `Answer`/`Refusal`), `scan-rs` (`wednesday-scan`: the scan), `store-rs` (`wednesday-store`: the database and `schema.json`), `journal-rs` (`wednesday-journal`: MT5 reports, stats, entries, snapshots),
+text, `.env` settings, a route's `Answer`/`Refusal`), `scan-rs` (`wednesday-scan`: the scan), `store-rs` (`wednesday-store`: the database and `schema.json`), `journal-rs` (`wednesday-journal`: MT5 reports, stats, entries, snapshots), `engine-rs` (`wednesday-engine`: the feed, the scan loop, charts, analysis, other markets),
 `server-rs` (`wednesday-rs`: the routes, store, engine and features) and `src-tauri` (the shell).
 A crate that doesn't change isn't rebuilt. The integration tests are one binary, `server-rs/tests/it/` (`main.rs` lists the modules; a test that
 sets environment variables holds `env_lock()`): `cargo test -p wednesday-rs --test it <filter>`.
@@ -142,7 +142,7 @@ request to Python, streaming the answer back. Each answer then carries
   the last scan, the active bias, the price and the coming news; `tests/golden/market/`).
   A second journal needs the `journal.multi` feature, read from the plugin host's registry
   (`server-rs/src/plugins/`, see `docs/plugins.md`).
-- **The engine** runs in Rust (`server-rs/src/engine/`): the feed (`feed.rs`: the TradingView
+- **The engine** runs in Rust (`engine-rs/src/`): the feed (`feed.rs`: the TradingView
   helper, synthetic data), the M1 buffer stored in `m1_bars`, the scan after each minute close,
   the live price and the forming candle. It answers `/api/status`, `/api/scan`, `/api/tick`,
   `/api/stream`, `/api/settings`, the charts (`charts.rs`: `/api/candles`, `/api/replay`,

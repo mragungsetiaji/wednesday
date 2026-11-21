@@ -18,8 +18,8 @@ use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
-use crate::scan::clock::NEW_YORK;
-use crate::scan::{Bar, Time};
+use wednesday_scan::clock::NEW_YORK;
+use wednesday_scan::{Bar, Time};
 
 /// A feed failure as Python's engine records it: `"{kind}: {message}"`, e.g.
 /// `RuntimeError: TradingView didn't answer within 30 s. Check the internet connection.`

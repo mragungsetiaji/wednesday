@@ -18,7 +18,7 @@ pub mod bias;
 pub mod calendar;
 pub use wednesday_base::config;
 pub mod drawings;
-pub mod engine;
+pub use wednesday_engine as engine;
 pub mod journal;
 pub mod logfile;
 pub use wednesday_base::notify;
@@ -194,7 +194,7 @@ fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store
             .route("/api/drawings/{id}", axum::routing::put(drawing_put).delete(drawing_delete))
             .route("/api/drawings/{id}/alert", axum::routing::put(drawing_alert_put).delete(drawing_alert_delete));
     }
-    let has_calendar = runtime.as_ref().is_some_and(|rt| rt.calendar.get().is_some());
+    let has_calendar = runtime.as_ref().is_some_and(|rt| services(&rt).calendar.get().is_some());
     if has_calendar {
         router = router
             .route("/api/calendar", get(calendar_get).put(calendar_put_here))
@@ -207,7 +207,7 @@ fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store
             .route("/api/calendar", axum::routing::put(calendar_put).fallback(forward))
             .route("/api/journals/{id}/entries", get(journal_entries).fallback(forward));
     }
-    if runtime.as_ref().is_some_and(|rt| rt.alerts.get().is_some()) {
+    if runtime.as_ref().is_some_and(|rt| services(&rt).alerts.get().is_some()) {
         router = router
             .route("/api/alerts", get(alerts_get).put(alerts_put))
             .route("/api/alerts/chats", get(alerts_chats))
@@ -297,6 +297,24 @@ pub async fn serve_std(listener: std::net::TcpListener, backend: SocketAddr, sto
     serve(tokio::net::TcpListener::from_std(listener)?, backend, store).await
 }
 
+/// What runs beside the engine: the order block alerts, the drawing alerts and the calendar.
+/// Kept with the runtime (`Runtime::extras`), so whoever holds the runtime reaches them.
+#[derive(Default)]
+pub struct Services {
+    /// Set by [`start_engine`] (which knows where `.env` is); without them the alert routes
+    /// aren't mounted.
+    pub alerts: std::sync::OnceLock<Arc<alerts::Alerts>>,
+    /// Checked after each scan and on each tick.
+    pub drawing_alerts: Arc<drawings::DrawingAlerts>,
+    /// Set by [`start_engine`]; without it the calendar routes aren't mounted here.
+    pub calendar: std::sync::OnceLock<Arc<calendar::Calendar>>,
+}
+
+/// The runtime's [`Services`].
+pub fn services(rt: &engine::Runtime) -> &Services {
+    rt.extras(Services::default)
+}
+
 /// The scan engine with the settings and scan config the Python server in `home` would run:
 /// saved from the dashboard over the environment and `home/.env`.
 pub async fn start_engine(home: &std::path::Path, store: Option<Store>) -> Result<Arc<engine::Runtime>, String> {
@@ -323,8 +341,8 @@ pub async fn start_engine_on(home: &std::path::Path, store: Option<Store>, sourc
     let cfg = engine::scan_config(&env);
     let alerts = Arc::new(alerts::Alerts::load(store.clone(), home).await);
     let rt = engine::Runtime::start(settings, engine::Options { cfg, ..Default::default() }, store)?;
-    let _ = rt.alerts.set(alerts);
-    let _ = rt.calendar.set(calendar::Calendar::start(rt.store.clone()).await);
+    let _ = services(&rt).alerts.set(alerts);
+    let _ = services(&rt).calendar.set(calendar::Calendar::start(rt.store.clone()).await);
     tokio::spawn(watch_alerts(rt.clone()));
     Ok(rt)
 }
@@ -354,23 +372,23 @@ async fn watch_alerts(rt: Arc<engine::Runtime>) {
             continue;
         }
         let st = engine.state();
-        let sender = rt.alerts.get().and_then(|a| a.sender());
+        let sender = services(&rt).alerts.get().and_then(|a| a.sender());
         if st.version != version {
             version = st.version;
             if let Some(result) = &st.result {
-                if let Some(a) = rt.alerts.get() {
+                if let Some(a) = services(&rt).alerts.get() {
                     let (_, active) = engine::bias(rt.store.as_ref()).await;
                     a.check(&engine.source, &engine.symbol, result, &st.m1, active.as_deref()).await;
                 }
                 if let Some(store) = &rt.store {
-                    rt.drawing_alerts.check(store, &engine.source, &engine.symbol, &st.m1, sender.as_ref()).await;
+                    services(&rt).drawing_alerts.check(store, &engine.source, &engine.symbol, &st.m1, sender.as_ref()).await;
                 }
             }
         }
         if st.tick != tick {
             tick = st.tick;
             if let (Some(store), Some(live)) = (&rt.store, &st.live) {
-                rt.drawing_alerts.check_tick(store, &engine.source, &engine.symbol, live.price, live.time,
+                services(&rt).drawing_alerts.check_tick(store, &engine.source, &engine.symbol, live.price, live.time,
                                              sender.as_ref()).await;
             }
         }
@@ -567,7 +585,7 @@ async fn calendar_put(State(app): State<App>, req: Request) -> Response {
 /// The calendar with the engine here: settings, the week's events, reactions, imports.
 fn calendar_of(app: &App) -> (&Arc<engine::Runtime>, &Arc<calendar::Calendar>) {
     let rt = runtime_of(app);
-    (rt, rt.calendar.get().expect("calendar routes are only mounted with a calendar"))
+    (rt, services(&rt).calendar.get().expect("calendar routes are only mounted with a calendar"))
 }
 
 async fn calendar_get(State(app): State<App>) -> Response {
@@ -1157,7 +1175,7 @@ async fn drawing_put(State(app): State<App>, Path(id): Path<String>, req: Reques
     let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
     let rt = runtime_of(&app);
     let e = rt.engine();
-    engine_answer(drawings::routes::put(store, &e.source, &e.symbol, &id, &body, Some(&rt.drawing_alerts)).await)
+    engine_answer(drawings::routes::put(store, &e.source, &e.symbol, &id, &body, Some(&services(&rt).drawing_alerts)).await)
 }
 
 async fn drawing_delete(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
@@ -1167,7 +1185,7 @@ async fn drawing_delete(State(app): State<App>, Path(id): Path<String>, req: Req
     let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
     let rt = runtime_of(&app);
     let e = rt.engine();
-    engine_answer(drawings::routes::delete(store, &e.source, &e.symbol, &id, Some(&rt.drawing_alerts)).await)
+    engine_answer(drawings::routes::delete(store, &e.source, &e.symbol, &id, Some(&services(&rt).drawing_alerts)).await)
 }
 
 async fn drawing_alert_put(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
@@ -1179,7 +1197,7 @@ async fn drawing_alert_put(State(app): State<App>, Path(id): Path<String>, req: 
     let rt = runtime_of(&app);
     let e = rt.engine();
     let armed = drawings::routes::armed_bar(&e.state().m1);
-    engine_answer(drawings::routes::alert_put(store, &e.source, &e.symbol, &id, armed, &body, Some(&rt.drawing_alerts)).await)
+    engine_answer(drawings::routes::alert_put(store, &e.source, &e.symbol, &id, armed, &body, Some(&services(&rt).drawing_alerts)).await)
 }
 
 async fn drawing_alert_delete(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
@@ -1189,15 +1207,15 @@ async fn drawing_alert_delete(State(app): State<App>, Path(id): Path<String>, re
     let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
     let rt = runtime_of(&app);
     let e = rt.engine();
-    engine_answer(drawings::routes::alert_delete(store, &e.source, &e.symbol, &id, Some(&rt.drawing_alerts)).await)
+    engine_answer(drawings::routes::alert_delete(store, &e.source, &e.symbol, &id, Some(&services(&rt).drawing_alerts)).await)
 }
 
 fn alerts_of(app: &App) -> &Arc<alerts::Alerts> {
-    runtime_of(app).alerts.get().expect("alert routes are only mounted with alerts")
+    services(runtime_of(app)).alerts.get().expect("alert routes are only mounted with alerts")
 }
 
 async fn alerts_get(State(app): State<App>) -> Response {
-    let drawing_error = runtime_of(&app).drawing_alerts.last_error();
+    let drawing_error = services(runtime_of(&app)).drawing_alerts.last_error();
     engine_answer(alerts_of(&app).get(drawing_error).await)
 }
 
@@ -1206,7 +1224,7 @@ async fn alerts_put(State(app): State<App>, req: Request) -> Response {
         return refused;
     }
     let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
-    let drawing_error = runtime_of(&app).drawing_alerts.last_error();
+    let drawing_error = services(runtime_of(&app)).drawing_alerts.last_error();
     engine_answer(alerts_of(&app).put(&body, drawing_error).await)
 }
 

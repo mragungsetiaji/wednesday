@@ -20,9 +20,9 @@ use chrono::{DateTime, Duration, NaiveDateTime, Timelike, Utc};
 use serde_json::{json, Map, Value};
 use tokio::sync::{mpsc, oneshot, watch};
 
-use crate::calendar::py_repr;
-use crate::scan::{scan, Bar, Clock, Detector, DetectorParams, ScanConfig, ScanResult, Time};
-use crate::store::{Arg, Store};
+use wednesday_base::py::py_repr;
+use wednesday_scan::{scan, Bar, Clock, Detector, DetectorParams, ScanConfig, ScanResult, Time};
+use wednesday_store::{Arg, Store};
 use feed::{Feed, FeedError, Tick};
 
 /// After losing a connection that doesn't retry by itself, the feed gets this many tries.
@@ -151,7 +151,7 @@ impl DataSettings {
                 None | Some(Value::Null) => Ok(None),
                 Some(Value::String(s)) if s.is_empty() => Ok(None),
                 Some(Value::String(s)) => Ok(Some(s.clone())),
-                Some(other) => Ok(Some(crate::journal::service::py_str(other))),
+                Some(other) => Ok(Some(wednesday_base::py::py_str(other))),
             }
         };
         let tick = match d.get("tick_seconds") {
@@ -703,21 +703,23 @@ pub struct Runtime {
     pub store: Option<Store>,
     pub opts: Options,
     current: Mutex<(DataSettings, Arc<Engine>)>,
-    /// The order block alerts, set by [`crate::start_engine`] (which knows where `.env` is);
-    /// without them the alert routes go to Python.
-    pub alerts: std::sync::OnceLock<Arc<crate::alerts::Alerts>>,
-    /// The alerts on the trader's drawings, checked after each scan and on each tick.
-    pub drawing_alerts: Arc<crate::drawings::DrawingAlerts>,
-    /// The economic calendar, set by [`crate::start_engine`]; without it the calendar routes go
-    /// to Python.
-    pub calendar: std::sync::OnceLock<Arc<crate::calendar::Calendar>>,
+    /// What the server runs beside the engine (its alerts, drawing alerts and calendar), kept
+    /// here so it travels with the runtime; the engine doesn't look inside. See [`Runtime::extras`].
+    pub extras: std::sync::OnceLock<Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 impl Runtime {
+    /// The server's things kept with this runtime, made by `init` the first time.
+    pub fn extras<T: Send + Sync + 'static>(&self, init: impl FnOnce() -> T) -> &T {
+        self.extras
+            .get_or_init(|| Arc::new(init()))
+            .downcast_ref::<T>()
+            .expect("one type of extras per runtime")
+    }
+
     pub fn start(settings: DataSettings, opts: Options, store: Option<Store>) -> Result<Arc<Runtime>, String> {
         let engine = start(&settings, &opts, store.clone())?;
-        Ok(Arc::new(Runtime { store, opts, current: Mutex::new((settings, engine)), alerts: Default::default(),
-                             drawing_alerts: Default::default(), calendar: Default::default() }))
+        Ok(Arc::new(Runtime { store, opts, current: Mutex::new((settings, engine)), extras: Default::default() }))
     }
 
     pub fn engine(&self) -> Arc<Engine> {

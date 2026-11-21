@@ -61,16 +61,7 @@ impl Cache {
 
 // ---- Python's string helpers ----
 
-/// `str(v)` for a JSON value (strings as they are, numbers as Python prints them).
-pub fn py_str(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        Value::Null => "None".into(),
-        Value::Bool(b) => if *b { "True" } else { "False" }.into(),
-        Value::Number(_) => pyjson::dumps(v),
-        other => pyjson::dumps(other).replace('"', "'"),
-    }
-}
+pub use wednesday_base::py::py_str;
 
 /// Python's truthiness.
 fn truthy(v: Option<&Value>) -> bool {

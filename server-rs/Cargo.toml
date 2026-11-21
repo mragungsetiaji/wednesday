@@ -28,8 +28,9 @@ wednesday-base.workspace = true
 wednesday-scan.workspace = true
 wednesday-store.workspace = true
 wednesday-journal.workspace = true
+wednesday-engine.workspace = true
 sqlx.workspace = true
-tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tokio.workspace = true
 tokio-stream = "0.1"
 ring = "0.17"
 base64 = "0.22"

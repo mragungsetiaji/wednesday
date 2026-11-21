@@ -4,7 +4,7 @@
 
 [workspace]
 resolver = "2"
-members = ["base-rs", "journal-rs", "scan-rs", "server-rs", "src-tauri", "store-rs"]
+members = ["base-rs", "engine-rs", "journal-rs", "scan-rs", "server-rs", "src-tauri", "store-rs"]
 
 [workspace.package]
 version = "0.3.2"
@@ -22,6 +22,8 @@ wednesday-base = { path = "base-rs" }
 wednesday-scan = { path = "scan-rs" }
 wednesday-store = { path = "store-rs" }
 wednesday-journal = { path = "journal-rs" }
+wednesday-engine = { path = "engine-rs" }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 log = "0.4"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite", "postgres"] }
 

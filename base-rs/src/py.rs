@@ -187,6 +187,17 @@ pub fn py_repr(s: &str) -> String {
     out
 }
 
+/// `str(v)` for a JSON value (strings as they are, numbers as Python prints them).
+pub fn py_str(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Null => "None".into(),
+        Value::Bool(b) => if *b { "True" } else { "False" }.into(),
+        Value::Number(_) => crate::pyjson::dumps(v),
+        other => crate::pyjson::dumps(other).replace('"', "'"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

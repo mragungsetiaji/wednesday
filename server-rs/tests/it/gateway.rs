@@ -246,9 +246,9 @@ async fn engine_routes_have_the_contract_shape() {
     let secrets = wednesday_rs::alerts::secrets::Secrets::with(Box::new(NoKeyring), |_| None);
     let alerts = wednesday_rs::alerts::Alerts::new(Some(store.clone()), secrets, std::sync::Arc::new(|_: &str| None),
                                                    "http://127.0.0.1:9", Default::default());
-    let _ = rt.alerts.set(std::sync::Arc::new(alerts));
+    let _ = wednesday_rs::services(&rt).alerts.set(std::sync::Arc::new(alerts));
     // The calendar without its fetch task (no network in a test).
-    let _ = rt.calendar.set(wednesday_rs::calendar::Calendar::new(Some(store.clone())).await);
+    let _ = wednesday_rs::services(&rt).calendar.set(wednesday_rs::calendar::Calendar::new(Some(store.clone())).await);
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = l.local_addr().unwrap();
     tokio::spawn(wednesday_rs::serve_with_engine(l, listen(python()).await, Some(store), rt.clone()));
