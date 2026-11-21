@@ -4,7 +4,7 @@
 
 [workspace]
 resolver = "2"
-members = ["base-rs", "scan-rs", "server-rs", "src-tauri", "store-rs"]
+members = ["base-rs", "journal-rs", "scan-rs", "server-rs", "src-tauri", "store-rs"]
 
 [workspace.package]
 version = "0.3.2"
@@ -21,6 +21,7 @@ serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 wednesday-base = { path = "base-rs" }
 wednesday-scan = { path = "scan-rs" }
 wednesday-store = { path = "store-rs" }
+wednesday-journal = { path = "journal-rs" }
 log = "0.4"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite", "postgres"] }
 

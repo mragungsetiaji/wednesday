@@ -5400,6 +5400,7 @@ dependencies = [
 name = "wednesday-base"
 version = "0.3.2"
 dependencies = [
+ "chrono",
  "serde_json",
 ]
 
@@ -5416,6 +5417,18 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-single-instance",
  "wednesday-rs",
+]
+
+[[package]]
+name = "wednesday-journal"
+version = "0.3.2"
+dependencies = [
+ "chrono",
+ "log",
+ "serde_json",
+ "wednesday-base",
+ "wednesday-scan",
+ "wednesday-store",
 ]
 
 [[package]]
@@ -5439,6 +5452,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "wednesday-base",
+ "wednesday-journal",
  "wednesday-scan",
  "wednesday-store",
  "windows-sys 0.61.2",

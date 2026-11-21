@@ -27,6 +27,7 @@ serde_json.workspace = true
 wednesday-base.workspace = true
 wednesday-scan.workspace = true
 wednesday-store.workspace = true
+wednesday-journal.workspace = true
 sqlx.workspace = true
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = "0.1"

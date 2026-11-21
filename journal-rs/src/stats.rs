@@ -125,7 +125,7 @@ fn floats(items: impl IntoIterator<Item = f64>) -> Num {
 
 /// Python's `round(x, digits)` on a float: the exact binary value, rounded half-even.
 fn py_round(x: f64, digits: usize) -> f64 {
-    crate::scan::round_to(x, digits)
+    wednesday_scan::round_to(x, digits)
 }
 
 /// `round(x, digits)` on a numpy float64: `rint(x * 10**digits) / 10**digits`.

@@ -98,7 +98,7 @@ The Rust crates form one Cargo workspace (`Cargo.toml` at the root): one `Cargo.
 builds keep only line tables for our code and no debug info for dependencies, and
 `.cargo/config.toml` limits builds to two jobs (CI sets `CARGO_BUILD_JOBS`).
 The crates, each a folder at the root: `base-rs` (`wednesday-base`: Python-identical JSON and
-text, `.env` settings, a route's `Answer`/`Refusal`), `scan-rs` (`wednesday-scan`: the scan), `store-rs` (`wednesday-store`: the database and `schema.json`),
+text, `.env` settings, a route's `Answer`/`Refusal`), `scan-rs` (`wednesday-scan`: the scan), `store-rs` (`wednesday-store`: the database and `schema.json`), `journal-rs` (`wednesday-journal`: MT5 reports, stats, entries, snapshots),
 `server-rs` (`wednesday-rs`: the routes, store, engine and features) and `src-tauri` (the shell).
 A crate that doesn't change isn't rebuilt. The integration tests are one binary, `server-rs/tests/it/` (`main.rs` lists the modules; a test that
 sets environment variables holds `env_lock()`): `cargo test -p wednesday-rs --test it <filter>`.
@@ -133,7 +133,7 @@ request to Python, streaming the answer back. Each answer then carries
   `tests/golden/alerts/` and `tests/golden/drawings/` hold the reference output
   (`tests/test_alerts_golden.py`, `tests/test_drawings_golden.py`). `watch_alerts` in `lib.rs`
   runs the checks; Python's plugins still hear `on_alert`, from the `alert_log` rows Rust wrote.
-- **The journal** is in `server-rs/src/journal/`: the MT5 report import (`report.rs`, its own
+- **The journal** is in `journal-rs/` (`wednesday-journal`; freezing the market stays in `server-rs/src/journal/market.rs`): the MT5 report import (`report.rs`, its own
   HTML tokenizer copying Python's `HTMLParser`), the stats (`stats.rs`, numpy and pandas
   arithmetic copied to the last bit) and the routes (`service.rs`). `tests/golden/reports/` and
   `tests/golden/journal/` hold the reference output both must give (`tests/test_report_golden.py`,
@@ -166,7 +166,7 @@ request to Python, streaming the answer back. Each answer then carries
   fake source. With the engine, Rust answers `/api/calendar`, its reactions and imports, and
   fetches whenever the week is stale (Python fetched only when the dashboard asked); without
   it, Rust only checks and saves the settings and Python answers.
-- **Terms, bias, snapshots** (`terms.rs`, `bias.rs`, `snapshots.rs`). The disclaimer is built
+- **Terms, bias, snapshots** (`terms.rs`, `bias.rs`, `journal-rs/src/snapshots.rs`). The disclaimer is built
   into the binary; `TERMS_VERSION` must equal `terms.py`'s (a unit test checks). The bias is
   only ever what the trader sent; the Python follower reads it from the database.
 

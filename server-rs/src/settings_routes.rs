@@ -1,7 +1,6 @@
 //! Workspaces and drawing templates (`workspaces.py`, `drawing_templates.py`): named sets kept in
 //! the settings table, validated as the Python server validates them, with its messages.
 
-use chrono::Utc;
 use serde_json::{json, Map, Value};
 
 use crate::pyjson;
@@ -23,10 +22,7 @@ fn invalid<T>(msg: impl Into<String>) -> Result<T, Refused> {
     Err(Refused::Invalid(msg.into()))
 }
 
-/// `datetime.now(timezone.utc).isoformat()`
-pub fn now_iso() -> String {
-    Utc::now().format("%Y-%m-%dT%H:%M:%S%.6f+00:00").to_string()
-}
+pub use wednesday_base::time::now_iso;
 
 /// `" ".join(str(name).split())[:60]`
 fn squeeze(name: &str) -> String {

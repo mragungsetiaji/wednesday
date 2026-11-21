@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::json;
 
-use crate::engine::{Answer, Refusal};
+use wednesday_base::{Answer, Refusal};
 
 pub const MAX_BYTES: usize = 12 * 1024 * 1024;
 pub const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";

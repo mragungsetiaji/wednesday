@@ -12,9 +12,9 @@ use serde_json::{json, Map, Value};
 
 use super::report;
 use super::stats::{self, Bars};
-use crate::pyjson;
-use crate::settings_routes::now_iso;
-use crate::store::{Arg, Store};
+use wednesday_base::pyjson;
+use wednesday_base::time::now_iso;
+use wednesday_store::{Arg, Store};
 
 pub const MULTI_FEATURE: &str = "journal.multi";
 const MARGIN: i64 = 15 * 3600; // load bars this far past a trade's ends: the clocks can differ by hours
@@ -153,7 +153,7 @@ fn py_float(v: &Value) -> Result<f64, Fail> {
                 _ => None,
             };
             parsed.ok_or_else(|| Fail::Status(422, format!("could not convert string to float: {}",
-                                                           crate::calendar::py_repr(s))))
+                                                           wednesday_base::py::py_repr(s))))
         }
         Value::Null => fail(422, "float() argument must be a string or a real number, not 'NoneType'"),
         Value::Array(_) => fail(422, "float() argument must be a string or a real number, not 'list'"),
@@ -173,7 +173,7 @@ fn py_int(v: &Value) -> Result<i64, Fail> {
         },
         Value::Bool(b) => Ok(*b as i64),
         Value::String(s) => s.trim().replace('_', "").parse::<i64>().map_err(|_| {
-            Fail::Status(422, format!("invalid literal for int() with base 10: {}", crate::calendar::py_repr(s)))
+            Fail::Status(422, format!("invalid literal for int() with base 10: {}", wednesday_base::py::py_repr(s)))
         }),
         Value::Null => fail(422, "int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"),
         Value::Array(_) => fail(422, "int() argument must be a string, a bytes-like object or a real number, not 'list'"),
@@ -637,7 +637,7 @@ fn clean_entry(text: Option<&Value>, tags: Option<&Value>, mood: Option<&Value>)
 }
 
 /// `POST .../entries` (`Journals.add_entry`): a note, a session review, or a setup from the
-/// ladder, with `market` (the market now, [`super::market::freeze`]) frozen into it.
+/// ladder, with `market` (the market now, `journal::market::freeze` in server-rs) frozen into it.
 pub async fn add_entry(store: &Store, id: &str, body: &Map<String, Value>, market: Option<Value>) -> Result<Value, Fail> {
     get(store, id).await?;
     let kind = if truthy(body.get("kind")) { py_str(&body["kind"]) } else { "note".into() };
@@ -656,7 +656,7 @@ pub async fn add_entry(store: &Store, id: &str, body: &Map<String, Value>, marke
     row.insert("id".into(), random_hex(12).into());
     row.insert("journal_id".into(), id.into());
     row.insert("kind".into(), kind.into());
-    row.insert("created_at".into(), crate::engine::py_iso_utc(chrono::Utc::now()).into());
+    row.insert("created_at".into(), wednesday_base::time::py_iso_utc(chrono::Utc::now()).into());
     row.insert("updated_at".into(), Value::Null);
     row.insert("text".into(), text.into());
     row.insert("tags".into(), json!(tags));
