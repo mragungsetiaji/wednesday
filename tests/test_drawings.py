@@ -108,6 +108,20 @@ def test_drawings_api(store, tmp_path):
     assert client.delete(f"/api/drawings/{ID}").status_code == 404
 
 
+def test_drawings_of_another_pane_symbol(store, tmp_path):
+    """A full-screen pane on another market (FX:XAGUSD beside gold) keeps its own drawings."""
+    client = app_for(store, tmp_path)
+    q = {"symbol": "fx:xagusd"}
+    assert client.put(f"/api/drawings/{ID}", json=LINE, params=q).status_code == 200
+    silver = client.get("/api/drawings", params=q).json()
+    assert silver["symbol"] == "FX:XAGUSD" and [d["id"] for d in silver["drawings"]] == [ID]
+    assert client.get("/api/drawings").json()["drawings"] == []  # not on the scanned market
+    bad = client.get("/api/drawings", params={"symbol": "XAGUSD"})
+    assert bad.status_code == 400 and "exchange prefix" in bad.json()["detail"]
+    assert client.delete(f"/api/drawings/{ID}").status_code == 404
+    assert client.delete(f"/api/drawings/{ID}", params=q).status_code == 200
+
+
 def test_drawings_need_a_database(tmp_path):
     client = app_for(None, tmp_path)
     assert client.get("/api/drawings").status_code == 409

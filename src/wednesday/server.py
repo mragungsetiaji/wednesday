@@ -212,15 +212,26 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         if runtime and runtime.drawing_alerts:
             runtime.drawing_alerts.invalidate()
 
+    def drawing_symbol(symbol: str | None) -> str:
+        """The market a drawings request is about: ``?symbol=`` (a full-screen pane on another
+        market, such as FX:XAGUSD beside gold) or the scanned one."""
+        if symbol is None or not symbol.strip():
+            return current().symbol
+        try:
+            return clean_symbol(symbol.strip())
+        except MarketError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+
     def alert_payload(row: dict) -> dict:
         return {k: v for k, v in row.items() if k not in ("source", "symbol")}
 
     @app.get("/api/drawings")
-    def get_drawings() -> dict:
+    def get_drawings(symbol: str | None = Query(None)) -> dict:
         store = drawing_store()
-        rows = store.drawings(current_source(), current().symbol)
-        alerts = store.drawing_alerts(current_source(), current().symbol)
-        return {"source": current_source(), "symbol": current().symbol, "drawings": [drawing_payload(r) for r in rows],
+        symbol = drawing_symbol(symbol)
+        rows = store.drawings(current_source(), symbol)
+        alerts = store.drawing_alerts(current_source(), symbol)
+        return {"source": current_source(), "symbol": symbol, "drawings": [drawing_payload(r) for r in rows],
                 "alerts": [alert_payload(a) for a in alerts]}
 
     @app.get("/api/drawings/alerts")
@@ -255,18 +266,19 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return {"deleted": drawing_id}
 
     @app.put("/api/drawings/{drawing_id}")
-    def put_drawing(drawing_id: str, body: dict = Body(...)) -> dict:
+    def put_drawing(drawing_id: str, body: dict = Body(...), symbol: str | None = Query(None)) -> dict:
+        symbol = drawing_symbol(symbol)
         try:
             row = clean_drawing(drawing_id, body)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
-        drawing_store().drawing_put({**row, "source": current_source(), "symbol": current().symbol})
+        drawing_store().drawing_put({**row, "source": current_source(), "symbol": symbol})
         drawings_changed()  # a moved drawing moves its alert
         return row
 
     @app.delete("/api/drawings/{drawing_id}")
-    def delete_drawing(drawing_id: str) -> dict:
-        if not drawing_store().drawing_delete(drawing_id, current_source(), current().symbol):
+    def delete_drawing(drawing_id: str, symbol: str | None = Query(None)) -> dict:
+        if not drawing_store().drawing_delete(drawing_id, current_source(), drawing_symbol(symbol)):
             raise HTTPException(404, "No such drawing")
         drawings_changed()
         return {"deleted": drawing_id}

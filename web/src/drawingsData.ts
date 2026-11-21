@@ -31,6 +31,7 @@ const changesOf = (s: Step): Change[] => (Array.isArray(s) ? s : [s]);
 
 export type Drawings = DrawingCtl & {
   available: boolean; // false without a database
+  alertable: boolean; // false on a pane's other market: only the scanned market's drawings alert
   error: string | null;
   setHidden: (v: boolean) => void;
   setMagnet: (v: boolean) => void;
@@ -57,7 +58,18 @@ const byDrawing = (xs: DrawingAlert[]) => Object.fromEntries(xs.map((a) => [a.dr
  * takes Esc), Delete removes the selected drawing, Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z or
  * Ctrl+Y redoes.
  */
-export function useDrawings(source: string | undefined, symbol: string | undefined, version = 0): Drawings {
+export interface DrawingsOptions {
+  /** A full-screen pane on another market: its drawings, saved under `?symbol=`, without alerts. */
+  pane?: boolean;
+  /** The drawing tool, magnet, stay and hide-all come from this one (the main chart's). */
+  shared?: Drawings;
+  /** Whether Esc, Delete and undo/redo keys act on these drawings (the focused chart's). */
+  keys?: boolean;
+}
+
+export function useDrawings(source: string | undefined, symbol: string | undefined, version = 0,
+  { pane = false, shared, keys = true }: DrawingsOptions = {}): Drawings {
+  const paneSymbol = pane ? symbol : undefined; // ?symbol= on every request
   const [items, setItems] = useState<Drawing[]>([]);
   const [alerts, setAlerts] = useState<Record<string, DrawingAlert>>({});
   const [available, setAvailable] = useState(true);
@@ -76,7 +88,7 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
   const [, setHistoryVersion] = useState(0); // rerender when what undo/redo can do changes
 
   const reload = useCallback(() => {
-    fetchDrawings()
+    fetchDrawings(paneSymbol)
       .then((r) => {
         setItems(r.drawings);
         setAlerts(byDrawing(r.alerts ?? []));
@@ -87,7 +99,7 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
         setAlerts({});
         setAvailable(!String(e).includes("database"));
       });
-  }, []);
+  }, [paneSymbol]);
 
   useEffect(() => {
     if (!source || !symbol) return;
@@ -103,7 +115,7 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
 
   // After each scan: an alert that fired greys out.
   useEffect(() => {
-    if (!version || !source) return;
+    if (!version || !source || pane) return;
     fetchDrawingAlerts().then((r) => setAlerts(byDrawing(r.alerts))).catch(() => {});
   }, [version, source]);
 
@@ -125,13 +137,13 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
   const apply = useCallback((id: string, d: Drawing | null) => {
     if (d) {
       setItems((xs) => (xs.some((x) => x.id === id) ? xs.map((x) => (x.id === id ? d : x)) : [...xs, d]));
-      putDrawing(d).then(() => { setError(null); announceDrawings(); }).catch(failed("save"));
+      putDrawing(d, paneSymbol).then(() => { setError(null); announceDrawings(); }).catch(failed("save"));
     } else {
       setItems((xs) => xs.filter((x) => x.id !== id));
       select((s) => (s === id ? null : s));
-      deleteDrawing(id).then(() => { setError(null); announceDrawings(); }).catch(failed("delete"));
+      deleteDrawing(id, paneSymbol).then(() => { setError(null); announceDrawings(); }).catch(failed("delete"));
     }
-  }, [failed]);
+  }, [failed, paneSymbol]);
 
   const record = useCallback((step: Step) => {
     const h = history.current;
@@ -143,9 +155,9 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
   const create = useCallback((d: Drawing) => {
     apply(d.id, d);
     select(d.id);
-    setHidden(false); // a new drawing never disappears into "hide all"
+    (shared?.setHidden ?? setHidden)(false); // a new drawing never disappears into "hide all"
     record({ before: null, after: d });
-  }, [apply, record, setHidden]);
+  }, [apply, record, setHidden, shared?.setHidden]);
 
   const change = useCallback((d: Drawing, commit: boolean) => {
     const current = itemsRef.current.find((x) => x.id === d.id) ?? null;
@@ -205,6 +217,7 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
   }, []);
 
   useEffect(() => {
+    if (!keys) return;
     const onKey = (e: KeyboardEvent) => {
       if (typing(e.target)) return;
       const mod = e.ctrlKey || e.metaKey;
@@ -229,14 +242,23 @@ export function useDrawings(source: string | undefined, symbol: string | undefin
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [tool, selected, items, remove, undo, redo]);
+  }, [keys, tool, selected, items, remove, undo, redo]);
 
   const canUndo = history.current.undo.length > 0;
   const canRedo = history.current.redo.length > 0;
+  // A pane on another market draws with the main chart's tool and settings; its drawings have no alerts.
+  const t = shared ?? { tool, setTool, hidden, setHidden, magnet, setMagnet, stay, setStay };
+  const paneAlerts = useMemo(() => ({}), []);
+  const noAlert = useCallback(async () => {
+    throw new Error("Alerts are only for the scanned market's drawings");
+  }, []);
   return useMemo(() => ({
-    items, hidden, tool, setTool, selected, select, create, change, remove, available, error,
-    setHidden, editText, undo, redo, canUndo, canRedo, textFocus, alerts, setAlert, removeAlert,
-    magnet, setMagnet, stay, setStay, lockAll, removeAll,
-  }), [items, hidden, tool, selected, create, change, remove, available, error, setHidden, editText, undo, redo,
-    canUndo, canRedo, textFocus, alerts, setAlert, removeAlert, magnet, setMagnet, stay, setStay, lockAll, removeAll]);
+    items, hidden: t.hidden, tool: t.tool, setTool: t.setTool, selected, select, create, change, remove, available, error,
+    alertable: !pane,
+    setHidden: t.setHidden, editText, undo, redo, canUndo, canRedo, textFocus,
+    alerts: pane ? paneAlerts : alerts, setAlert: pane ? noAlert : setAlert, removeAlert: pane ? noAlert : removeAlert,
+    magnet: t.magnet, setMagnet: t.setMagnet, stay: t.stay, setStay: t.setStay, lockAll, removeAll,
+  }), [items, t.hidden, t.tool, t.setTool, selected, create, change, remove, available, error, t.setHidden, editText, undo, redo,
+    canUndo, canRedo, textFocus, pane, paneAlerts, alerts, noAlert, setAlert, removeAlert, t.magnet, t.setMagnet, t.stay, t.setStay,
+    lockAll, removeAll]);
 }

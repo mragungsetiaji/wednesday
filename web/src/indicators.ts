@@ -11,6 +11,18 @@ export interface Indicator {
   kind: IndicatorKind;
   length: number;
   color: string;
+  hidden?: boolean; // on the chart's list but not drawn
+  width?: number; // line width in px, 1 to 4 (default: 2, RSI 1)
+  mult?: number; // Bollinger Bands: standard deviations either side (default 2)
+}
+
+export const LINE_WIDTHS = [1, 2, 3, 4];
+export const lineWidth = (i: Indicator) => i.width ?? (i.kind === "rsi" ? 1 : 2);
+
+/** A multiplier a person typed, kept within 0.5 and 5. */
+export function cleanMult(v: number, fallback: number): number {
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(5, Math.max(0.5, Math.round(v * 10) / 10));
 }
 
 export const INDICATOR_KINDS: { kind: IndicatorKind; name: string; short: string; length: number; hint: string }[] = [
@@ -104,7 +116,7 @@ export function linesOf(ind: Indicator, closes: number[]): { name: string; value
     case "rsi":
       return [{ name: "", values: rsi(closes, ind.length) }];
     case "bb": {
-      const b = bollinger(closes, ind.length);
+      const b = bollinger(closes, ind.length, ind.mult ?? 2);
       return [{ name: "upper", values: b.upper }, { name: "basis", values: b.mid }, { name: "lower", values: b.lower }];
     }
   }

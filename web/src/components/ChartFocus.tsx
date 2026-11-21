@@ -1,6 +1,6 @@
-import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useContext, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import type { CalendarEvent, DetectorInfo, QuartersResponse, Scan, SessionsResponse, TradeBias } from "../api";
+import type { CalendarEvent, DetectorInfo, QuartersResponse, Scan, SessionsResponse } from "../api";
 import type { NewsMark } from "../newsPrimitive";
 import type { LayerOptions } from "../chartData";
 import { CrosshairBus } from "../crosshairSync";
@@ -12,19 +12,20 @@ import { usePref } from "../prefs";
 import type { RailItem } from "../rail";
 import type { LevelGroup } from "../refLevels";
 import type { ChartPalette } from "../theme";
-import { BiasPill } from "./BiasPill";
 import { ChartKeys } from "./ChartKeys";
 import { ChartPane, type PaneLayers } from "./ChartPane";
 import { ChartMarket, type ChartNav } from "./PriceChart";
 import { DrawingStyleBar } from "./DrawingStyleBar";
 import { DrawingToolbar } from "./DrawingToolbar";
-import { LevelsMenu } from "./LevelsMenu";
+import { LevelChecks } from "./LevelsMenu";
+import { IndicatorsMenu, type QuartersIndicator } from "./ChartTopMenus";
+import { usePopover } from "./usePopover";
+import { TcIcon } from "../tcIcons";
 import { SnapshotMenu, type SnapshotSource } from "./SnapshotMenu";
 import { Toasts } from "./Toasts";
 import { compose, fileName } from "../snapshot";
 import type { Drawings } from "../drawingsData";
 import { NewsAlert } from "./NewsAlert";
-import { LiveTickerPrice } from "./TickerPrice";
 
 const DEFAULT_TFS = ["1H", "15M", "4H", "5M", "30M", "4H"];
 
@@ -115,13 +116,74 @@ interface Props {
   toggles: Toggle[];
   tf: string; // the first chart follows the dashboard's timeframe
   onTf: (tf: string) => void;
-  status: { cls: string; text: string };
-  bias: TradeBias | null;
   news: NewsMark[]; // every high-impact release, whether the News toggle is on or not
   live: LiveFeed | null; // live ticks
   drawings: Drawings;
+  source: string; // the data source, which a pane's own drawings are kept under
+  onMainKeys?: (on: boolean) => void; // false while a pane on another market has the keyboard
+  quartersCtl: QuartersIndicator;
   upcomingNews: CalendarEvent[];
   onClose: () => void;
+}
+
+/** The layout picker: the current layout's icon, opening every layout. */
+function LayoutMenu({ value, onChange }: { value: string; onChange: (id: LayoutId) => void }) {
+  const { open, setOpen, ref } = usePopover<HTMLDivElement>();
+  const id = useId();
+  const current = LAYOUTS.find((l) => l.id === value) ?? LAYOUTS[0];
+  return (
+    <div className="tb-menu" ref={ref}>
+      <button type="button" className="tb-btn" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
+        title={`Layout: ${current.title}`} aria-label={`Layout: ${current.title}`}>
+        <LayoutIcon cols={current.cols} rows={current.rows} big={current.big} size={15} />
+        <TcIcon name="chevronDown" size={12} />
+      </button>
+      {open && (
+        <div className="chart-pop menu-pop layout-pop" id={id} role="menu" aria-label="Layout">
+          {LAYOUTS.map((l) => (
+            <button key={l.id} type="button" role="menuitemradio" aria-checked={l.id === value}
+              className={`draw-flyout-item${l.id === value ? " is-active" : ""}`}
+              onClick={() => { onChange(l.id); setOpen(false); }}>
+              <LayoutIcon cols={l.cols} rows={l.rows} big={l.big} size={15} />
+              {l.title}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The full screen layers in one menu: the toggles and the reference levels. */
+function FocusLayersMenu({ toggles, levelGroups, onLevelGroups }: {
+  toggles: Toggle[];
+  levelGroups: LevelGroup[];
+  onLevelGroups: (v: LevelGroup[]) => void;
+}) {
+  const { open, setOpen, ref } = usePopover<HTMLDivElement>();
+  const id = useId();
+  return (
+    <div className="tb-menu" ref={ref}>
+      <button type="button" className="tb-btn" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
+        title="Layers and levels on every chart (a chart's own layers button overrides them)">
+        <TcIcon name="layers" />
+        <span>Layers</span>
+        <TcIcon name="chevronDown" size={12} />
+      </button>
+      {open && (
+        <div className="chart-pop menu-pop" id={id} role="group" aria-label="Layers">
+          {toggles.map((t) => (
+            <label key={t.label} className="scale-opt" title={t.title}>
+              <input type="checkbox" checked={t.checked} onChange={(e) => t.onChange(e.target.checked)} />
+              {t.title ?? t.label}
+            </label>
+          ))}
+          <hr />
+          <LevelChecks value={levelGroups} onChange={onLevelGroups} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -130,7 +192,7 @@ interface Props {
  * if you like, its own layers. Uses the browser's full screen when it is allowed; leaving it
  * (Esc) closes the view.
  */
-export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, showNews, allDetectors, sessions, levelGroups, onLevelGroups, toggles, tf, onTf, status, bias, news, live, drawings, upcomingNews, onClose }: Props) {
+export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, layers, palette, quarters, showQuarters, showNews, allDetectors, sessions, levelGroups, onLevelGroups, toggles, tf, onTf, news, live, drawings, source, onMainKeys, quartersCtl, upcomingNews, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [savedLayout, setLayoutId] = usePref<LayoutId | number>("wed.focusLayout", "2"); // 1 / 2 / 4 before more layouts
   const spec = layoutOf(savedLayout);
@@ -151,6 +213,10 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
   const market = useContext(ChartMarket);
   const desktop = useDesktopApi();
   const pane = Math.min(focused, layout - 1);
+  // Panes on another market keep their own drawings; the style bar and the keys follow the focused pane.
+  const [paneCtls, setPaneCtls] = useState<Record<number, Drawings | null>>({});
+  const reporters = useMemo(() => Array.from({ length: 6 }, (_, i) => (ctl: Drawings | null) =>
+    setPaneCtls((m) => (m[i] === ctl ? m : { ...m, [i]: ctl }))), []);
 
   useEffect(() => {
     const el = ref.current;
@@ -182,6 +248,13 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
   const setPaneSymbol = (i: number, value: string | null) =>
     setPaneSymbols(Array.from({ length: Math.max(paneSymbols.length, i + 1) }, (_, j) => (j === i ? value : paneSymbols[j] ?? null)));
   const paneLabel = (i: number) => { const s = paneSymbol(i); return s ? `${s} ${paneTf(i)}` : paneTf(i); };
+  const focusedOther = !!paneSymbol(pane);
+  const activeDrawings = (focusedOther && paneCtls[pane]) || drawings;
+  useEffect(() => {
+    onMainKeys?.(!focusedOther);
+  }, [focusedOther, onMainKeys]);
+  useEffect(() => () => onMainKeys?.(true), [onMainKeys]);
+  const close = useCallback(() => onClose(), [onClose]);
 
   // Snapshot of the whole layout: each chart's screenshot where it sits in the grid, its
   // timeframe on it, one footer under all of them.
@@ -231,41 +304,19 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
 
   return (
     <div ref={ref} className="focus" role="dialog" aria-modal="true" aria-label="Full screen charts" tabIndex={-1}>
+      {/* No page header: the tools, then Exit, which always shows (the tools scroll on a narrow screen). */}
       <header className="focus-bar">
-        <div className="ticker">
-          <span className="brand">Wednesday</span>
-          <span className="focus-symbol">{symbol}</span>
-          <LiveTickerPrice live={live} fallback={scan.price} />
-          {bias && <BiasPill bias={bias} />}
-          <span className={`live ${status.cls}`}>
-            <span className="dot" aria-hidden="true" />
-            {status.text}
-          </span>
-        </div>
-        <div className="focus-tools">
+        <div className="focus-tools" role="toolbar" aria-label="Full screen tools">
           <DrawingToolbar ctl={drawings} row />
-          <div className="segmented" role="group" aria-label="Layout">
-            {LAYOUTS.map((l) => (
-              <button key={l.id} type="button" className="seg" aria-pressed={spec.id === l.id} title={l.title} aria-label={l.title}
-                onClick={() => setLayoutId(l.id)}>
-                <LayoutIcon cols={l.cols} rows={l.rows} big={l.big} size={15} />
-              </button>
-            ))}
-          </div>
-          <div className="toggles">
-            {toggles.map((t) => (
-              <label key={t.label} className="toggle" title={t.title}>
-                <input type="checkbox" checked={t.checked} onChange={(e) => t.onChange(e.target.checked)} />
-                {t.label}
-              </label>
-            ))}
-            <LevelsMenu value={levelGroups} onChange={onLevelGroups} />
-          </div>
-          <SnapshotMenu source={layoutShot} label="Snapshot layout" className="button quiet focus-snap" />
-          <button type="button" className="button quiet focus-exit" onClick={onClose} title="Exit full screen (Esc or F)">
-            <CollapseIcon /> Exit
-          </button>
+          <span className="tb-sep" aria-hidden="true" />
+          <LayoutMenu value={spec.id} onChange={setLayoutId} />
+          <FocusLayersMenu toggles={toggles} levelGroups={levelGroups} onLevelGroups={onLevelGroups} />
+          <IndicatorsMenu quarters={quartersCtl} />
+          <SnapshotMenu source={layoutShot} label="Snapshot layout" className="tb-btn tb-icon" iconSize={16} />
         </div>
+        <button type="button" className="button quiet focus-exit" onClick={close} title="Exit full screen (Esc or F)">
+          <CollapseIcon /> Exit
+        </button>
       </header>
       <div ref={gridRef} className={`focus-grid${layout > 1 ? " is-split has-focus" : ""}`}
         style={{ "--cols": template(sizes.cols), "--rows": template(sizes.rows) } as CSSProperties}>
@@ -280,7 +331,8 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
             }}
             cell={c} sync={{ bus, id: i }} onPopOut={() => openChartWindow(desktop, paneTf(i))} news={news} live={live} drawings={drawings}
             nav={(h) => { navs.current[i] = h; }} focused={i === pane} onFocus={() => setFocused(i)}
-            symbol={paneSymbol(i)} mainSymbol={mainSymbol} onSymbol={live ? (v) => setPaneSymbol(i, v) : undefined} />
+            symbol={paneSymbol(i)} mainSymbol={mainSymbol} onSymbol={live ? (v) => setPaneSymbol(i, v) : undefined}
+            source={source} onDrawings={reporters[i]} />
         ))}
         {boundaries(sizes.cols).map((at, i) => (
           <Splitter key={`x${i}`} axis="x" value={at} label="Resize columns" onChange={(v) => resize("cols", i, v)}
@@ -291,7 +343,7 @@ export function ChartFocus({ symbol, scan, timeframes, version, lookback, rail, 
             onDone={saveDrag} onReset={() => even("rows", i)} />
         ))}
       </div>
-      <DrawingStyleBar ctl={drawings} />
+      <DrawingStyleBar ctl={activeDrawings} />
       <NewsAlert events={upcomingNews} />
       <Toasts />
       <ChartKeys active timeframes={known} setTf={(v) => setPaneTf(pane, v)} nav={() => navs.current[pane] ?? null}

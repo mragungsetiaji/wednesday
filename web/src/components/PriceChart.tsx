@@ -9,6 +9,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
+  type LineWidth,
   type SeriesMarker,
   type Time,
   type UTCTimestamp,
@@ -23,7 +24,7 @@ import { counters, planUpdate } from "../perf";
 import { DrawingEditor } from "../drawingEditor";
 import { heikin, heikinBar, useChartType } from "../chartType";
 import { useChartSettings } from "../chartSettings";
-import { indicatorLabel, linesOf } from "../indicators";
+import { indicatorLabel, lineWidth, linesOf } from "../indicators";
 import { useIndicators } from "../indicatorPrefs";
 import type { DrawingCtl } from "../drawings";
 import { useLiveTick, type LiveFeed } from "../liveData";
@@ -327,6 +328,8 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const marketRef = useRef(market);
   marketRef.current = market;
   const [scale, setScale] = useState<ScaleState>(AUTO_SCALE);
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
   const [chartType] = useChartType();
   const [settings] = useChartSettings();
   const settingsKey = JSON.stringify(settings);
@@ -594,6 +597,9 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       const last = candles.length - 1;
       const chart = chartRef.current;
       const ts = chart?.timeScale();
+      // Another market or timeframe: the price scale fits its candles again, even after the price
+      // axis was dragged (which turns autoscale off), unless the trader locked the range.
+      chart?.priceScale("right").applyOptions({ autoScale: !scaleRef.current.locked });
       if (chart && ts && saved && saved.reset === resetKey) {
         // Just mounted, the chart has no width until autoSize measures it, and a range set before
         // that is lost: wait for the width, and save nothing until the view is back.
@@ -867,6 +873,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     const rows: LegendRow[] = [];
     let rsiPane = 0;
     for (const ind of indicators) {
+      if (ind.hidden) continue;
       const oscillator = ind.kind === "rsi";
       if (oscillator && !rsiPane) rsiPane = hasQuarters ? QUARTER_PANE + 1 : 1;
       const lines = linesOf(ind, closes);
@@ -874,7 +881,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       for (const line of lines) {
         const sr = chart.addSeries(LineSeries, {
           color: ind.color,
-          lineWidth: line.name === "basis" ? 1 : oscillator ? 1 : 2,
+          lineWidth: (line.name === "basis" ? 1 : lineWidth(ind)) as LineWidth,
           lineStyle: line.name === "basis" ? 2 : 0,
           priceLineVisible: false,
           lastValueVisible: line.name !== "basis",

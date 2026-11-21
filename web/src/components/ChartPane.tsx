@@ -1,12 +1,12 @@
-import { useEffect, useId, useMemo, useState, type CSSProperties, type Ref } from "react";
+import { useEffect, useId, useMemo, type CSSProperties, type Ref } from "react";
 
 import type { DetectorInfo, QuartersResponse, Scan, SessionsResponse } from "../api";
 import type { CrosshairLink } from "../crosshairSync";
 import type { LinkGroup } from "../windowLink";
-import type { DrawingCtl } from "../drawings";
+import { useDrawings, type Drawings } from "../drawingsData";
 import type { LiveFeed } from "../liveData";
 import { useMarketCandles, useMarketLive } from "../marketData";
-import { paneSymbol, SUGGESTED_SYMBOLS } from "../marketSymbol";
+import { TICKERS } from "../marketSymbol";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "../chartData";
 import { fmtPrice } from "../format";
 import { Direction, LayersIcon, PopOutIcon } from "../icons";
@@ -59,12 +59,15 @@ interface Props {
   onPopOut?: () => void; // open this chart in its own window
   news?: NewsMark[];
   live?: LiveFeed | null;
-  drawings?: DrawingCtl | null;
+  drawings?: Drawings | null; // the scanned market's; a pane on another market keeps its own, with the same tool
+  source?: string; // the data source, which drawings are kept under
+  onDrawings?: (ctl: Drawings | null) => void; // a pane on another market hands up its drawings (the style bar edits them)
   nav?: Ref<ChartNav | null>;
   cell?: { col: number; row: number; rowSpan: number }; // its place in the full screen grid
   focused?: boolean; // receives the keyboard shortcuts (outlined when there are several panes)
   onFocus?: () => void;
   // Full screen: the pane's own symbol (null = the scanned one), shown from TradingView without levels.
+  // Picked from the same markets as the main chart's menu.
   symbol?: string | null;
   mainSymbol?: string;
   onSymbol?: (symbol: string | null) => void;
@@ -135,8 +138,9 @@ function ScanPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers:
         events={events}
         highlight={null}
         palette={palette}
-        resetKey={tf}
-        viewKey={`pane:${label}`}
+        resetKey={`${mainSymbol}|${tf}`}
+        timeframe={tf}
+        viewKey={`pane:${label}:${mainSymbol}`}
         loading={!chart}
         onNeedOlder={loadOlder}
         quarters={quarters}
@@ -157,13 +161,19 @@ function ScanPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers:
 const NO_OWN: PaneLayers = {};
 
 /**
- * A pane on another symbol (e.g. FX:XAGUSD beside gold): TradingView candles and live price only.
- * Levels, setups, alerts and drawings belong to the scanned symbol, so none are drawn here.
+ * A pane on another symbol (e.g. FX:XAGUSD beside gold): TradingView candles and live price, and
+ * drawings of its own (kept per symbol, drawn with the main chart's tool, without alerts). Levels,
+ * setups and alerts belong to the scanned symbol, so none are drawn here.
  */
 function MarketPane({ symbol, tf, onTf, timeframes, version, lookback, palette, showNews, own = NO_OWN, label, sync, rangeLink,
-  news, nav, cell, focused, onFocus, mainSymbol = "", onSymbol, tickSeconds = 1 }: Props & { symbol: string }) {
+  news, nav, cell, focused, onFocus, mainSymbol = "", onSymbol, tickSeconds = 1, drawings: main, source, onDrawings }: Props & { symbol: string }) {
   const { chart, loadOlder, error } = useMarketCandles(symbol, tf, version, own.lookback ?? lookback);
   const live = useMarketLive(symbol, tickSeconds);
+  const drawings = useDrawings(main ? source : undefined, symbol, 0, { pane: true, shared: main ?? undefined, keys: !!focused });
+  useEffect(() => {
+    onDrawings?.(main ? drawings : null);
+  }, [drawings, main, onDrawings]);
+  useEffect(() => () => onDrawings?.(null), [onDrawings]);
   const newsOn = own.news ?? showNews;
   return (
     <section className={`pane${focused ? " is-focused" : ""}`} aria-label={`${label}: ${symbol} ${tf}`} onPointerDownCapture={onFocus}
@@ -177,8 +187,8 @@ function MarketPane({ symbol, tf, onTf, timeframes, version, lookback, palette, 
           ))}
         </div>
         {onSymbol && <SymbolBox label={label} value={symbol} main={mainSymbol} onChange={onSymbol} />}
-        <span className="pane-note" title="This symbol isn't scanned: no levels, setups, alerts or drawings. Candles and price from TradingView.">
-          Price only
+        <span className="pane-note" title="This symbol isn't scanned: no levels, setups or alerts. Candles and price from TradingView; drawings are kept for it.">
+          Not scanned
         </span>
       </div>
       {error && !chart && <p className="pane-error" role="alert">{error}</p>}
@@ -189,7 +199,7 @@ function MarketPane({ symbol, tf, onTf, timeframes, version, lookback, palette, 
         highlight={null}
         palette={palette}
         resetKey={`${symbol}|${tf}`}
-        viewKey={`pane:${label}`}
+        viewKey={`pane:${label}:${symbol}`}
         timeframe={tf}
         loading={!chart && !error}
         onNeedOlder={loadOlder}
@@ -199,7 +209,7 @@ function MarketPane({ symbol, tf, onTf, timeframes, version, lookback, palette, 
         rangeLink={rangeLink}
         news={newsOn ? news : undefined}
         live={live}
-        drawings={null}
+        drawings={main ? drawings : null}
         nav={nav}
         precision={chart?.precision ?? 2}
       />
@@ -212,8 +222,8 @@ const NO_EVENTS: never[] = [];
 const NO_ROWS: never[] = [];
 
 /**
- * The pane's symbol: empty or the scanned symbol follows the scan; any TradingView symbol with
- * its exchange prefix (FX:XAGUSD is FXCM silver) shows that market's candles beside it.
+ * The pane's market, from the same list as the main chart's menu: the scanned one follows the
+ * scan with its levels; another shows that market's candles beside it.
  */
 function SymbolBox({ label, value, main, onChange }: {
   label: string;
@@ -221,36 +231,20 @@ function SymbolBox({ label, value, main, onChange }: {
   main: string;
   onChange: (symbol: string | null) => void;
 }) {
-  const shown = value ?? main;
-  const [draft, setDraft] = useState(shown);
-  const listId = useId();
-  useEffect(() => setDraft(shown), [shown]);
-  const parsed = paneSymbol(draft, main);
-  const commit = () => {
-    if (parsed === undefined) return; // keeps the draft, marked invalid
-    if (parsed !== value) onChange(parsed);
-    else setDraft(shown);
-  };
+  const id = useId();
+  const shown = (value ?? main).toUpperCase();
+  const listed = TICKERS.some((t) => t.symbol === shown);
   return (
     <span className="pane-symbol">
-      <input type="text" value={draft} spellCheck={false} aria-label={`${label} symbol`} list={listId}
-        aria-invalid={parsed === undefined}
-        title={parsed === undefined
-          ? "Use a TradingView symbol with its exchange prefix, e.g. FX:XAGUSD (FXCM silver)"
-          : `Symbol of this chart. Empty or ${main} follows the scan; another (FX:XAGUSD, OANDA:XAUUSD...) shows its price only.`}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-          if (e.key === "Escape") {
-            setDraft(shown);
-            e.stopPropagation();
-          }
-          e.stopPropagation(); // typing letters mustn't trigger the chart shortcuts
-        }} />
-      <datalist id={listId}>
-        {[main, ...SUGGESTED_SYMBOLS.filter((s) => s !== main)].filter(Boolean).map((s) => <option key={s} value={s} />)}
-      </datalist>
+      <select id={id} value={shown} aria-label={`${label} market`}
+        title={`Market of this chart. ${main} is scanned (levels, setups); another shows its price only.`}
+        onKeyDown={(e) => e.stopPropagation() /* arrow keys pick a market, not the chart's shortcuts */}
+        onChange={(e) => onChange(e.target.value === main.toUpperCase() ? null : e.target.value)}>
+        {!listed && <option value={shown}>{shown}</option>}
+        {TICKERS.map((t) => (
+          <option key={t.symbol} value={t.symbol}>{t.short} · {t.name}{t.symbol === main.toUpperCase() ? " (scanned)" : ""}</option>
+        ))}
+      </select>
     </span>
   );
 }

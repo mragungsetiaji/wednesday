@@ -13,11 +13,10 @@ import { canAlert, isPosition, LABEL_SIZE, newId, TEXT_SIZE } from "../drawings"
 import type { Drawings } from "../drawingsData";
 import { CrossIcon, GripIcon, LockIcon, MoreIcon, PencilIcon, TemplatesIcon, TextIcon, TrashIcon, UnlockIcon } from "../icons";
 import { usePref } from "../prefs";
+import { ColorPicker } from "./ColorPicker";
 import { DrawingAlertButton, Floating } from "./DrawingAlertForm";
 import { usePopover } from "./usePopover";
 
-// Fixed hues that read on both themes; the first swatch (null) is the theme's drawing colour.
-const COLORS: (string | null)[] = [null, "#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4", "#3b82f6", "#ec4899", "#9ca3af"];
 const WIDTHS = [1, 2, 3, 4];
 const DASHES: { dash: DrawingDash; label: string }[] = [
   { dash: "solid", label: "Solid" },
@@ -93,16 +92,8 @@ export function DrawingStyleBar({ ctl }: { ctl: Drawings }) {
             <PencilIcon size={16} />
             <span className={`draw-ink-bar${d.style.color ? "" : " is-theme"}`} style={d.style.color ? { background: d.style.color } : undefined} />
           </span>
-        } disabled={d.locked} width={208}>
-          {() => (
-            <div className="draw-colors" role="radiogroup" aria-label="Colour">
-              {COLORS.map((c) => (
-                <button key={c ?? "theme"} type="button" role="radio" className={`color-swatch${c ? "" : " is-theme"}`}
-                  aria-checked={d.style.color === c} aria-label={c ?? "Theme colour"} title={c ?? "Theme colour"}
-                  style={c ? { background: c } : undefined} onClick={() => set({ color: c })} />
-              ))}
-            </div>
-          )}
+        } disabled={d.locked} width={252}>
+          {() => <ColorPicker value={d.style.color ?? null} theme="Theme colour" onChange={(c) => set({ color: c })} />}
         </Menu>
       )}
       {!position && (
@@ -147,7 +138,7 @@ export function DrawingStyleBar({ ctl }: { ctl: Drawings }) {
           )}
         </Menu>
       )}
-      {canAlert(d) && <DrawingAlertButton key={d.id} d={d} ctl={ctl} />}
+      {canAlert(d) && ctl.alertable && <DrawingAlertButton key={d.id} d={d} ctl={ctl} />}
       <button type="button" className="draw-tool" aria-pressed={d.locked}
         title={d.locked ? "Unlock" : "Lock: no moving or deleting"} aria-label={d.locked ? "Unlock the drawing" : "Lock the drawing"}
         onClick={() => ctl.change({ ...d, locked: !d.locked }, true)}>

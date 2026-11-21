@@ -1,5 +1,10 @@
 {
  "requests": {
+  "DELETE /api/drawings/{drawing_id}": {
+   "query": [
+    "symbol?"
+   ]
+  },
   "GET /api/candles": {
    "query": [
     "before?",
@@ -20,6 +25,11 @@
     "period?",
     "session?",
     "weekday?"
+   ]
+  },
+  "GET /api/drawings": {
+   "query": [
+    "symbol?"
    ]
   },
   "GET /api/markets/candles": {
@@ -140,7 +150,10 @@
      "title": "Body",
      "type": "object"
     }
-   }
+   },
+   "query": [
+    "symbol?"
+   ]
   },
   "PUT /api/drawings/{drawing_id}/alert": {
    "body": {

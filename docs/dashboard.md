@@ -24,8 +24,9 @@ found on it:
 
 The timeframe tabs carry each timeframe's structure direction (↑ / ↓). Beside
 them, the **Layers** menu switches the detectors (**Order blocks**, **Liquidity**,
-**Inducement**) and the overlays (**Mid OBs**, **HTF**, **Swings**, **Quarters**,
-**News**) on and off.
+**Inducement**) and the overlays (**Mid OBs**, **HTF**, **Swings**, **News**) on and
+off. The chart carries no legend under it; the readout at its top left names what is
+under the pointer.
 
 The chart has no page header: its top bar starts with the market. Click the symbol
 (`XAUUSD`) to pick another: **XAU** (gold, `FX:XAUUSD`), **XAG** (silver,
@@ -72,7 +73,10 @@ at the bottom right brings it back.
 
 Each chart keeps its zoom and scroll while the app is open: go to Settings or
 the Journal and back, or full screen and back, and the view is where you left
-it. A new timeframe starts fitted to its candles.
+it. The view is kept per market: switch from XAU to DXY and back and each opens
+where you left it, and a market you haven't viewed yet (or a new timeframe) starts
+fitted to its candles, with the price scale fitting them again even after the price
+axis was dragged.
 
 The time left on the forming candle counts down beside the price label, for the
 chart's timeframe.
@@ -132,8 +136,8 @@ once, each where it sits in the grid with its timeframe on it, and one footer.
 
 The chart's top bar holds, left to right: the market menu (the symbol, the markets it
 can switch to, and its source, bar times, candles and last scan), the timeframes (an arrow shows each one's bias), the
-chart type, **Indicators**, **Layers** (the detectors and overlays: Mid OBs, HTF, Swings,
-Quarters, News), **Sessions**, undo and redo, **Workspace**, bar replay (▶) and
+chart type, **Indicators** (with the quarterly pane, QT), **Layers** (the detectors and
+overlays: Mid OBs, HTF, Swings, News), **Sessions**, undo and redo, **Workspace**, bar replay (▶) and
 the link button. At the right end: the camera (copy, save or attach a picture of
 the chart), chart settings, the light / dark switch, the pop-out, full screen and
 levels-pane buttons, **⋯** (follow the system's theme again, the keyboard
@@ -146,15 +150,19 @@ keep using the real candles. The light / dark switch overrides the system's them
 in every window until **⋯ > Theme: follow the system**.
 
 **Indicators** adds an EMA (20 to start), an SMA (50), Bollinger Bands (20, two
-standard deviations) or an RSI (14, in a pane under the chart with lines at 70 and
-30). Each one gets a colour and its length can be changed in the same menu; the
-legend over the chart shows their values under the pointer. They are worked out on
-closed candles only, and every chart and window shows the same ones.
+standard deviations), an RSI (14, in a pane under the chart with lines at 70 and
+30) or **QT**, the quarterly pane (see [Quarters](#quarters)). Adding one opens its
+settings: the length, the Bollinger Bands' standard deviations, the line width and the
+colour (greys from white to black, ten hues in six shades, or any colour through
+**Custom…**); QT's settings colour its blocks by direction or by quarter. Under **On
+the chart** each one can be hidden and shown again (the eye), opened again (the
+gear) or removed. The readout over the chart shows their values under the pointer.
+They are worked out on closed candles only, and every chart and window shows the same
+ones.
 
 **Chart settings** (the sliders) sets the up and down candle colours, the last
 price line, the grid (both, horizontal, vertical or none), the crosshair (free, or
-on the candle's close), the space after the last candle and how the quarterly
-pane is coloured, for every chart.
+on the candle's close) and the space after the last candle, for every chart.
 **Reset to the defaults** goes back to the theme's colours.
 
 The column left of the chart holds the drawing tools in TradeCanvas's groups. A
@@ -321,7 +329,11 @@ wiped by the weekly feed later.
 ## Full screen and multiple charts
 
 The button at the bottom right of the chart (or **F**) opens the charts full
-screen, TradingView style. Pick a layout at the top:
+screen, TradingView style, without a page header: the bar at the top holds the drawing
+tools, the layout, **Layers** (Mid OBs, HTF, Swings, News and the session levels for
+every chart), **Indicators** and the layout snapshot, and **Exit** at its right end,
+which always shows: on a narrow screen the tools scroll sideways instead. Pick a
+layout from the layout menu:
 
 - **one chart**, **two side by side**, **three columns** or **three rows**;
 - **one big chart with two or three stacked beside it**, for an execution chart
@@ -330,9 +342,8 @@ screen, TradingView style. Pick a layout at the top:
   monitor.
 
 Each chart has its own timeframe tabs; the first one follows the dashboard's
-timeframe, the others are remembered in this browser, as is the layout. The
-layers at the top (Mid OBs, HTF, Swings, Quarters, News, Sessions) switch for every chart
-at once. **Esc** or **Exit** goes back. On a phone the charts stack and scroll.
+timeframe, the others are remembered in this browser, as is the layout. **Esc** or
+**Exit** goes back. On a phone the charts stack and scroll.
 
 - **Per-chart layers**: the layers button at the right of a chart's tabs gives
   that chart its own detectors, overlays, session levels and candle count (more candles for a 4H
@@ -345,18 +356,15 @@ at once. **Esc** or **Exit** goes back. On a phone the charts stack and scroll.
   the candle that contains the same moment on their timeframe (and the same
   price), and their OHLC and quarter readouts follow. A chart whose candles
   don't reach back that far just hides its crosshair.
-- **Another symbol in a chart**: the box next to a chart's timeframe tabs holds
-  its symbol. Type a TradingView symbol with its exchange prefix, for example
-  `FX:XAGUSD` (FXCM silver) on the right next to gold on the left, and press
-  Enter. That chart shows the other market's candles and live price, from
-  TradingView, labelled **Price only**: levels, setups, alerts, the bias and
-  drawings belong to the scanned symbol, so none are drawn on it. Clear the box,
-  or type the scanned symbol, to bring the chart back. Each chart's symbol is
-  remembered by its place. It works with every data source. The Windows app
-  includes what it needs; run from source, it needs Node.js and the TradingView
-  helper installed (`make install`, see
-  [Data sources](data-sources.md#tradingview)), and without them the chart says so.
-  In bar replay every chart shows the scanned symbol.
+- **Another market in a chart**: the menu next to a chart's timeframe tabs picks its
+  market from the same list as the main chart (XAU, XAG, DXY, NQ, S&P, DJI), for
+  example silver on the right next to gold on the left. That chart shows the other
+  market's candles and live price from TradingView, labelled **Not scanned**: levels,
+  setups, alerts and the bias belong to the scanned market. It can be drawn on: its
+  drawings are kept for that market (with the same tools, but without alerts), and
+  the selected drawing's style bar and the Delete and undo keys follow the chart you
+  last clicked. Picking the scanned market brings the chart back. Each chart's market
+  is remembered by its place. In bar replay every chart shows the scanned market.
 - **Resizable panes**: drag a line between charts; each line moves only the two
   charts beside it. Arrow keys move a focused line (Shift for bigger steps), and
   double-click shares the two evenly. Every layout remembers its own sizes.
@@ -449,12 +457,12 @@ York hours with the trading day starting at 18:00 NY:
 
 A block is **green** when that period closed above its open and **red** when it
 closed below. The running block is outlined only. To tell the quarters apart
-instead, set **Chart settings > Quarters pane > Colour blocks by** to **Quarter**
+instead, set **Colour blocks by** to **Quarter** in QT's settings (**Indicators**, the gear)
 and pick a colour for each of Q1 to Q4 (Mon to Thu, Tokyo to NY PM, and the 90m
 Q1 to Q4; Friday keeps the direction colours). The block's bottom edge still shows
 the direction, green or red. Hovering the chart adds the
 week, session and 90m move under the cursor to the readout at the top left.
-Switch the pane off with **Quarters** above the chart.
+Hide or remove the pane under **Indicators** (QT).
 
 The **Quarters** panel below the chart counts how often each weekday, session and
 90-minute quarter closed green, with the average move, over the stored history

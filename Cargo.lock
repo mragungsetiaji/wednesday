@@ -5485,7 +5485,7 @@ dependencies = [
 
 [[package]]
 name = "wednesday-alerts"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "log",
@@ -5502,7 +5502,7 @@ dependencies = [
 
 [[package]]
 name = "wednesday-base"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "serde_json",
@@ -5510,7 +5510,7 @@ dependencies = [
 
 [[package]]
 name = "wednesday-calendar"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -5541,7 +5541,7 @@ dependencies = [
 
 [[package]]
 name = "wednesday-drawings"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "log",
@@ -5555,7 +5555,7 @@ dependencies = [
 
 [[package]]
 name = "wednesday-engine"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "futures-util",
@@ -5572,7 +5572,7 @@ dependencies = [
 
 [[package]]
 name = "wednesday-journal"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "log",
@@ -5584,7 +5584,7 @@ dependencies = [
 
 [[package]]
 name = "wednesday-plugins"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -5633,7 +5633,7 @@ dependencies = [
 
 [[package]]
 name = "wednesday-scan"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -5642,7 +5642,7 @@ dependencies = [
 
 [[package]]
 name = "wednesday-store"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "log",

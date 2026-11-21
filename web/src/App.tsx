@@ -30,7 +30,6 @@ import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtPrice } from "./format";
 import { BookIcon, ChartIcon, Direction, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
 import { TcIcon } from "./tcIcons";
-import { useChartSettings } from "./chartSettings";
 import { LayersMenu } from "./components/LayersMenu";
 import { ChartSettingsMenu, ChartTypeMenu, IndicatorsMenu, MoreMenu, SymbolMenu, ThemeButton } from "./components/ChartTopMenus";
 import { SnapshotMenu, type SnapshotSource } from "./components/SnapshotMenu";
@@ -96,7 +95,12 @@ export default function App() {
   const [showHigherTf, setShowHigherTf] = usePref("xau.otherTf", true);
   const [showMidOb, setShowMidOb] = usePref("xau.midOb", true);
   const [hidden, setHidden] = usePref<string[]>("xau.hiddenLayers", []);
-  const [showQuarters, setShowQuarters] = usePref("xau.quarters", true);
+  // The quarterly pane is an indicator (QT): on the chart or not, and shown or hidden.
+  const [quartersAdded, setQuartersAdded] = usePref("xau.quarters", true);
+  const [quartersHidden, setQuartersHidden] = usePref("wed.quartersHidden", false);
+  const showQuarters = quartersAdded && !quartersHidden;
+  const quartersCtl = useMemo(() => ({ added: quartersAdded, hidden: quartersHidden, setAdded: setQuartersAdded,
+    setHidden: setQuartersHidden }), [quartersAdded, quartersHidden, setQuartersAdded, setQuartersHidden]);
   const [showSwings, setShowSwings] = usePref("wed.swings", true);
   const [showNews, setShowNews] = usePref("wed.newsLines", true);
   const [savedLevels, setLevelGroups] = usePref<LevelGroup[]>("wed.refLevels", DEFAULT_LEVELS);
@@ -157,7 +161,9 @@ export default function App() {
   // The live price stays out of this component's state: a tick re-renders only what shows it.
   const liveFeed = useLiveFeed(data?.tick_seconds ?? 0, data?.version ?? 0, refreshScan);
   const live = replaying ? null : liveFeed;
-  const drawings = useDrawings(data?.source, data?.symbol, data?.version ?? 0);
+  // The main drawings' keys (Delete, undo) step aside while a full screen pane on another market has focus.
+  const [mainKeys, setMainKeys] = useState(true);
+  const drawings = useDrawings(data?.source, data?.symbol, data?.version ?? 0, { keys: mainKeys });
 
   useEffect(() => {
     if (timeframes.length && !timeframes.includes(tf)) setTf(timeframes[0]);
@@ -254,7 +260,6 @@ export default function App() {
   }, [showBanner, view]);
 
   const mainNav = useRef<ChartNav | null>(null);
-  const [chartSettings] = useChartSettings();
   // The top bar's camera takes the main chart's picture.
   const mainShot = useMemo<SnapshotSource>(() => ({
     make: () => mainNav.current?.snapshotSource().make() ?? null,
@@ -401,13 +406,12 @@ export default function App() {
                 </div>
                 <span className="tb-sep" aria-hidden="true" />
                 <ChartTypeMenu />
-                <IndicatorsMenu />
+                <IndicatorsMenu quarters={quartersCtl} />
                 <span className="tb-sep" aria-hidden="true" />
                 <LayersMenu detectors={allDetectors} hidden={hidden} onToggle={toggleLayer} overlays={[
                   { key: "mid", label: "Mid OBs", on: showMidOb, set: setShowMidOb },
                   { key: "htf", label: "HTF", title: "Higher timeframes", on: showHigherTf, set: setShowHigherTf },
                   { key: "swings", label: "Swings", on: showSwings, set: setShowSwings },
-                  { key: "quarters", label: "Quarters", on: showQuarters, set: setShowQuarters },
                   { key: "news", label: "News", on: showNews, set: setShowNews },
                 ]} />
                 <LevelsMenu value={levelGroupsOn} onChange={setLevelGroups} />
@@ -458,7 +462,8 @@ export default function App() {
                 events={events}
                 highlight={highlight}
                 palette={palette}
-                resetKey={tf}
+                resetKey={`${data?.symbol ?? ""}|${tf}`}
+                timeframe={tf}
                 loading={!chart}
                 onNeedOlder={replaying ? undefined : loadOlder}
                 quarters={quarters}
@@ -472,25 +477,8 @@ export default function App() {
                 sync={mainLink.sync}
                 rangeLink={mainLink.rangeLink}
                 snapshotButton={false}
-                viewKey="main"
+                viewKey={`main:${data?.symbol ?? ""}`}
               />
-              </div>
-              <div className="chart-foot">
-                <ul className="legend" aria-label="Chart legend">
-                  <li><span className="key key-setup" /> S / B: limit entry, dashed stop</li>
-                  <li><span className="key key-bull" /> Bullish OB</li>
-                  <li><span className="key key-bear" /> Bearish OB</li>
-                  <li><span className="key key-liq" /> BSL / SSL</li>
-                  <li><span className="key key-idm" /> IDM</li>
-                  <li><span className="key key-bos" /> Last break</li>
-                  {showSwings && <li><span className="key key-swing" /> HH / HL / LH / LL swings</li>}
-                  {showNews && <li><span className="key key-news" /> High-impact news</li>}
-                  {quarterRows.length > 0 && <li><span className="key key-quarter" /> {chartSettings.quarterColors === "quarter"
-                    ? "Quarters: a colour per Q, edge green closed up" : "Quarters: green closed up"}</li>}
-                  {levels.killzones.length > 0 && <li><span className="key key-killzone" /> Killzones</li>}
-                  {levels.lines.length > 0 && <li><span className="key key-reflevel" /> Session levels, faint once swept</li>}
-                  <li className="muted">Times are {CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"}</li>
-                </ul>
               </div>
               {scan && config && (
                 <Dock open={dockTab} onOpen={setDockTab} tabs={[
@@ -580,16 +568,16 @@ export default function App() {
             { label: "Mid OBs", checked: showMidOb, onChange: setShowMidOb },
             { label: "HTF", title: "Higher timeframes", checked: showHigherTf, onChange: setShowHigherTf },
             { label: "Swings", checked: showSwings, onChange: setShowSwings },
-            { label: "Quarters", checked: showQuarters, onChange: setShowQuarters },
             { label: "News", checked: showNews, onChange: setShowNews },
           ]}
           tf={tf}
           onTf={setTf}
-          status={status}
-          bias={tradeBias}
           news={allNews}
           live={live}
           drawings={drawings}
+          source={data.source}
+          onMainKeys={setMainKeys}
+          quartersCtl={quartersCtl}
           upcomingNews={upcomingNews}
           onClose={closeFocus}
         />

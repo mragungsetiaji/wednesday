@@ -462,8 +462,10 @@ export interface DrawingAlert {
 }
 export type DrawingAlertInput = Pick<DrawingAlert, "condition" | "mode" | "note" | "expires_at" | "intrabar">;
 
-export const fetchDrawings = () =>
-  getJson<{ source: string; symbol: string; drawings: Drawing[]; alerts: DrawingAlert[] }>("/api/drawings");
+/** `?symbol=` for a full-screen pane on another market; omitted, the scanned one. */
+const drawingQuery = (symbol?: string) => (symbol ? `?symbol=${encodeURIComponent(symbol)}` : "");
+export const fetchDrawings = (symbol?: string) =>
+  getJson<{ source: string; symbol: string; drawings: Drawing[]; alerts: DrawingAlert[] }>(`/api/drawings${drawingQuery(symbol)}`);
 export const fetchDrawingAlerts = () => getJson<{ alerts: DrawingAlert[] }>("/api/drawings/alerts");
 export const putDrawingAlert = (id: string, a: DrawingAlertInput) => send<DrawingAlert>("PUT", `/api/drawings/${id}/alert`, a);
 export const deleteDrawingAlert = (id: string) => send<{ deleted: string }>("DELETE", `/api/drawings/${id}/alert`);
@@ -481,8 +483,9 @@ export const putDrawingTemplate = (family: DrawingFamily, name: string, t: { sty
   send<DrawingTemplate>("PUT", `/api/drawing-templates/${family}/${encodeURIComponent(name)}`, t);
 export const deleteDrawingTemplate = (family: DrawingFamily, name: string) =>
   send<{ deleted: string }>("DELETE", `/api/drawing-templates/${family}/${encodeURIComponent(name)}`);
-export const putDrawing = (d: Drawing) => send<Drawing>("PUT", `/api/drawings/${d.id}`, d);
-export const deleteDrawing = (id: string) => send<{ deleted: string }>("DELETE", `/api/drawings/${id}`);
+export const putDrawing = (d: Drawing, symbol?: string) => send<Drawing>("PUT", `/api/drawings/${d.id}${drawingQuery(symbol)}`, d);
+export const deleteDrawing = (id: string, symbol?: string) =>
+  send<{ deleted: string }>("DELETE", `/api/drawings/${id}${drawingQuery(symbol)}`);
 
 export interface TermsResponse {
   version: string;

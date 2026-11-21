@@ -897,6 +897,48 @@ p {
 .color-swatch.is-theme {
   background: var(--draw);
 }
+/* The colour picker: greys, then ten hues in six shades, then the system picker. */
+.color-picker {
+  display: grid;
+  gap: 4px;
+}
+.color-row {
+  display: grid;
+  grid-template-columns: repeat(10, 20px);
+  gap: 4px;
+}
+.color-row:first-of-type {
+  margin-block-end: 4px;
+}
+.color-picker .color-swatch {
+  border-radius: 4px;
+}
+.color-theme {
+  width: auto;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 4px !important;
+  color: var(--surface);
+  font-size: 12px;
+  justify-self: start;
+}
+.color-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block-start: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.color-custom input[type="color"] {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: none;
+}
 .color-swatch[aria-checked="true"] {
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--text);
 }
@@ -1347,10 +1389,9 @@ p {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--s2) var(--s4);
-  min-height: 48px;
-  padding: var(--s1) var(--s4);
+  gap: var(--s2);
+  min-height: 44px;
+  padding: var(--s1) var(--s2) var(--s1) var(--s3);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
   font-size: var(--text-sm);
@@ -1360,16 +1401,31 @@ p {
   letter-spacing: 0.02em;
   color: var(--text-2);
 }
+/* The tools scroll sideways on a narrow screen; Exit stays beside them. */
 .focus-tools {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--s2) var(--s4);
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.focus-tools > * {
+  flex: none;
+}
+.focus-tools .chart-pop {
+  position: fixed; /* menus open under their button, outside the scrolling row */
+  inset: auto;
 }
 .focus-exit {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+.layout-pop .draw-flyout-item {
+  gap: 10px;
 }
 
 /* A chart in its own window (#popout/5M): the bar, one pane, the status bar. */
@@ -1663,6 +1719,17 @@ p {
 }
 .pane-symbol {
   margin-inline-start: var(--s2);
+}
+.pane-symbol select {
+  max-width: 18ch;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-xs);
 }
 .pane-symbol input {
   width: 11ch;
@@ -4569,10 +4636,74 @@ fieldset:disabled .switch {
 }
 .ind-row {
   display: grid;
-  grid-template-columns: 26px 1fr 64px 28px;
+  grid-template-columns: 10px 1fr 28px 28px 28px;
   align-items: center;
-  gap: 8px;
-  padding: 2px 8px;
+  gap: 6px;
+  padding: 2px 4px 2px 8px;
+}
+.ind-row.is-hidden .ind-name,
+.ind-row.is-hidden .ind-dot {
+  opacity: 0.4;
+}
+.ind-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+/* An indicator's settings, over the page. */
+.ind-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.25);
+}
+.ind-dialog {
+  width: min(320px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 16px 40px rgb(0 0 0 / 0.3);
+  outline: none;
+  animation: draw-flyout-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ind-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 8px 6px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.ind-dialog-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.ind-dialog-body {
+  display: grid;
+  gap: 4px;
+  padding: 10px 8px;
+}
+.ind-dialog-body .color-picker {
+  padding: 0 8px;
+}
+.ind-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 16px 12px;
+}
+.ind-q-tabs {
+  margin: 4px 8px;
+}
+.ind-q-tabs .seg {
+  width: auto;
+  padding: 0 10px;
+  gap: 6px;
 }
 .ind-row input[type="number"],
 .set-row input[type="number"],

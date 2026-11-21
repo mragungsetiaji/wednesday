@@ -1147,10 +1147,28 @@ fn drawing_store(app: &App) -> Result<&Store, Response> {
     app.store.as_ref().ok_or_else(|| detail(StatusCode::CONFLICT, "Drawings need a database"))
 }
 
-async fn drawings_list(State(app): State<App>) -> Response {
+/// The market a drawings request is about: `?symbol=` (a full-screen pane on another market, such
+/// as FX:XAGUSD beside gold) or the scanned one. A value that isn't a TradingView symbol is a 400.
+fn drawing_symbol(q: &HashMap<String, String>, own: &str) -> Result<String, Response> {
+    let Some(raw) = q.get("symbol").map(|s| s.trim()).filter(|s| !s.is_empty()) else {
+        return Ok(own.to_string());
+    };
+    let s = raw.to_uppercase();
+    let part = |p: &str, extra: &str| {
+        (1..=32).contains(&p.len()) && p.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || "_.".contains(c) || extra.contains(c))
+    };
+    match s.split_once(':') {
+        Some((exchange, name)) if part(exchange, "") && part(name, "!&-") => Ok(s),
+        _ => Err(detail(StatusCode::BAD_REQUEST,
+            format!("{} isn't a TradingView symbol. Use the exchange prefix, e.g. FX:XAGUSD.", wednesday_base::py::py_repr(raw)))),
+    }
+}
+
+async fn drawings_list(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
     let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
     let e = runtime_of(&app).engine();
-    engine_answer(drawings::routes::list(store, &e.source, &e.symbol).await)
+    let symbol = match drawing_symbol(&q, &e.symbol) { Ok(s) => s, Err(r) => return r };
+    engine_answer(drawings::routes::list(store, &e.source, &symbol).await)
 }
 
 async fn drawings_alerts(State(app): State<App>) -> Response {
@@ -1159,7 +1177,7 @@ async fn drawings_alerts(State(app): State<App>) -> Response {
     engine_answer(drawings::routes::alerts(store, &e.source, &e.symbol).await)
 }
 
-async fn drawing_put(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+async fn drawing_put(State(app): State<App>, Path(id): Path<String>, axum::extract::Query(q): Query, req: Request) -> Response {
     if let Some(refused) = app.guard(req.method(), req.headers()) {
         return refused;
     }
@@ -1167,17 +1185,19 @@ async fn drawing_put(State(app): State<App>, Path(id): Path<String>, req: Reques
     let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
     let rt = runtime_of(&app);
     let e = rt.engine();
-    engine_answer(drawings::routes::put(store, &e.source, &e.symbol, &id, &body, Some(&services(&rt).drawing_alerts)).await)
+    let symbol = match drawing_symbol(&q, &e.symbol) { Ok(s) => s, Err(r) => return r };
+    engine_answer(drawings::routes::put(store, &e.source, &symbol, &id, &body, Some(&services(&rt).drawing_alerts)).await)
 }
 
-async fn drawing_delete(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+async fn drawing_delete(State(app): State<App>, Path(id): Path<String>, axum::extract::Query(q): Query, req: Request) -> Response {
     if let Some(refused) = app.guard(req.method(), req.headers()) {
         return refused;
     }
     let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
     let rt = runtime_of(&app);
     let e = rt.engine();
-    engine_answer(drawings::routes::delete(store, &e.source, &e.symbol, &id, Some(&services(&rt).drawing_alerts)).await)
+    let symbol = match drawing_symbol(&q, &e.symbol) { Ok(s) => s, Err(r) => return r };
+    engine_answer(drawings::routes::delete(store, &e.source, &symbol, &id, Some(&services(&rt).drawing_alerts)).await)
 }
 
 async fn drawing_alert_put(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
