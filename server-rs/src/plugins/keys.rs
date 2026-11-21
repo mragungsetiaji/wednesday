@@ -1,5 +1,5 @@
 //! Public keys Wednesday trusts for downloaded plugins: key id -> base64 of the 32-byte raw
-//! Ed25519 key. A copy of `src/wednesday/plugin_keys.py` `TRUSTED`; `tests/plugins_install.rs`
+//! Ed25519 key. A copy of `src/wednesday/plugin_keys.py` `TRUSTED`; `tests/it/plugins_install.rs`
 //! fails when the two differ.
 //!
 //! A plugin from the licence server is only unpacked when its manifest is signed by one of these

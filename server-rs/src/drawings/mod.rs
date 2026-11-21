@@ -7,7 +7,7 @@
 //! * `routes`: the route logic, as functions giving the answer or a refusal.
 //!
 //! `tests/golden/drawings/` holds Python's output for all of these (`tests/test_drawings_golden.py`),
-//! which `tests/drawings_golden.rs` replays.
+//! which `tests/it/drawings_golden.rs` replays.
 
 pub mod checker;
 pub mod clean;

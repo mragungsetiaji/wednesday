@@ -1,6 +1,6 @@
 //! Account numbers with the drawdown rebuilt from M1 prices: `src/wednesday/journal/stats.py` in
 //! Rust (#96, step 9c). The output must equal Python's `analyse` to the bit, checked by
-//! `tests/golden/journal/` (`tests/test_journal_golden.py` writes it, `tests/journal_golden.rs`
+//! `tests/golden/journal/` (`tests/test_journal_golden.py` writes it, `tests/it/journal_golden.rs`
 //! checks this side).
 //!
 //! * **Gain** is time-weighted: each closed trade grows the account by its result over the

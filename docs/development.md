@@ -97,6 +97,8 @@ The Rust crates form one Cargo workspace (`Cargo.toml` at the root): one `Cargo.
 `target/` folder, one version (`[workspace.package]`, set by `scripts/set_version.py`). Debug
 builds keep only line tables for our code and no debug info for dependencies, and
 `.cargo/config.toml` limits builds to two jobs (CI sets `CARGO_BUILD_JOBS`).
+The integration tests are one binary, `server-rs/tests/it/` (`main.rs` lists the modules; a test that
+sets environment variables holds `env_lock()`): `cargo test -p wednesday-rs --test it <filter>`.
 
 ```bash
 cd server-rs && cargo run -- [--host 127.0.0.1] [--port 8000] [--home DIR] [--db URL] [--ui-dir DIR] [--source synthetic]
@@ -171,7 +173,7 @@ To add or change a route:
 2. Its answer must have the shape `tests/api_contract.json` gives it; the Rust tests
    check every GET route listed there. A route that scans must also match
    `tests/golden/`. Python's server is the reference: change it the same way.
-3. Add its requests to `server-rs/tests/conformance.rs`, which sends each one to the
+3. Add its requests to `server-rs/tests/it/conformance.rs`, which sends each one to the
    real Python server and to Rust and compares the answers (status and JSON).
 
 ```bash
@@ -180,7 +182,7 @@ make serve-py PORT=8001         # the Python server ...
 make serve-rs PORT=8000         # ... and the Rust one in front, on http://127.0.0.1:8000
 ```
 
-`server-rs/tests/storage.rs` checks the store against `storage.py`: the same tables,
+`server-rs/tests/it/storage.rs` checks the store against `storage.py`: the same tables,
 and what one writes the other reads. It runs on SQLite, and on PostgreSQL when
 `initdb` works or `WEDNESDAY_TEST_POSTGRES` names a server where it may create
 databases (`postgresql://postgres@127.0.0.1:5432/postgres`); otherwise it says

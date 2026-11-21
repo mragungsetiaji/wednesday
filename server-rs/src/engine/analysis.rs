@@ -5,7 +5,7 @@
 //! The handlers take the query as a map and answer as FastAPI does: the same bodies, statuses and
 //! messages, and FastAPI's validation list (status 422) for a query it would refuse. The
 //! distribution's work ([`tables`], [`values`], [`move_distribution`]) is public so
-//! `tests/distribution_golden.rs` can check it against `tests/golden/distribution/`.
+//! `tests/it/distribution_golden.rs` can check it against `tests/golden/distribution/`.
 //!
 //! The distribution copies numpy and pandas to the last bit: numpy's pairwise sum for the mean and
 //! the variance, pandas' Kahan-compensated rolling mean for the ATR, `np.linspace` and

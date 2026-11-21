@@ -5,7 +5,7 @@ as the journal stores them, and the clock offset or null to detect it) and ``bar
 bars per symbol on the price clock, unix seconds), and ``expected.json``: what
 ``wednesday.journal.stats.analyse`` returns, as JSON.
 
-The Rust port (``server-rs/tests/journal_golden.rs``) must give exactly this output: the same
+The Rust port (``server-rs/tests/it/journal_golden.rs``) must give exactly this output: the same
 keys in the same order, the same numbers to the bit, and an int where Python has an int (``0``)
 and a float where it has a float (``0.0``). So the comparison here is on the JSON text.
 

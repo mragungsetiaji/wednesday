@@ -2,7 +2,7 @@
 //! features, handle the licence, serve `/api/ee/<name>/...`, keep their settings in the server's
 //! (only their own), are restarted when they stop and stopped with the server.
 
-mod plugin_kit;
+use crate::plugin_kit;
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -62,6 +62,7 @@ const CROSS_SITE: &[(&str, &str)] = &[("origin", "http://evil.example")];
 
 #[tokio::test]
 async fn a_plugin_runs_with_its_own_token() {
+    let _env = crate::env_lock();
     let home = temp("runs");
     put_fake(&home.join("plugins"), "wednesday_ee", json!({}));
     std::env::set_var("TELEGRAM_BOT_TOKEN", "123:secret");

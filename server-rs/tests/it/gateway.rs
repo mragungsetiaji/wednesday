@@ -259,10 +259,10 @@ async fn engine_routes_have_the_contract_shape() {
     }
     for route in wednesday_rs::ENGINE_ROUTES {
         assert!(routes.contains(route), "{route} isn't in tests/api_contract.json");
-        // The stream is read below; other markets need a TradingView helper (tests/engine_markets.rs).
+        // The stream is read below; other markets need a TradingView helper (tests/it/engine_markets.rs).
         if !route.starts_with("GET ") || route.ends_with("/stream") || route.contains("/markets/")
             || route.ends_with("/clock/feed") || route.ends_with("/api/replay") || route.ends_with("/alerts/chats") {
-            continue; // need a query (tests/engine_charts.rs covers them)
+            continue; // need a query (tests/it/engine_charts.rs covers them)
         }
         let res = send(req("GET", addr, &route[4..], "", None)).await;
         assert_eq!(res.headers()["x-wednesday-server"], "rust", "{route}");

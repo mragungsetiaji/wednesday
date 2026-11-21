@@ -1,7 +1,7 @@
 //! The MT5 history report (HTML) as trades and cash: `src/wednesday/journal/imports.py` in Rust
 //! (#96). The output, and every `ReportError` message, must equal Python's `parse_report`,
 //! checked by `tests/golden/reports/` (`tests/test_report_golden.py` writes it,
-//! `tests/report_golden.rs` checks this side).
+//! `tests/it/report_golden.rs` checks this side).
 //!
 //! Python reads the file with `html.parser.HTMLParser` and plain `str`/`float`/`strptime`, so this
 //! file copies the parts of those the import goes through:

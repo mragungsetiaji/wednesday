@@ -1,5 +1,5 @@
 """Reference data for the drawings and their price alerts (#96, step 9e): what ``drawings.py`` and
-``drawing_alerts.py`` give for many inputs, which the Rust port (``server-rs/tests/drawings_golden.rs``)
+``drawing_alerts.py`` give for many inputs, which the Rust port (``server-rs/tests/it/drawings_golden.rs``)
 must give too.
 
 ``tests/golden/drawings/golden.json`` holds: ``clean_drawing`` and ``clean_alert`` inputs with their

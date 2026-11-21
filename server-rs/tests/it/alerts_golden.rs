@@ -2,7 +2,7 @@
 //! 9e): the same order blocks, settings and M1 bars in, the same texts, keys and checks out. The
 //! Python side is `tests/test_alerts_golden.py`, which writes the files.
 
-mod fake_telegram;
+use crate::fake_telegram;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

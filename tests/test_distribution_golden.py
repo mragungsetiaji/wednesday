@@ -4,7 +4,7 @@ tables and ``distribution()``'s answer out, for many periods, measures, lookback
 Each case in ``tests/golden/distribution/<case>/`` has the input, ``m1.csv.gz`` (closed M1 bars on
 the feed's clock) and ``d1.csv.gz`` (daily bars by New York trading day, as ``daily_history`` gives
 them; absent when the case has none), and ``expected.json``: the tables (``tables(quarter_blocks(m1),
-d1)``) and the answer to each query. The Rust port (``server-rs/tests/distribution_golden.rs``) must
+d1)``) and the answer to each query. The Rust port (``server-rs/tests/it/distribution_golden.rs``) must
 give the same output, floats to the last bit.
 
     UPDATE_GOLDEN=1 uv run pytest tests/test_distribution_golden.py

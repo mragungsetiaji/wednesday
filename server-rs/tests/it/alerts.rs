@@ -2,7 +2,7 @@
 //! local port and a credential store in memory: the same answers and messages as `alerts.py` and
 //! `server.py`, and the bot token in none of them.
 
-mod fake_telegram;
+use crate::fake_telegram;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

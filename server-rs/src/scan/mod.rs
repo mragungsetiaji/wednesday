@@ -4,7 +4,7 @@
 //!
 //! A line-by-line port of `timeframes.py`, `structure.py`, `levels.py`, `detectors/`,
 //! `scanner.py`, `sessions.py` and `quarters.py`. Its output is checked against the same
-//! reference files as the Python scan (`tests/golden/`, see `tests/golden.rs`): change one and
+//! reference files as the Python scan (`tests/golden/`, see `tests/it/golden.rs`): change one and
 //! the other must follow.
 //!
 //! Times are naive feed-clock times ([`Time`]); a unix second reads one as UTC, as the chart does.

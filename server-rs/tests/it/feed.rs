@@ -165,6 +165,7 @@ async fn tradingview_feed_over_the_fake_helper() {
 /// shared by the tests of this file).
 #[tokio::test]
 async fn finding_the_helper() {
+    let _env = crate::env_lock();
     let Some(node) = node_or_skip("discovery test") else { return };
     let set = |dir: &Path| std::env::set_var("WEDNESDAY_TRADINGVIEW_DIR", dir);
 
@@ -211,7 +212,7 @@ async fn finding_the_helper() {
 }
 
 /// Real FX:XAUUSD bars through this checkout's tradingview/ helper (needs `npm install --prefix
-/// tradingview` and the network): `cargo test --test feed -- --ignored`.
+/// tradingview` and the network): `cargo test --test it feed -- --ignored`.
 #[tokio::test]
 #[ignore]
 async fn live_tradingview_bars() {

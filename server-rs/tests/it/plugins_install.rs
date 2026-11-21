@@ -1,7 +1,7 @@
 //! Downloading a plugin (plugins/install.rs): only a genuine package for this API and target is
 //! unpacked, and never outside its folder.
 
-mod plugin_kit;
+use crate::plugin_kit;
 
 use plugin_kit::*;
 use serde_json::{json, Value};

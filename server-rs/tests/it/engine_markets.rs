@@ -191,6 +191,7 @@ async fn the_default_helper_comes_from_the_environment() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::copy(golden("fake_feed.mjs"), dir.join("feed.mjs")).unwrap();
+    let _env = crate::env_lock();
     std::env::set_var("WEDNESDAY_TRADINGVIEW_DIR", &dir);
     std::env::set_var("WEDNESDAY_NODE", &node);
     let rt = runtime("UTC");
@@ -208,7 +209,7 @@ async fn the_default_helper_comes_from_the_environment() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Real TradingView: `cargo test --test engine_markets -- --ignored` (needs the network and
+/// Real TradingView: `cargo test --test it engine_markets -- --ignored` (needs the network and
 /// `npm install --prefix tradingview`).
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]

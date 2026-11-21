@@ -144,6 +144,6 @@ UPDATE_GOLDEN=1 uv run pytest tests/test_golden.py
 ```
 
 The same files are the reference for the Rust port of the scan in
-`server-rs/src/scan/` (#96), checked by `server-rs/tests/golden.rs` (`make test-tauri`).
+`server-rs/src/scan/` (#96), checked by `server-rs/tests/it/golden.rs` (`make test-tauri`).
 Until Python's scan goes, a detector change goes into both: change the Python one,
 rewrite the output, then make the Rust one match it.
