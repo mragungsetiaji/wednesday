@@ -1,6 +1,6 @@
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { fetchQuarters, fetchScan, fetchSessions, type QuartersResponse, type ScanResponse, type SessionsResponse } from "./api";
+import { fetchQuarters, fetchScan, fetchSessions, fetchSettings, saveSettings, type QuartersResponse, type ScanResponse, type SessionsResponse } from "./api";
 import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
 import { ChartFocus } from "./components/ChartFocus";
@@ -19,13 +19,12 @@ import { JournalPage } from "./components/JournalPage";
 import { NewsAlert } from "./components/NewsAlert";
 import { ChartKeys } from "./components/ChartKeys";
 import { LevelsMenu } from "./components/LevelsMenu";
-import { Toasts } from "./components/Toasts";
+import { toast, Toasts } from "./components/Toasts";
 import { ChartMarket, PriceChart, SHOW_SHORTCUTS, type ChartNav } from "./components/PriceChart";
 import { QuartersPanel } from "./components/QuartersPanel";
 import { Rail } from "./components/Rail";
 import { SettingsPage } from "./components/SettingsPage";
 import { SOURCES, StatusBar } from "./components/StatusBar";
-import { LiveTickerPrice } from "./components/TickerPrice";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
 import { fmtPrice } from "./format";
@@ -33,7 +32,7 @@ import { BookIcon, ChartIcon, Direction, PopOutIcon, SidePanelIcon, SlidersIcon 
 import { TcIcon } from "./tcIcons";
 import { useChartSettings } from "./chartSettings";
 import { LayersMenu } from "./components/LayersMenu";
-import { ChartSettingsMenu, ChartTypeMenu, IndicatorsMenu, MoreMenu, SymbolInfo, ThemeButton } from "./components/ChartTopMenus";
+import { ChartSettingsMenu, ChartTypeMenu, IndicatorsMenu, MoreMenu, SymbolMenu, ThemeButton } from "./components/ChartTopMenus";
 import { SnapshotMenu, type SnapshotSource } from "./components/SnapshotMenu";
 import { usePref } from "./prefs";
 import { newsMarks } from "./newsPrimitive";
@@ -252,7 +251,7 @@ export default function App() {
     els.forEach((el) => resize.observe(el));
     measure();
     return () => resize.disconnect();
-  }, [showBanner]);
+  }, [showBanner, view]);
 
   const mainNav = useRef<ChartNav | null>(null);
   const [chartSettings] = useChartSettings();
@@ -276,6 +275,47 @@ export default function App() {
     if (tfFromLink.current) tfFromLink.current = false;
     else mainLink.shareTf(tf);
   }, [tf]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The chart's symbol menu moves the whole engine to another market, as Settings > Data source does.
+  const [switching, setSwitching] = useState(false);
+  const pickSymbol = useCallback(async (symbol: string) => {
+    setSwitching(true);
+    try {
+      const s = await fetchSettings();
+      if (!s.editable) {
+        toast("The market can't be changed here: this server's data source is fixed where it was started.");
+        return;
+      }
+      const base = s.settings ?? { source: s.running.source, symbol: null, clock: null, tick_seconds: null };
+      await saveSettings({ ...base, symbol });
+      toast(`Loading ${symbol}: the chart follows after the first scan.`);
+      refreshScan();
+    } catch (err) {
+      toast(`Couldn't switch to ${symbol}: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSwitching(false);
+    }
+  }, [refreshScan]);
+
+  const viewNav = (compact: boolean) => (
+    <nav className={`nav${compact ? " nav-compact" : ""}`} aria-label="Views">
+      {/* In the chart's toolbar the chart is where you are: only the way out. */}
+      {!compact && (
+        <a href="#" className="nav-item" aria-current={view === "chart" ? "page" : undefined}
+          onClick={(e) => { e.preventDefault(); setView("chart"); }}>
+          <ChartIcon /> Chart
+        </a>
+      )}
+      <a href="#journal" className="nav-item" aria-current={view === "journal" ? "page" : undefined} title="Journal" aria-label={compact ? "Journal" : undefined}
+        onClick={(e) => { e.preventDefault(); setView("journal"); }}>
+        <BookIcon />{!compact && " Journal"}
+      </a>
+      <a href="#settings" className="nav-item" aria-current={view === "settings" ? "page" : undefined} title="Settings" aria-label={compact ? "Settings" : undefined}
+        onClick={(e) => { e.preventDefault(); setView("settings"); }}>
+        <SlidersIcon />{!compact && " Settings"}
+      </a>
+    </nav>
+  );
+
   const market = useMemo(() => ({ pip: data?.pip ?? 0.1, clockOffset: data?.clock_offset ?? 0, symbol: data?.symbol ?? "",
     clockName: data?.clock ?? "UTC" }), [data?.pip, data?.clock_offset, data?.symbol, data?.clock]);
 
@@ -300,41 +340,17 @@ export default function App() {
   return (
     <ChartMarket.Provider value={market}>
     <div ref={appRef} className="app">
-      <header ref={topbarRef} className="topbar">
-        {view === "journal" ? (
+      {/* The chart has no top bar: its toolbar carries the market and the views. Journal and
+          Settings keep a slim one to come back. */}
+      {view !== "chart" && (
+        <header ref={topbarRef} className="topbar">
           <div className="ticker">
             <span className="brand">Wednesday</span>
-            <h1 className="ticker-title">Journal</h1>
+            <h1 className="ticker-title">{view === "journal" ? "Journal" : "Settings"}</h1>
           </div>
-        ) : (
-          <div className="ticker">
-            <span className="brand">Wednesday</span>
-            <div className="ticker-symbol">
-              <h1>{data?.symbol ?? "XAUUSD"}</h1>
-              {data?.source && <span className="ticker-source">{SOURCES[data.source] ?? data.source}</span>}
-            </div>
-            <LiveTickerPrice live={live} fallback={scan?.price ?? null} />
-            <span className={`live ${chartStatus.cls}`}>
-              <span className="dot" aria-hidden="true" />
-              {chartStatus.text}
-            </span>
-          </div>
-        )}
-        <nav className="nav" aria-label="Views">
-          <a href="#" className="nav-item" aria-current={view === "chart" ? "page" : undefined}
-            onClick={(e) => { e.preventDefault(); setView("chart"); }}>
-            <ChartIcon /> Chart
-          </a>
-          <a href="#journal" className="nav-item" aria-current={view === "journal" ? "page" : undefined}
-            onClick={(e) => { e.preventDefault(); setView("journal"); }}>
-            <BookIcon /> Journal
-          </a>
-          <a href="#settings" className="nav-item" aria-current={view === "settings" ? "page" : undefined}
-            onClick={(e) => { e.preventDefault(); setView("settings"); }}>
-            <SlidersIcon /> Settings
-          </a>
-        </nav>
-      </header>
+          {viewNav(false)}
+        </header>
+      )}
 
       {showBanner && (
         <div ref={bannerRef} className="banner" role="alert">
@@ -359,7 +375,7 @@ export default function App() {
           <main className={`workspace${showRail ? "" : " is-rail-hidden"}`}>
             <section className="chart-area" aria-label="Chart">
               <div className="chart-toolbar" role="toolbar" aria-label="Chart">
-                <SymbolInfo symbol={data?.symbol ?? "XAUUSD"} rows={[
+                <SymbolMenu symbol={data?.symbol ?? "FX:XAUUSD"} onPick={pickSymbol} busy={switching} rows={[
                   ["Source", data?.source ? SOURCES[data.source] ?? data.source : "—"],
                   ["Bar times", CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed time"],
                   ["Timeframe", tf],
@@ -429,6 +445,8 @@ export default function App() {
                   <SidePanelIcon size={16} open={showRail} />
                 </button>
                 <MoreMenu onShortcuts={() => window.dispatchEvent(new Event(SHOW_SHORTCUTS))} />
+                <span className="tb-sep" aria-hidden="true" />
+                {viewNav(true)}
               </div>
               {replaying && <ReplayBar replay={replay} tf={tf} clockName={CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed"} />}
               <div className="chart-body">

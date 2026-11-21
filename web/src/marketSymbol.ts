@@ -3,8 +3,34 @@
  * Empty, or the source's own symbol, means the pane follows the scanned market.
  */
 
-/** TradingView symbols the symbol box suggests. `FX:` is FXCM. */
-export const SUGGESTED_SYMBOLS = ["FX:XAUUSD", "FX:XAGUSD", "OANDA:XAUUSD", "OANDA:XAGUSD", "TVC:DXY"];
+export interface Ticker {
+  symbol: string; // TradingView's name, with its exchange prefix
+  short: string; // what the menu shows
+  name: string;
+}
+
+/**
+ * The markets the chart's symbol menu offers; picking one moves the whole engine (scan, levels,
+ * alerts) to it. `FX:` is FXCM spot; the indices are OANDA's CFDs, which trade nearly round the
+ * clock like gold.
+ */
+export const TICKERS: Ticker[] = [
+  { symbol: "FX:XAUUSD", short: "XAU", name: "Gold spot" },
+  { symbol: "FX:XAGUSD", short: "XAG", name: "Silver spot" },
+  { symbol: "TVC:DXY", short: "DXY", name: "US Dollar Index" },
+  { symbol: "OANDA:NAS100USD", short: "NQ", name: "Nasdaq 100" },
+  { symbol: "OANDA:SPX500USD", short: "S&P", name: "S&P 500" },
+  { symbol: "OANDA:US30USD", short: "DJI", name: "Dow Jones 30" },
+];
+
+/** TradingView symbols the full-screen pane's symbol box suggests. */
+export const SUGGESTED_SYMBOLS = TICKERS.map((t) => t.symbol);
+
+/** A symbol without its exchange prefix, as the chart's top bar shows it: FX:XAUUSD -> XAUUSD. */
+export function tickerName(symbol: string): string {
+  const s = symbol.trim();
+  return s.slice(s.indexOf(":") + 1) || s;
+}
 
 const SYMBOL = /^[A-Z0-9_.]{1,32}:[A-Z0-9_.!&-]{1,32}$/;
 

@@ -4472,9 +4472,44 @@ fieldset:disabled .switch {
   flex: none;
 }
 .tb-symbol {
-  display: flex;
-  align-items: center;
-  gap: 2px;
+  /* Block, not flex: the menu (position: fixed, no offsets) then opens under the pill. */
+  display: block;
+}
+/* The market pill: the symbol and a chevron, opening the market menu. */
+.tb-symbol-btn {
+  height: 30px;
+  padding: 0 8px 0 12px;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text);
+}
+.tb-symbol-btn .icon {
+  color: var(--text-3);
+}
+.symbol-item {
+  display: grid;
+  grid-template-columns: 3.5em 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+}
+.symbol-item-short {
+  font-weight: 600;
+  color: var(--text);
+}
+.symbol-item-tv {
+  font-size: 11px;
+  color: var(--text-3);
+}
+/* The views (Chart, Journal, Settings) as icons at the end of the chart's toolbar. */
+.nav.nav-compact {
+  margin-inline-start: 0;
+}
+.nav.nav-compact .nav-item {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
 }
 .tb-symbol-name {
   padding: 0 4px 0 2px;

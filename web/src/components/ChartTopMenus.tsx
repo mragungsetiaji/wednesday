@@ -4,23 +4,47 @@ import { CHART_TYPES, useChartType } from "../chartType";
 import { DEFAULT_CHART_SETTINGS, useChartSettings, type ChartSettings } from "../chartSettings";
 import { useIndicators } from "../indicatorPrefs";
 import { cleanLength, indicatorLabel, INDICATOR_COLORS, INDICATOR_KINDS, MAX_LENGTH, type Indicator, type IndicatorKind } from "../indicators";
+import { TICKERS, tickerName } from "../marketSymbol";
 import { TcIcon } from "../tcIcons";
 import { useThemeChoice, type ThemeChoice } from "../theme";
 import { usePopover } from "./usePopover";
 
-/** The symbol at the start of the chart's top bar, with what feeds it under the info button. */
-export function SymbolInfo({ symbol, rows }: { symbol: string; rows: [string, string][] }) {
+/**
+ * The symbol at the start of the chart's top bar: a menu of the markets the engine can scan
+ * ([`TICKERS`]), with what feeds the chart below them. Picking one calls `onPick`; without it
+ * (a pane that can't switch) the menu only shows the info.
+ */
+export function SymbolMenu({ symbol, rows, onPick, busy = false }: {
+  symbol: string;
+  rows: [string, string][];
+  onPick?: (symbol: string) => void;
+  busy?: boolean;
+}) {
   const { open, setOpen, ref } = usePopover<HTMLDivElement>();
   const id = useId();
+  const current = symbol.trim().toUpperCase();
   return (
     <div className="tb-menu tb-symbol" ref={ref}>
-      <span className="tb-symbol-name">{symbol}</span>
-      <button type="button" className="tb-btn tb-icon" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
-        title="Symbol info" aria-label={`${symbol} info`}>
-        <TcIcon name="info" />
+      <button type="button" className="tb-btn tb-symbol-btn" aria-expanded={open} aria-controls={id} aria-haspopup="menu"
+        onClick={() => setOpen(!open)} disabled={busy} title={busy ? `Switching to ${symbol}…` : `${symbol}: change the market`}>
+        <span className="tb-symbol-name">{tickerName(symbol)}</span>
+        <TcIcon name="chevronDown" size={14} />
       </button>
       {open && (
-        <div className="chart-pop symbol-pop" id={id} role="group" aria-label={`${symbol} info`}>
+        <div className="chart-pop symbol-pop" id={id} role="menu" aria-label="Market">
+          {onPick && TICKERS.map((t) => (
+            <button key={t.symbol} type="button" role="menuitemradio" aria-checked={t.symbol === current}
+              className={`draw-flyout-item symbol-item${t.symbol === current ? " is-active" : ""}`}
+              onClick={() => {
+                setOpen(false);
+                if (t.symbol !== current) onPick(t.symbol);
+              }}>
+              <span className="symbol-item-short">{t.short}</span>
+              <span className="symbol-item-name">{t.name}</span>
+              <span className="symbol-item-tv">{t.symbol}</span>
+            </button>
+          ))}
+          {onPick && <hr />}
           <div className="pop-head">{symbol}</div>
           <dl className="symbol-info">
             {rows.map(([k, v]) => (

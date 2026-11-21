@@ -27,7 +27,18 @@ them, the **Layers** menu switches the detectors (**Order blocks**, **Liquidity*
 **Inducement**) and the overlays (**Mid OBs**, **HTF**, **Swings**, **Quarters**,
 **News**) on and off.
 
-The button at the far right of the chart's top bar hides the right pane
+The chart has no page header: its top bar starts with the market. Click the symbol
+(`XAUUSD`) to pick another: **XAU** (gold, `FX:XAUUSD`), **XAG** (silver,
+`FX:XAGUSD`), **DXY** (`TVC:DXY`), **NQ** (Nasdaq 100, `OANDA:NAS100USD`), **S&P**
+(`OANDA:SPX500USD`) or **DJI** (Dow Jones 30, `OANDA:US30USD`). Picking one moves the
+whole screener to it, as **Settings > Data source** does: the feed reconnects and the
+scan, levels and alerts follow the new market after its first scan. The indices are
+OANDA's CFDs, which trade nearly round the clock like gold. The same menu lists the
+source, bar times, candles and last scan. **Journal** and **Settings** are the two
+icons at the right end of the top bar; their pages keep a slim header with
+**Chart**, **Journal** and **Settings** to come back.
+
+The levels-pane button near the right end of the chart's top bar hides the right pane
 (bias, levels, structure and events) so the chart takes the full width, and
 shows it again. The dashboard remembers the choice in this browser.
 
@@ -119,14 +130,14 @@ once, each where it sits in the grid with its timeframe on it, and one footer.
 
 ## Drawings
 
-The chart's top bar holds, left to right: the symbol and its info (source, bar
-times, candles, last scan), the timeframes (an arrow shows each one's bias), the
+The chart's top bar holds, left to right: the market menu (the symbol, the markets it
+can switch to, and its source, bar times, candles and last scan), the timeframes (an arrow shows each one's bias), the
 chart type, **Indicators**, **Layers** (the detectors and overlays: Mid OBs, HTF, Swings,
 Quarters, News), **Sessions**, undo and redo, **Workspace**, bar replay (▶) and
 the link button. At the right end: the camera (copy, save or attach a picture of
 the chart), chart settings, the light / dark switch, the pop-out, full screen and
-levels-pane buttons, and **⋯** (follow the system's theme again, the keyboard
-shortcuts).
+levels-pane buttons, **⋯** (follow the system's theme again, the keyboard
+shortcuts), then **Journal** and **Settings**.
 
 The chart type draws filled candles, hollow candles (up candles drawn as an
 outline) or Heikin Ashi, on every chart and window. Heikin Ashi changes only the

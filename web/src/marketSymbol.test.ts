@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { foldTick, paneSymbol } from "./marketSymbol.ts";
+import { foldTick, paneSymbol, TICKERS, tickerName } from "./marketSymbol.ts";
 
 test("a pane symbol is a TradingView name, or null for the scanned one", () => {
   assert.equal(paneSymbol("fx:xagusd", "FX:XAUUSD"), "FX:XAGUSD");
@@ -22,4 +22,13 @@ test("ticks build the forming M1 candle", () => {
   assert.deepEqual(bar, { time: t0, open: 48.4, high: 48.5, low: 48.3, close: 48.3 });
   bar = foldTick(bar, 48.35, t0 + 61); // the next minute opens on its first tick
   assert.deepEqual(bar, { time: t0 + 60, open: 48.35, high: 48.35, low: 48.35, close: 48.35 });
+});
+
+test("the chart's market menu: six markets, shown without the exchange", () => {
+  assert.deepEqual(TICKERS.map((t) => t.short), ["XAU", "XAG", "DXY", "NQ", "S&P", "DJI"]);
+  assert.equal(new Set(TICKERS.map((t) => t.symbol)).size, TICKERS.length);
+  assert.ok(TICKERS.every((t) => paneSymbol(t.symbol, "") === t.symbol), "each is a valid TradingView symbol");
+  assert.equal(tickerName("FX:XAUUSD"), "XAUUSD");
+  assert.equal(tickerName("OANDA:NAS100USD"), "NAS100USD");
+  assert.equal(tickerName("XAUUSD"), "XAUUSD");
 });
