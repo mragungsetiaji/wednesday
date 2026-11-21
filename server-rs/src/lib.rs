@@ -27,7 +27,7 @@ pub use wednesday_base::pyjson;
 pub use wednesday_scan as scan;
 pub mod settings_routes;
 pub mod snapshots;
-pub mod store;
+pub use wednesday_store as store;
 pub mod terms;
 pub mod ui;
 

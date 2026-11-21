@@ -21,12 +21,13 @@ axum = { version = "0.8", default-features = false, features = ["http1", "json",
 http-body-util = "0.1"
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
-log = "0.4"
+log.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 serde_json.workspace = true
 wednesday-base.workspace = true
 wednesday-scan.workspace = true
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite", "postgres"] }
+wednesday-store.workspace = true
+sqlx.workspace = true
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = "0.1"
 ring = "0.17"

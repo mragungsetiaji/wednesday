@@ -486,7 +486,7 @@ impl Store {
     }
 
     pub async fn set_setting(&self, key: &str, value: &Value) -> Result<(), String> {
-        self.upsert("settings", vec![("key", Arg::Str(Some(key.into()))), ("value", Arg::Str(Some(crate::pyjson::dumps(value))))],
+        self.upsert("settings", vec![("key", Arg::Str(Some(key.into()))), ("value", Arg::Str(Some(wednesday_base::pyjson::dumps(value))))],
                     &["key"])
             .await
     }
@@ -518,7 +518,7 @@ impl Store {
     /// A drawing row as `drawings.clean_drawing` makes it, plus source and symbol.
     pub async fn drawing_put(&self, row: &Map<String, Value>) -> Result<(), String> {
         let s = |k: &str| Arg::Str(row.get(k).and_then(Value::as_str).map(String::from));
-        let j = |k: &str| Arg::Str(row.get(k).filter(|v| !v.is_null()).map(crate::pyjson::dumps));
+        let j = |k: &str| Arg::Str(row.get(k).filter(|v| !v.is_null()).map(wednesday_base::pyjson::dumps));
         let b = |k: &str| Arg::Bool(row.get(k).and_then(Value::as_bool).unwrap_or(false));
         self.upsert("drawings", vec![("id", s("id")), ("source", s("source")), ("symbol", s("symbol")), ("kind", s("kind")),
                                      ("points", j("points")), ("style", j("style")), ("props", j("props")),
@@ -577,15 +577,15 @@ impl Store {
 impl Store {
     /// Add or update past and coming releases (`calendar_put`); a known figure isn't wiped by a
     /// row without it. A key given twice ends as Python's one-row-at-a-time upserts leave it.
-    pub async fn calendar_put(&self, rows: &[crate::calendar::CalRow]) -> Result<(), String> {
-        let mut merged: Vec<crate::calendar::CalRow> = Vec::with_capacity(rows.len());
+    pub async fn calendar_put(&self, rows: &[CalRow]) -> Result<(), String> {
+        let mut merged: Vec<CalRow> = Vec::with_capacity(rows.len());
         let mut at: std::collections::HashMap<(i64, &str, &str), usize> = Default::default();
         for r in rows {
             match at.get(&(r.time, r.currency.as_str(), r.title.as_str())) {
                 Some(&i) => {
                     let old = &merged[i];
                     let keep = |new: &Option<String>, old: &Option<String>| new.clone().or_else(|| old.clone());
-                    merged[i] = crate::calendar::CalRow { forecast: keep(&r.forecast, &old.forecast),
+                    merged[i] = CalRow { forecast: keep(&r.forecast, &old.forecast),
                                                           previous: keep(&r.previous, &old.previous),
                                                           actual: keep(&r.actual, &old.actual), ..r.clone() };
                 }
@@ -622,7 +622,7 @@ impl Store {
     /// Stored releases, newest first (`calendar_history`); an imported release without an impact
     /// counts under any. Empty lists don't filter.
     pub async fn calendar_history(&self, currencies: &[String], impacts: &[String], before: Option<i64>)
-        -> Result<Vec<crate::calendar::CalRow>, String> {
+        -> Result<Vec<CalRow>, String> {
         let mut sql = String::from("SELECT * FROM calendar_events WHERE 1 = 1");
         let mut args = Vec::new();
         let marks = |n: usize| vec!["?"; n].join(", ");
@@ -640,7 +640,7 @@ impl Store {
         }
         sql += " ORDER BY \"time\" DESC";
         let rows = self.rows("calendar_events", &sql, args).await?;
-        Ok(rows.iter().filter_map(crate::calendar::CalRow::from_json).collect())
+        Ok(rows.iter().filter_map(CalRow::from_json).collect())
     }
 
     /// Stored releases: count, first and last time (unix seconds), as `calendar_bounds`.
@@ -658,6 +658,34 @@ impl Store {
             Pool::Sqlite(p) => go!(p),
             Pool::Postgres(p) => go!(p),
         }
+    }
+}
+
+/// A `calendar_events` row.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CalRow {
+    pub time: i64, // the release, unix seconds UTC
+    pub currency: String,
+    pub title: String,
+    pub impact: Option<String>,
+    pub forecast: Option<String>,
+    pub previous: Option<String>,
+    pub actual: Option<String>,
+    pub source: String,
+}
+
+impl CalRow {
+    pub fn to_json(&self) -> Value {
+        serde_json::json!({"time": self.time, "currency": self.currency, "title": self.title, "impact": self.impact,
+               "forecast": self.forecast, "previous": self.previous, "actual": self.actual, "source": self.source})
+    }
+
+    /// A row as the store gives it back.
+    pub fn from_json(r: &Map<String, Value>) -> Option<CalRow> {
+        let s = |k: &str| r.get(k).and_then(Value::as_str).map(String::from);
+        Some(CalRow { time: r.get("time")?.as_i64()?, currency: s("currency")?, title: s("title")?, impact: s("impact"),
+                      forecast: s("forecast"), previous: s("previous"), actual: s("actual"),
+                      source: s("source").unwrap_or_default() })
     }
 }
 

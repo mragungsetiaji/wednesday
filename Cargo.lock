@@ -5440,6 +5440,7 @@ dependencies = [
  "tokio-stream",
  "wednesday-base",
  "wednesday-scan",
+ "wednesday-store",
  "windows-sys 0.61.2",
  "zip",
 ]
@@ -5451,6 +5452,18 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "serde_json",
+]
+
+[[package]]
+name = "wednesday-store"
+version = "0.3.2"
+dependencies = [
+ "chrono",
+ "log",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "wednesday-base",
 ]
 
 [[package]]

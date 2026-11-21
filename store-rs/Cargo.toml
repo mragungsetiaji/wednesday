@@ -1,0 +1,18 @@
+[package]
+name = "wednesday-store"
+version.workspace = true
+description = "Wednesday's database in Rust: the tables storage.py makes, on SQLite and PostgreSQL"
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+log.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+wednesday-base.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

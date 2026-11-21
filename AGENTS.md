@@ -96,8 +96,8 @@ detectors, setups, sessions, quarters) exists twice, `src/wednesday/` and
   view works in New York time. Convert with `quarters.to_new_york` / `utc_to_feed` rather
   than assuming UTC.
 - **Storage runs on SQLite and PostgreSQL.** Go through `storage.py` (SQLAlchemy); no
-  SQLite-only SQL. The Rust server (`server-rs/src/store.rs`) makes the same tables from
-  `server-rs/schema.json`: after changing a table, run
+  SQLite-only SQL. The Rust server (`store-rs/src/lib.rs`) makes the same tables from
+  `store-rs/schema.json`: after changing a table, run
   `UPDATE_RUST_SCHEMA=1 uv run pytest tests/test_rust_schema.py` and `make test-tauri`.
 - **Optional extras stay optional.** `postgres` and `desktop` are extras; import them
   inside the function that needs them so the core runs without them, and report a missing one as an install hint.

@@ -1,6 +1,6 @@
 """The database schema the Rust server creates (#96): generated from ``storage.metadata``.
 
-``server-rs/schema.json`` holds, per table, the ``CREATE TABLE`` and ``CREATE INDEX`` statements
+``store-rs/schema.json`` holds, per table, the ``CREATE TABLE`` and ``CREATE INDEX`` statements
 SQLAlchemy issues on SQLite and on PostgreSQL, and each column's type and nullability (for adding
 columns a newer version introduced to an older database). The Rust store runs exactly these, so
 both servers make and read the same tables. After a change to the tables in ``storage.py``:
@@ -19,7 +19,7 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 
 from wednesday.storage import metadata
 
-SCHEMA = Path(__file__).parents[1] / "server-rs" / "schema.json"
+SCHEMA = Path(__file__).parents[1] / "store-rs" / "schema.json"
 DIALECTS = {"sqlite": sqlite.dialect(), "postgresql": postgresql.dialect()}
 
 
@@ -48,4 +48,4 @@ def test_the_rust_schema_matches_storage():
         return
     assert json.loads(SCHEMA.read_text(encoding="utf-8")) == now, (
         "storage.py's tables changed: run UPDATE_RUST_SCHEMA=1 uv run pytest tests/test_rust_schema.py "
-        "and make the Rust store (server-rs/src/store.rs) handle the new columns")
+        "and make the Rust store (store-rs/src/lib.rs) handle the new columns")

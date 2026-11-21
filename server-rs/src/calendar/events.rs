@@ -2,7 +2,7 @@
 //! with the bits of Python's string and time handling they lean on.
 
 use chrono::{DateTime, Duration, FixedOffset, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 // ---- Python's strings ----
 
@@ -238,33 +238,7 @@ pub fn parse_events(payload: &[Value]) -> Vec<Value> {
 
 // ---- the history's rows ----
 
-/// A `calendar_events` row.
-#[derive(Clone, Debug, PartialEq)]
-pub struct CalRow {
-    pub time: i64, // the release, unix seconds UTC
-    pub currency: String,
-    pub title: String,
-    pub impact: Option<String>,
-    pub forecast: Option<String>,
-    pub previous: Option<String>,
-    pub actual: Option<String>,
-    pub source: String,
-}
-
-impl CalRow {
-    pub fn to_json(&self) -> Value {
-        json!({"time": self.time, "currency": self.currency, "title": self.title, "impact": self.impact,
-               "forecast": self.forecast, "previous": self.previous, "actual": self.actual, "source": self.source})
-    }
-
-    /// A row as the store gives it back.
-    pub fn from_json(r: &Map<String, Value>) -> Option<CalRow> {
-        let s = |k: &str| r.get(k).and_then(Value::as_str).map(String::from);
-        Some(CalRow { time: r.get("time")?.as_i64()?, currency: s("currency")?, title: s("title")?, impact: s("impact"),
-                      forecast: s("forecast"), previous: s("previous"), actual: s("actual"),
-                      source: s("source").unwrap_or_default() })
-    }
-}
+pub use wednesday_store::CalRow;
 
 /// `_figure`: the text, stripped and cut to 40 characters; None when empty.
 fn figure(v: Option<&Value>) -> Option<String> {

@@ -98,7 +98,7 @@ The Rust crates form one Cargo workspace (`Cargo.toml` at the root): one `Cargo.
 builds keep only line tables for our code and no debug info for dependencies, and
 `.cargo/config.toml` limits builds to two jobs (CI sets `CARGO_BUILD_JOBS`).
 The crates, each a folder at the root: `base-rs` (`wednesday-base`: Python-identical JSON and
-text, `.env` settings, a route's `Answer`/`Refusal`), `scan-rs` (`wednesday-scan`: the scan),
+text, `.env` settings, a route's `Answer`/`Refusal`), `scan-rs` (`wednesday-scan`: the scan), `store-rs` (`wednesday-store`: the database and `schema.json`),
 `server-rs` (`wednesday-rs`: the routes, store, engine and features) and `src-tauri` (the shell).
 A crate that doesn't change isn't rebuilt. The integration tests are one binary, `server-rs/tests/it/` (`main.rs` lists the modules; a test that
 sets environment variables holds `env_lock()`): `cargo test -p wednesday-rs --test it <filter>`.
@@ -116,10 +116,10 @@ For comparing the two, `--backend <port>` puts it back in front of a Python serv
 request to Python, streaming the answer back. Each answer then carries
 `x-wednesday-server: rust` or `python`.
 
-- **The database.** `server-rs/src/store.rs` opens the same database as Python
+- **The database.** `store-rs/src/lib.rs` opens the same database as Python
   (`XAU_DB_URL` from the environment or the home folder's `.env`, else
   `sqlite:///data/xau.db` in the home folder), on SQLite or PostgreSQL. It makes the
-  tables from `server-rs/schema.json`, which `tests/test_rust_schema.py` generates from
+  tables from `store-rs/schema.json`, which `tests/test_rust_schema.py` generates from
   `storage.py`, and stores JSON as Python's `json.dumps` writes it. When Rust can't open
   the database (or `XAU_DB_URL=none`), Python serves those routes.
 - **No login.** The dashboard runs on the trader's machine; ported routes refuse
