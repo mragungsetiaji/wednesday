@@ -76,7 +76,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: ". -> target"
 
       - name: Install the Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
@@ -84,12 +84,14 @@ jobs:
       - name: Build the installer (Tauri, NSIS)
         working-directory: src-tauri
         shell: pwsh
+        env:
+          CARGO_BUILD_JOBS: "4"  # .cargo/config.toml keeps local builds to 2
         run: |
           cargo tauri build --config tauri.release.conf.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           # The name the README and earlier releases use.
-          $setup = Get-ChildItem target\release\bundle\nsis\*-setup.exe | Select-Object -First 1
-          if (-not $setup) { Write-Error "No NSIS installer in target\release\bundle\nsis"; exit 1 }
+          $setup = Get-ChildItem ..\target\release\bundle\nsis\*-setup.exe | Select-Object -First 1
+          if (-not $setup) { Write-Error "No NSIS installer in ..\target\release\bundle\nsis"; exit 1 }
           New-Item -ItemType Directory -Force ..\dist | Out-Null
           Copy-Item $setup.FullName "..\dist\WednesdaySetup-${{ steps.version.outputs.version }}.exe"
 

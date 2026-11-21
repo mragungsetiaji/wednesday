@@ -11,3 +11,4 @@ data/
 logs/
 tradingview/node_modules/
 packaging/node/
+/target/

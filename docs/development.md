@@ -93,6 +93,11 @@ Starlette's `StaticFiles(html=True)` did). An unknown `/api` route is FastAPI's 
 `{"detail": "Not Found"}`. The desktop app runs it in its own process; there is no Python in the
 installer.
 
+The Rust crates form one Cargo workspace (`Cargo.toml` at the root): one `Cargo.lock`, one
+`target/` folder, one version (`[workspace.package]`, set by `scripts/set_version.py`). Debug
+builds keep only line tables for our code and no debug info for dependencies, and
+`.cargo/config.toml` limits builds to two jobs (CI sets `CARGO_BUILD_JOBS`).
+
 ```bash
 cd server-rs && cargo run -- [--host 127.0.0.1] [--port 8000] [--home DIR] [--db URL] [--ui-dir DIR] [--source synthetic]
 ```

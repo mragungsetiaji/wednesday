@@ -1,0 +1,23 @@
+# One Cargo workspace for every Rust crate in the repo: one Cargo.lock and one target/ folder,
+# so the dependencies (tokio, axum, sqlx, reqwest, tauri...) build once for the server and the
+# desktop shell instead of twice.
+
+[workspace]
+resolver = "2"
+members = ["server-rs", "src-tauri"]
+
+[workspace.package]
+version = "0.3.2"
+edition = "2021"
+rust-version = "1.77.2"
+license-file = "LICENSE"
+publish = false
+
+# Debug builds stay light: line numbers for our own code (backtraces still point at lines),
+# no debug info for dependencies. Debug info is most of target/ and of the link time.
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+debug = false

@@ -30,11 +30,10 @@ PLACES: list[tuple[str, re.Pattern, int]] = [
     ("web/package-lock.json", re.compile(r'(\n    "": \{\n      "name": "[^"]+",\n      "version": ")([^"]+)(")'), 1),
     # The Tauri desktop shell (src-tauri, #92): its config, crate and lock entry
     ("src-tauri/tauri.conf.json", re.compile(r'^(  "version": ")([^"]+)(")', re.M), 1),
-    ("src-tauri/Cargo.toml", re.compile(r'^(version = ")([^"]+)(")', re.M), 1),
-    ("src-tauri/Cargo.lock", re.compile(r'(\[\[package\]\]\nname = "wednesday-desktop"\nversion = ")([^"]+)(")'), 1),
-    ("src-tauri/Cargo.lock", re.compile(r'(\[\[package\]\]\nname = "wednesday-rs"\nversion = ")([^"]+)(")'), 1),
-    ("server-rs/Cargo.toml", re.compile(r'^(version = ")([^"]+)(")', re.M), 1),
-    ("server-rs/Cargo.lock", re.compile(r'(\[\[package\]\]\nname = "wednesday-rs"\nversion = ")([^"]+)(")'), 1),
+    # The Rust workspace (server-rs, src-tauri): one version for every crate, and the lock entries
+    ("Cargo.toml", re.compile(r'(?<=^\[workspace\.package\]\n)(version = ")([^"]+)(")', re.M), 1),
+    ("Cargo.lock", re.compile(r'(\[\[package\]\]\nname = "wednesday-desktop"\nversion = ")([^"]+)(")'), 1),
+    ("Cargo.lock", re.compile(r'(\[\[package\]\]\nname = "wednesday-rs"\nversion = ")([^"]+)(")'), 1),
 ]
 
 

@@ -1,0 +1,4 @@
+# Two compile jobs at a time so a build doesn't take the whole laptop; CI raises it with
+# CARGO_BUILD_JOBS.
+[build]
+jobs = 2
