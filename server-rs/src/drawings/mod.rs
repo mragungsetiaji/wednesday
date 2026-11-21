@@ -12,7 +12,7 @@
 pub mod checker;
 pub mod clean;
 pub mod events;
-pub mod py;
+pub use wednesday_base::py;
 pub mod routes;
 
 pub use checker::DrawingAlerts;

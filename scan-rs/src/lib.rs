@@ -25,6 +25,6 @@ pub use levels::Level;
 pub use scanner::{scan, ScanConfig, ScanResult};
 
 /// Python's `round(x, digits)`: the nearest decimal, read from the float's exact value.
-pub(crate) fn round_to(x: f64, digits: usize) -> f64 {
+pub fn round_to(x: f64, digits: usize) -> f64 {
     format!("{x:.digits$}").parse().unwrap_or(x)
 }

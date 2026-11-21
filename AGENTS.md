@@ -59,7 +59,7 @@ to compare them, with Python following the Rust engine (`FollowFeed`, `WEDNESDAY
 route must answer as `tests/api_contract.json` says and match `tests/golden/` where it scans,
 and refuses cross-site writes as `same_site.py` does. The scan itself (resampling, structure,
 detectors, setups, sessions, quarters) exists twice, `src/wednesday/` and
-`server-rs/src/scan/`: a change to one must go into the other, and both `make test` and
+`scan-rs/src/`: a change to one must go into the other, and both `make test` and
 `make test-tauri` check them against the same `tests/golden/`.
 
 ## Rules that matter here

@@ -67,9 +67,8 @@ dev-ui:
 tauri: $(UI_BUILD) ## The Tauri desktop app (src-tauri), with the Rust server in its process
 	cd src-tauri && cargo run
 
-test-tauri: ## Run the Rust tests: the Tauri shell and the Rust server (server-rs), against tests/golden
-	cd src-tauri && cargo test
-	cd server-rs && cargo test
+test-tauri: ## Run the Rust tests: every crate of the workspace (shell, server, scan), against tests/golden
+	cargo test --workspace
 
 serve-rs: ## Compare: the Rust server on PORT in front of a running Python one on PORT+1 (make serve-py PORT=8001 first; ARGS=--engine runs the engine)
 	cd server-rs && cargo run -- --port $(PORT) --backend $$(( $(PORT) + 1 )) --home $(CURDIR) $(ARGS)

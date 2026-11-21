@@ -15,15 +15,17 @@ name = "wednesday-rs"
 path = "src/main.rs"
 
 [dependencies]
-chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
-chrono-tz = "0.10"
+chrono.workspace = true
+chrono-tz.workspace = true
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
 http-body-util = "0.1"
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 log = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+serde_json.workspace = true
+wednesday-base.workspace = true
+wednesday-scan.workspace = true
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite", "postgres"] }
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-stream = "0.1"

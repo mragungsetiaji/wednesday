@@ -97,7 +97,10 @@ The Rust crates form one Cargo workspace (`Cargo.toml` at the root): one `Cargo.
 `target/` folder, one version (`[workspace.package]`, set by `scripts/set_version.py`). Debug
 builds keep only line tables for our code and no debug info for dependencies, and
 `.cargo/config.toml` limits builds to two jobs (CI sets `CARGO_BUILD_JOBS`).
-The integration tests are one binary, `server-rs/tests/it/` (`main.rs` lists the modules; a test that
+The crates, each a folder at the root: `base-rs` (`wednesday-base`: Python-identical JSON and
+text, `.env` settings, a route's `Answer`/`Refusal`), `scan-rs` (`wednesday-scan`: the scan),
+`server-rs` (`wednesday-rs`: the routes, store, engine and features) and `src-tauri` (the shell).
+A crate that doesn't change isn't rebuilt. The integration tests are one binary, `server-rs/tests/it/` (`main.rs` lists the modules; a test that
 sets environment variables holds `env_lock()`): `cargo test -p wednesday-rs --test it <filter>`.
 
 ```bash
@@ -188,7 +191,7 @@ and what one writes the other reads. It runs on SQLite, and on PostgreSQL when
 databases (`postgresql://postgres@127.0.0.1:5432/postgres`); otherwise it says
 PostgreSQL was skipped.
 
-The scan exists twice (`server-rs/src/scan/` and `src/wednesday/`: resampling, structure,
+The scan exists twice (`scan-rs/src/` and `src/wednesday/`: resampling, structure,
 the detectors, setups, session levels and quarters) and both give the same output on
 `tests/golden/`. A change to one goes into the other.
 

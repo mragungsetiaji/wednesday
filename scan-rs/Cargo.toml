@@ -1,0 +1,13 @@
+[package]
+name = "wednesday-scan"
+version.workspace = true
+description = "Wednesday's scan: M1 to 4H-5M candles, structure, detectors, setups, sessions and quarters"
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono.workspace = true
+chrono-tz.workspace = true
+serde_json.workspace = true

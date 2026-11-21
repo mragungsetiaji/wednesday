@@ -11,21 +11,7 @@ pub mod charts;
 pub mod feed;
 pub mod markets;
 
-/// A route's refusal: the HTTP status and FastAPI's `detail` (a message, or its validation list).
-#[derive(Debug)]
-pub struct Refusal {
-    pub status: u16,
-    pub detail: Value,
-}
-
-impl Refusal {
-    pub fn new(status: u16, detail: impl Into<Value>) -> Refusal {
-        Refusal { status, detail: detail.into() }
-    }
-}
-
-/// What a ported engine route gives: its JSON body, or a refusal.
-pub type Answer = Result<Value, Refusal>;
+pub use wednesday_base::{Answer, Refusal};
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;

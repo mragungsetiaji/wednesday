@@ -29,36 +29,7 @@ pub const CALENDAR_KEY: &str = "calendar";
 pub const DEFAULT_URL: &str = "https://nfs.faireconomy.media/ff_calendar_thisweek.json";
 pub const IMPACTS: [&str; 3] = ["High", "Medium", "Low"];
 
-/// Python's `repr(s)` for a string.
-pub fn py_repr(s: &str) -> String {
-    let quote = if s.contains('\'') && !s.contains('"') { '"' } else { '\'' };
-    let mut out = String::from(quote);
-    for c in s.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '\t' => out.push_str("\\t"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            c if c == quote => {
-                out.push('\\');
-                out.push(c);
-            }
-            c if c.is_control() || (c.is_whitespace() && c != ' ') => {
-                let n = c as u32;
-                if n < 0x100 {
-                    out.push_str(&format!("\\x{n:02x}"));
-                } else if n < 0x10000 {
-                    out.push_str(&format!("\\u{n:04x}"));
-                } else {
-                    out.push_str(&format!("\\U{n:08x}"));
-                }
-            }
-            c => out.push(c),
-        }
-    }
-    out.push(quote);
-    out
-}
+pub use wednesday_base::py::py_repr;
 
 // ---- the settings (CalendarSettings) ----
 

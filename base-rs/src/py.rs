@@ -103,11 +103,11 @@ pub fn repr(v: &Value) -> String {
         Value::Null => "None".into(),
         Value::Bool(b) => (if *b { "True" } else { "False" }).into(),
         Value::Number(_) => crate::pyjson::dumps(v),
-        Value::String(s) => crate::calendar::py_repr(s),
+        Value::String(s) => py_repr(s),
         Value::Array(a) => format!("[{}]", a.iter().map(repr).collect::<Vec<_>>().join(", ")),
         Value::Object(m) => format!(
             "{{{}}}",
-            m.iter().map(|(k, x)| format!("{}: {}", crate::calendar::py_repr(k), repr(x))).collect::<Vec<_>>().join(", ")
+            m.iter().map(|(k, x)| format!("{}: {}", py_repr(k), repr(x))).collect::<Vec<_>>().join(", ")
         ),
     }
 }
@@ -153,6 +153,37 @@ pub fn grouped(v: f64, digits: usize) -> String {
         out.push('.');
         out.push_str(f);
     }
+    out
+}
+
+/// Python's `repr(s)` for a string.
+pub fn py_repr(s: &str) -> String {
+    let quote = if s.contains('\'') && !s.contains('"') { '"' } else { '\'' };
+    let mut out = String::from(quote);
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\t' => out.push_str("\\t"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c if c.is_control() || (c.is_whitespace() && c != ' ') => {
+                let n = c as u32;
+                if n < 0x100 {
+                    out.push_str(&format!("\\x{n:02x}"));
+                } else if n < 0x10000 {
+                    out.push_str(&format!("\\u{n:04x}"));
+                } else {
+                    out.push_str(&format!("\\U{n:08x}"));
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
     out
 }
 

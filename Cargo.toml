@@ -4,7 +4,7 @@
 
 [workspace]
 resolver = "2"
-members = ["server-rs", "src-tauri"]
+members = ["base-rs", "scan-rs", "server-rs", "src-tauri"]
 
 [workspace.package]
 version = "0.3.2"
@@ -12,6 +12,14 @@ edition = "2021"
 rust-version = "1.77.2"
 license-file = "LICENSE"
 publish = false
+
+# Versions shared by the crates (`dep.workspace = true` in a member).
+[workspace.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+chrono-tz = "0.10"
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+wednesday-base = { path = "base-rs" }
+wednesday-scan = { path = "scan-rs" }
 
 # Debug builds stay light: line numbers for our own code (backtraces still point at lines),
 # no debug info for dependencies. Debug info is most of target/ and of the link time.

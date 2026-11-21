@@ -1,0 +1,11 @@
+[package]
+name = "wednesday-base"
+version.workspace = true
+description = "What Wednesday's Rust crates share: Python-identical JSON and text, .env settings, routes' answers"
+edition.workspace = true
+rust-version.workspace = true
+license-file.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true
