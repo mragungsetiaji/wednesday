@@ -83,6 +83,8 @@ export function JournalChart({ stats, view, palette, currency }: { stats: Journa
     return () => {
       chart.remove();
       chartRef.current = null;
+      // Its series went with it; removing them from the next chart throws.
+      seriesRef.current = [];
     };
   }, []);
 
