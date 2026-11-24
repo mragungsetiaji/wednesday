@@ -114,3 +114,8 @@ detectors, setups, sessions, quarters) exists twice, `src/wednesday/` and
 Match the surrounding code: type hints, dataclasses for settings with
 `from_dict`/`to_dict`, short docstrings that say what and why. User-facing text (dashboard, docs, errors) is plain and
 direct, and error messages say what to do next ("Set the bot token in Settings > Telegram alerts").
+
+## Commits
+
+Never add a `Co-Authored-By:` trailer (or any other co-author or "generated with"
+line) to commit messages or pull request descriptions.

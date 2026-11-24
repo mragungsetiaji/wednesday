@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+.env.*
+data
+target
+web/node_modules
+web/dist
+tradingview
+src/xau_screener
+**/__pycache__
+**/*.pyc

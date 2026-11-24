@@ -11,5 +11,6 @@
 | [Configuration](configuration.md) | Make targets, CLI options, `.env` |
 | [Windows desktop app](desktop.md) | The installer, where settings live, building a release |
 | [Windows and VPS](deploy-windows.md) | Running from source on Windows, 24/7 on a VPS |
+| [Docker](deploy-docker.md) | The Rust server in one container, behind a reverse proxy with a login |
 | [Plugins](plugins.md) | Extra features from a separate package: entry point, context, hooks, versioning |
 | [Development](development.md) | Project layout, tests, how a scan flows |
