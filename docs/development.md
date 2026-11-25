@@ -56,9 +56,12 @@ src/wednesday/
   news.py         economic calendar (ForexFactory weekly feed) for the risk-time card; every week kept in calendar_events
   news_stats.py   gold's move after past releases per event type (M1, feed clock), calendar CSV import
   storage.py      SQLAlchemy store: settings, M1 history, alert log, journals (SQLite / PostgreSQL)
-  history.py      older candles for the chart as it scrolls left (memory, then stored M1)
+  history.py      older candles for the chart as it scrolls left (memory, then stored bars)
+  ingest.py       each timeframe's own candles from the source, stored per series, and the backfill
+  keeper.py       the markets kept live (Settings > Markets): stored beside the scanned one
   journal/        MT5 accounts: HTML report import, gain and drawdown rebuilt from M1 bars, /api/journals; sample.py builds a made-up portfolio for tests and the docs screenshot
   plugins.py      loads plugins (entry point group wednesday.plugins): routes, hooks, jobs
+  auth.py         the login on a network host: accounts, sessions, setup code, /api/auth (wed-server/src/auth.rs in Rust)
   cli.py          command line entry point
 web/              React + Vite + TypeScript dashboard (lightweight-charts)
 src-tauri/        the Tauri desktop shell (#92), with the Rust server in its process
@@ -117,8 +120,8 @@ cd wed-server && cargo run -- [--host 127.0.0.1] [--port 8000] [--home DIR] [--d
 ```
 
 `--home` is the data folder (its `.env`, and `data/xau.db` by default; `make serve` and `make dev`
-use the checkout). Like `wednesday --serve`, it refuses a host that isn't loopback unless
-`--insecure`: the dashboard has no login. `XAU_HOST` and `XAU_PORT` work as for Python.
+use the checkout). Like `wednesday --serve`, it asks for a login on a host that isn't loopback
+(or with `--login`), unless `--insecure`. `XAU_HOST` and `XAU_PORT` work as for Python.
 
 For comparing the two, `--backend <port>` puts it back in front of a Python server
 (`make serve-rs`): it answers the routes in `PORTED` and `ENGINE_ROUTES` and passes every other
@@ -131,8 +134,11 @@ request to Python, streaming the answer back. Each answer then carries
   tables from `wed-store/schema.json`, which `tests/test_rust_schema.py` generates from
   `storage.py`, and stores JSON as Python's `json.dumps` writes it. When Rust can't open
   the database (or `XAU_DB_URL=none`), Python serves those routes.
-- **No login.** The dashboard runs on the trader's machine; ported routes refuse
-  cross-site writes as `same_site.py` does.
+- **The login** (`wed-server/src/auth.rs`, Python's `auth.py`): off on loopback, on for a
+  network host or `--login`. Accounts are rows of `users` (argon2id hashes), sessions rows of
+  `sessions` keyed by the token's SHA-256; a middleware answers 401 on every `/api` route but
+  `auth::PUBLIC`. Both servers hash and check passwords the same way, so either reads the
+  other's accounts. Ported routes refuse cross-site writes as `same_site.py` does.
 - **Drawings and alerts** run with the engine (step 9e). `wed-drawings/src/` has the
   drawings routes and the drawing alerts (`checker.rs`, checked after each scan and, for
   intrabar alerts, on each tick); `wed-alerts/src/` has the order block alerts, the
@@ -152,7 +158,7 @@ request to Python, streaming the answer back. Each answer then carries
   A second journal needs the `journal.multi` feature, read from the plugin host's registry
   (`wed-plugins/src/`, see `docs/plugins.md`).
 - **The engine** runs in Rust (`wed-engine/src/`): the feed (`feed.rs`: TradingView over
-  `tradingview.rs`, its websocket; synthetic data), the M1 buffer stored in `m1_bars`, the scan after each minute close,
+  `tradingview.rs`, its websocket; synthetic data), the M1 buffer stored in `bars` (tf `1m`), the scan after each minute close,
   the live price and the forming candle. It answers `/api/status`, `/api/scan`, `/api/tick`,
   `/api/stream`, `/api/settings`, the charts (`charts.rs`: `/api/candles`, `/api/replay`,
   `/api/replay/range`, `/api/clock/feed`), the analysis views (`analysis.rs`: `/api/sessions`,

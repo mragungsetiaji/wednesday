@@ -91,9 +91,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--serve", action="store_true", default=_env("XAU_SERVE") == "1",
                    help="run the web dashboard + API alongside the scan loop")
     p.add_argument("--host", default=_env("XAU_HOST") or "127.0.0.1",
-                   help="dashboard bind address; anything but loopback needs --insecure")
+                   help="dashboard bind address; anything but loopback asks for a login")
     p.add_argument("--insecure", action="store_true",
-                   help="allow a non-loopback --host (the dashboard has no login: anyone who can reach the port controls it)")
+                   help="no login on a non-loopback --host (development only: anyone who can reach the port controls it)")
+    p.add_argument("--login", action="store_true", default=_env("XAU_LOGIN") == "1",
+                   help="ask for a login on 127.0.0.1 too (behind a reverse proxy on this machine)")
+    p.add_argument("--create-user", metavar="USERNAME",
+                   help="create a dashboard account, or set a new password on it, and exit")
     p.add_argument("--port", type=int, default=_env("XAU_PORT", int) or 8000)
     p.add_argument("--ui-dir", default=_env("XAU_UI_DIR"), help="built dashboard folder (default web/dist)")
     p.add_argument("--json-out", default=_env("XAU_JSON_OUT"), help="append each scan as a JSON line to this file")
@@ -144,15 +148,34 @@ def is_loopback(host: str) -> bool:
         return False
 
 
-def check_host(args: argparse.Namespace) -> None:
-    """Refuse a network-reachable dashboard unless --insecure: it has no login."""
+def login_on(args: argparse.Namespace) -> bool:
+    """The login is on for a network host (unless --insecure) and with --login; off on 127.0.0.1."""
     if is_loopback(args.host):
-        return
-    if not args.insecure:
-        raise SystemExit(f"Refusing to serve the dashboard on {args.host}: it has no login, so anyone who can "
-                         "reach the port could change settings and delete data. Bind to 127.0.0.1, reach it "
-                         "through an SSH tunnel or a VPN (see docs/deploy-windows.md), or pass --insecure.")
-    log.warning("dashboard on %s, reachable by anyone who can reach the port (--insecure)", args.host)
+        return bool(args.login)
+    if args.insecure:
+        log.warning("dashboard on %s with no login, reachable by anyone who can reach the port (--insecure)",
+                    args.host)
+        return False
+    return True
+
+
+def create_user(args: argparse.Namespace, store) -> None:
+    """``--create-user``: read the password twice from the terminal, then add or reset the account."""
+    import getpass
+
+    from .auth import Auth, AuthError
+
+    if store is None:
+        raise SystemExit("Accounts live in the database: remove XAU_DB_URL=none from .env")
+    password = getpass.getpass(f"Password for {args.create_user}: ")
+    if getpass.getpass("Again: ") != password:
+        raise SystemExit("The passwords differ; nothing changed")
+    try:
+        new = Auth(store).create_user(args.create_user, password)
+    except AuthError as exc:
+        raise SystemExit(str(exc)) from exc
+    print(f"Created the account {args.create_user.strip().lower()}." if new else
+          f"Set a new password for {args.create_user.strip().lower()}; its devices are logged out.")
 
 
 def serve_forever(app, host: str, port: int) -> None:
@@ -181,6 +204,8 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
     store = None if args.db.lower() == "none" else Store(args.db)
     if store and args.reset_settings:
         store.delete_setting(SETTINGS_KEY)
+    if args.create_user:
+        return create_user(args, store)
     if base := follow_url():  # the Rust server runs the feed (#96): run what it runs
         data = followed_settings(base)
     else:
@@ -237,8 +262,14 @@ def run(args: argparse.Namespace, serve=serve_forever) -> None:
     if args.serve:
         from .server import create_app
 
-        check_host(args)
-        app = create_app(runtime, ui_dir=args.ui_dir)
+        from .auth import Auth, AuthError
+
+        try:
+            auth = Auth(runtime.store, enabled=login_on(args))
+        except AuthError as exc:
+            raise SystemExit(str(exc)) from exc
+        auth.start(_env)
+        app = create_app(runtime, ui_dir=args.ui_dir, auth=auth)
         runtime.start()
         log.info("dashboard on http://%s:%d", args.host, args.port)
         try:

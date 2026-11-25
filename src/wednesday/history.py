@@ -2,7 +2,8 @@
 
 The scan only needs ``lookback`` candles per timeframe, so the engine keeps just
 enough M1 bars for that. Older candles come from, in order: the engine's M1
-buffer, then the M1 bars stored in the database.
+buffer, then the M1 bars stored in the database. A timeframe the source builds itself
+(``ingest.py``) pages back through its own stored candles instead.
 """
 
 from __future__ import annotations
@@ -36,6 +37,26 @@ def older_candles(engine: Engine, tf: Timeframe, before: int, limit: int) -> tup
         if len(older):
             parts.insert(0, older)
     return (pd.concat(parts) if parts else _empty()), more
+
+
+def older_native(engine: Engine, native: pd.DataFrame, tf: Timeframe, before: int,
+                 limit: int) -> tuple[pd.DataFrame, bool]:
+    """:func:`older_candles` on the source's own candles of ``tf`` (``ingest.py``): those in
+    memory, then the stored ones."""
+    from .ingest import native_tf
+
+    edge = pd.Timestamp(before, unit="s")
+    out = native[native.index < edge].tail(limit)
+    rest = limit - len(out)
+    store, key, n = engine.buffer.store, engine.buffer.key, native_tf(tf.name)
+    if rest == 0:
+        return out, True
+    if store is None or key is None or n is None:
+        return out, False
+    if len(out):
+        edge = out.index[0]
+    older = store.load_bars(*key, rest, before=int(edge.timestamp()), tf=n.tf)
+    return (pd.concat([older, out]) if len(older) else out), len(older) == rest
 
 
 def _beyond_memory(engine: Engine, tf: Timeframe, edge: pd.Timestamp, count: int) -> tuple[pd.DataFrame, bool]:

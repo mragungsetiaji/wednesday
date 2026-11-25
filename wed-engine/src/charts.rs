@@ -189,20 +189,20 @@ fn bar_of(r: &serde_json::Map<String, Value>) -> Option<Bar> {
 
 /// `Store.load_bar_range`: stored M1 bars opening in [start, end], oldest first.
 async fn load_bar_range(s: Stream<'_>, start: i64, end: i64) -> Result<Vec<Bar>, String> {
-    let sql = "SELECT time, open, high, low, close, volume FROM m1_bars \
-               WHERE source = ? AND symbol = ? AND time >= ? AND time <= ? ORDER BY time";
+    let sql = "SELECT time, open, high, low, close, volume FROM bars \
+               WHERE source = ? AND symbol = ? AND tf = '1m' AND time >= ? AND time <= ? ORDER BY time";
     let args = vec![Arg::Str(Some(s.source.into())), Arg::Str(Some(s.symbol.into())), Arg::Int(Some(start)),
                     Arg::Int(Some(end))];
-    Ok(s.store.rows("m1_bars", sql, args).await?.iter().filter_map(bar_of).collect())
+    Ok(s.store.rows("bars", sql, args).await?.iter().filter_map(bar_of).collect())
 }
 
 /// The first and last stored bar's open time (`Store.bar_bounds` without the count).
 async fn bar_bounds(s: Stream<'_>) -> Result<(Option<i64>, Option<i64>), String> {
     let mut out = [None, None];
     for (slot, order) in out.iter_mut().zip(["ASC", "DESC"]) {
-        let sql = format!("SELECT time FROM m1_bars WHERE source = ? AND symbol = ? ORDER BY time {order} LIMIT 1");
+        let sql = format!("SELECT time FROM bars WHERE source = ? AND symbol = ? AND tf = '1m' ORDER BY time {order} LIMIT 1");
         let args = vec![Arg::Str(Some(s.source.into())), Arg::Str(Some(s.symbol.into()))];
-        *slot = s.store.rows("m1_bars", &sql, args).await?.first().and_then(|r| r.get("time")?.as_i64());
+        *slot = s.store.rows("bars", &sql, args).await?.first().and_then(|r| r.get("time")?.as_i64());
     }
     Ok((out[0], out[1]))
 }
@@ -264,10 +264,55 @@ pub async fn candles(rt: &Arc<Runtime>, q: &HashMap<String, String>) -> Answer {
     let tf = timeframe(tf_name)?;
     let engine = rt.engine();
     let st = engine.state();
+    if let Some(native) = st.native.get(tf.name).filter(|c| !c.is_empty()) {
+        return match before {
+            Some(before) => native_before(native, stream_of(rt, &engine), tf, before, limit).await,
+            None => latest_native(native, &st.m1, st.result.as_deref(), tf, limit),
+        };
+    }
     match before {
         Some(before) => candles_before(&st.m1, stream_of(rt, &engine), tf, before, limit).await,
         None => latest_candles(&st.m1, st.result.as_deref(), tf, limit),
     }
+}
+
+/// [`latest_candles`] on the source's own candles of `tf`, then the forming one built from M1 on
+/// their grid, so the chart shows TradingView's candles and still ends at the live price.
+pub fn latest_native(native: &[Bar], m1: &[Bar], result: Option<&wednesday_scan::ScanResult>, tf: Timeframe,
+                     limit: usize) -> Answer {
+    let Some(result) = result else { return Err(Refusal::new(503, "no data yet")) };
+    let mut all = native.to_vec();
+    all.extend(crate::ingest::forming(native, m1, tf.minutes));
+    let (levels, swings) = levels_and_swings(result, tf);
+    Ok(json!({
+        "timeframe": tf.name,
+        "price": result.price,
+        "candles": candle_rows(tail(&all, limit)),
+        "levels": levels,
+        "swings": swings,
+    }))
+}
+
+/// [`candles_before`] on the source's own candles: those in memory, then the stored ones.
+pub async fn native_before(native: &[Bar], stream: Option<Stream<'_>>, tf: Timeframe, before: i128, limit: usize)
+    -> Answer {
+    let before = i64::try_from(before).map_err(|_| internal())?;
+    let kept: Vec<Bar> = native.iter().filter(|c| unix(c.time) < before).copied().collect();
+    let mut out = tail(&kept, limit).to_vec();
+    let mut more = false;
+    let rest = limit - out.len();
+    if let (Some(s), Some(n), true) = (stream, crate::ingest::native_tf(tf.name), rest > 0) {
+        let edge = out.first().map_or(before, |c| unix(c.time));
+        let older = super::load_series(s.store, s.source, s.symbol, n.tf, rest, Some(edge)).await.map_err(|e| {
+            log::error!("older candles: {e}");
+            internal()
+        })?;
+        more = older.len() == rest;
+        out.splice(0..0, older);
+    } else if rest == 0 {
+        more = true;
+    }
+    Ok(json!({"timeframe": tf.name, "candles": candle_rows(&out), "has_more": more}))
 }
 
 /// [`candles`] with `before`: the older candles' answer.

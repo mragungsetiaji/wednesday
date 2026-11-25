@@ -19,6 +19,20 @@ use sqlx::{PgPool, Row, SqlitePool};
 
 const SCHEMA: &str = include_str!("../schema.json");
 
+/// The data migrations, as `MIGRATIONS` in storage.py: never renumber or edit an applied one.
+const MIGRATIONS: [(i64, &str); 2] = [(1, "bars_from_m1_bars"), (2, "seed_markets")];
+
+/// The dropdown's first markets (`DEFAULT_MARKETS` in storage.py): symbol, label, name, venue.
+pub const DEFAULT_MARKETS: [(&str, &str, &str, &str); 7] = [
+    ("FX:XAUUSD", "XAU", "Gold spot", "FXCM"),
+    ("OANDA:XAUUSD", "XAU", "Gold spot", "OANDA"),
+    ("FX:XAGUSD", "XAG", "Silver spot", "FXCM"),
+    ("TVC:DXY", "DXY", "US Dollar Index", "TVC"),
+    ("OANDA:NAS100USD", "NQ", "Nasdaq 100", "OANDA"),
+    ("OANDA:SPX500USD", "S&P", "S&P 500", "OANDA"),
+    ("OANDA:US30USD", "DJI", "Dow Jones 30", "OANDA"),
+];
+
 #[derive(Clone, Debug)]
 pub enum Arg {
     Str(Option<String>),
@@ -66,6 +80,7 @@ impl Store {
     pub async fn open(url: &str, home: &Path) -> Result<Store, String> {
         let store = Store::connect(url, home).await?;
         store.create_tables().await?;
+        store.migrate().await?;
         Ok(store)
     }
 
@@ -158,6 +173,51 @@ impl Store {
                     self.execute(&sql, vec![]).await?;
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// Apply the data migrations this database hasn't had yet (`MIGRATIONS` in storage.py, the
+    /// same versions and names), each in one transaction with its `schema_migrations` row.
+    async fn migrate(&self) -> Result<(), String> {
+        let done: Vec<i64> = self
+            .rows("schema_migrations", "SELECT version FROM schema_migrations", vec![])
+            .await?
+            .iter()
+            .filter_map(|r| r.get("version")?.as_i64())
+            .collect();
+        for (version, name) in MIGRATIONS {
+            if done.contains(&version) {
+                continue;
+            }
+            let mut stmts = match version {
+                // Versions before 0.5 kept only M1 bars, in `m1_bars`: move them to `bars` as "1m".
+                // (The WHERE: SQLite reads ON after a bare SELECT as a join.)
+                1 if !self.columns("m1_bars").await?.is_empty() => vec![
+                    ("INSERT INTO bars (source, symbol, tf, time, open, high, low, close, volume) \
+                      SELECT source, symbol, '1m', time, open, high, low, close, volume FROM m1_bars WHERE 1 = 1 \
+                      ON CONFLICT DO NOTHING".to_string(), vec![]),
+                    ("DROP TABLE m1_bars".to_string(), vec![]),
+                ],
+                // The dropdown's first markets, when the list is empty.
+                2 if self.rows("markets", "SELECT symbol FROM markets LIMIT 1", vec![]).await?.is_empty() =>
+                {
+                    let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.6f+00:00").to_string();
+                    DEFAULT_MARKETS.iter().enumerate().map(|(i, (symbol, label, name, venue))| (
+                        "INSERT INTO markets (source, symbol, label, name, venue, position, keep_live, added_at) \
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)".to_string(),
+                        vec![Arg::Str(Some("tradingview".into())), Arg::Str(Some((*symbol).into())),
+                             Arg::Str(Some((*label).into())), Arg::Str(Some((*name).into())),
+                             Arg::Str(Some((*venue).into())), Arg::Int(Some(i as i64)), Arg::Bool(false),
+                             Arg::Str(Some(now.clone()))],
+                    )).collect()
+                }
+                _ => vec![],
+            };
+            let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.6f+00:00").to_string();
+            stmts.push(("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)".into(),
+                        vec![Arg::Int(Some(version)), Arg::Str(Some(name.into())), Arg::Str(Some(now))]));
+            self.transaction(stmts).await?;
         }
         Ok(())
     }
@@ -382,11 +442,12 @@ impl Store {
         Ok(Value::Object(out))
     }
 
-    // ---- M1 bars ----
+    // ---- bars ----
 
-    /// Per stored stream: source, symbol, bars, and the first and last bar's open time (`bar_stats`).
+    /// Per stored M1 stream: source, symbol, bars, and the first and last bar's open time (`bar_stats`).
     pub async fn bar_stats(&self) -> Result<Vec<Value>, String> {
-        let sql = "SELECT source, symbol, COUNT(*), MIN(time), MAX(time) FROM m1_bars GROUP BY source, symbol ORDER BY source, symbol";
+        let sql = "SELECT source, symbol, COUNT(*), MIN(time), MAX(time) FROM bars WHERE tf = '1m' \
+                   GROUP BY source, symbol ORDER BY source, symbol";
         let err = |e: sqlx::Error| e.to_string();
         let iso = |t: Option<i64>| -> Value {
             t.and_then(|t| chrono::DateTime::from_timestamp(t, 0))
@@ -418,9 +479,67 @@ impl Store {
         }
     }
 
+    /// Every stored series with its ingest state (`series_status` in storage.py): bars, first and
+    /// last open time from `bars`, and from `series` whether it is kept live, the backfill and the
+    /// last error. Longest timeframe first within a symbol.
+    pub async fn series_status(&self) -> Result<Vec<Value>, String> {
+        let sql = "SELECT source, symbol, tf, COUNT(*), MIN(time), MAX(time) FROM bars GROUP BY source, symbol, tf";
+        let err = |e: sqlx::Error| e.to_string();
+        let iso = |t: Option<i64>| -> Value {
+            t.and_then(|t| chrono::DateTime::from_timestamp(t, 0))
+                .map(|d| d.naive_utc().format("%Y-%m-%dT%H:%M:%S").to_string().into())
+                .unwrap_or(Value::Null)
+        };
+        type Key = (String, String, String);
+        let mut counts: std::collections::HashMap<Key, (i64, Value, Value)> = Default::default();
+        macro_rules! go {
+            ($pool:expr) => {
+                for r in sqlx::query(sql).fetch_all($pool).await.map_err(err)? {
+                    let key = (r.try_get::<String, _>(0).map_err(err)?, r.try_get::<String, _>(1).map_err(err)?,
+                               r.try_get::<String, _>(2).map_err(err)?);
+                    counts.insert(key, (r.try_get::<i64, _>(3).map_err(err)?,
+                                        iso(r.try_get::<Option<i64>, _>(4).map_err(err)?),
+                                        iso(r.try_get::<Option<i64>, _>(5).map_err(err)?)));
+                }
+            };
+        }
+        match &self.pool {
+            Pool::Sqlite(p) => go!(p),
+            Pool::Postgres(p) => go!(p),
+        }
+        let state: std::collections::HashMap<Key, Map<String, Value>> = self
+            .rows("series", "SELECT * FROM series", vec![])
+            .await?
+            .into_iter()
+            .map(|r| {
+                let get = |k: &str| r.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+                ((get("source"), get("symbol"), get("tf")), r)
+            })
+            .collect();
+        let mut keys: Vec<&Key> = counts.keys().chain(state.keys().filter(|k| !counts.contains_key(*k))).collect();
+        const ORDER: [&str; 7] = ["1d", "4h", "1h", "30m", "15m", "5m", "1m"];
+        let rank = |tf: &str| ORDER.iter().position(|t| *t == tf).unwrap_or(ORDER.len());
+        keys.sort_by(|a, b| (&a.0, &a.1, rank(&a.2), &a.2).cmp(&(&b.0, &b.1, rank(&b.2), &b.2)));
+        Ok(keys
+            .into_iter()
+            .map(|key| {
+                let (n, first, last) = counts.get(key).cloned().unwrap_or((0, Value::Null, Value::Null));
+                let row = state.get(key);
+                let field = |k: &str| row.and_then(|r| r.get(k)).cloned().unwrap_or(Value::Null);
+                let active = matches!(field("active"), Value::Bool(true))
+                    || field("active").as_i64().is_some_and(|v| v != 0);
+                serde_json::json!({
+                    "source": key.0, "symbol": key.1, "tf": key.2, "bars": n, "first": first, "last": last,
+                    "active": active, "backfill": field("backfill"), "updated_at": field("updated_at"),
+                    "error": field("error"),
+                })
+            })
+            .collect())
+    }
+
     /// (source, symbol, bars) per stored stream, by source and symbol (`bar_stats` in storage.py).
     pub async fn bar_counts(&self) -> Result<Vec<(String, String, i64)>, String> {
-        let sql = "SELECT source, symbol, COUNT(*) FROM m1_bars GROUP BY source, symbol ORDER BY source, symbol";
+        let sql = "SELECT source, symbol, COUNT(*) FROM bars WHERE tf = '1m' GROUP BY source, symbol ORDER BY source, symbol";
         let err = |e: sqlx::Error| e.to_string();
         macro_rules! go {
             ($pool:expr) => {
@@ -493,6 +612,130 @@ impl Store {
 
     pub async fn delete_setting(&self, key: &str) -> Result<(), String> {
         self.execute("DELETE FROM settings WHERE key = ?", vec![Arg::Str(Some(key.into()))]).await.map(|_| ())
+    }
+
+    // ---- markets: the dropdown's list (Settings > Markets) ----
+
+    /// The markets of `source` in menu order (`Store.markets` in storage.py).
+    pub async fn markets(&self, source: &str) -> Result<Vec<Map<String, Value>>, String> {
+        let mut rows = self
+            .rows("markets", "SELECT symbol, label, name, venue, position, keep_live FROM markets \
+                              WHERE source = ? ORDER BY position, symbol", vec![Arg::Str(Some(source.into()))])
+            .await?;
+        for r in &mut rows {
+            let live = r.get("keep_live").and_then(Value::as_bool).unwrap_or(false);
+            r.insert("keep_live".into(), live.into());
+        }
+        Ok(rows)
+    }
+
+    /// Add a market at the end of the list (`add_market`).
+    pub async fn add_market(&self, source: &str, m: &Map<String, Value>) -> Result<(), String> {
+        let last = self.markets(source).await?.iter().filter_map(|r| r.get("position")?.as_i64()).max();
+        let s = |k: &str| Arg::Str(m.get(k).and_then(Value::as_str).map(String::from));
+        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.6f+00:00").to_string();
+        self.execute("INSERT INTO markets (source, symbol, label, name, venue, position, keep_live, added_at) \
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     vec![Arg::Str(Some(source.into())), s("symbol"), s("label"), s("name"), s("venue"),
+                          Arg::Int(Some(last.map_or(0, |p| p + 1))),
+                          Arg::Bool(m.get("keep_live").and_then(Value::as_bool).unwrap_or(false)), Arg::Str(Some(now))])
+            .await
+            .map(|_| ())
+    }
+
+    /// Rewrite the listed markets' label, name, venue and keep_live, in the given order (`save_markets`).
+    pub async fn save_markets(&self, source: &str, markets: &[Map<String, Value>]) -> Result<(), String> {
+        let stmts = markets.iter().enumerate().map(|(i, m)| {
+            let s = |k: &str| Arg::Str(m.get(k).and_then(Value::as_str).map(String::from));
+            ("UPDATE markets SET label = ?, name = ?, venue = ?, position = ?, keep_live = ? \
+              WHERE source = ? AND symbol = ?".to_string(),
+             vec![s("label"), s("name"), s("venue"), Arg::Int(Some(i as i64)),
+                  Arg::Bool(m.get("keep_live").and_then(Value::as_bool).unwrap_or(false)),
+                  Arg::Str(Some(source.into())), s("symbol")])
+        }).collect();
+        self.transaction(stmts).await
+    }
+
+    /// Take a market off the list; its stored bars stay (`delete_market`).
+    pub async fn delete_market(&self, source: &str, symbol: &str) -> Result<bool, String> {
+        Ok(self.execute("DELETE FROM markets WHERE source = ? AND symbol = ?",
+                        vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))]).await? > 0)
+    }
+
+    // ---- accounts: users and their sessions (wed-server/src/auth.rs, auth.py) ----
+
+    pub async fn users_count(&self) -> Result<usize, String> {
+        Ok(self.rows("users", "SELECT id FROM users", vec![]).await?.len())
+    }
+
+    /// One user by id (`by_id`) or by lowercased username.
+    pub async fn user(&self, by_id: bool, key: &str) -> Result<Option<Map<String, Value>>, String> {
+        let sql = if by_id { "SELECT * FROM users WHERE id = ?" } else { "SELECT * FROM users WHERE username = ?" };
+        Ok(self.rows("users", sql, vec![Arg::Str(Some(key.into()))]).await?.into_iter().next())
+    }
+
+    pub async fn add_user(&self, row: Vec<(&str, Arg)>) -> Result<(), String> {
+        let names: Vec<&str> = row.iter().map(|(k, _)| *k).collect();
+        let sql = format!("INSERT INTO users ({}) VALUES ({})", names.join(", "), vec!["?"; names.len()].join(", "));
+        self.execute(&sql, row.into_iter().map(|(_, a)| a).collect()).await.map(|_| ())
+    }
+
+    pub async fn update_user(&self, id: &str, values: Vec<(&str, Arg)>) -> Result<(), String> {
+        let sets: Vec<String> = values.iter().map(|(k, _)| format!("{k} = ?")).collect();
+        let mut args: Vec<Arg> = values.into_iter().map(|(_, a)| a).collect();
+        args.push(Arg::Str(Some(id.into())));
+        self.execute(&format!("UPDATE users SET {} WHERE id = ?", sets.join(", ")), args).await.map(|_| ())
+    }
+
+    pub async fn add_session(&self, token_hash: &str, user_id: &str, device: Option<&str>, created_at: &str,
+                             expires_at: &str) -> Result<(), String> {
+        let s = |v: &str| Arg::Str(Some(v.into()));
+        self.execute("INSERT INTO sessions (token_hash, user_id, device, created_at, expires_at, last_seen_at) \
+                      VALUES (?, ?, ?, ?, ?, ?)",
+                     vec![s(token_hash), s(user_id), Arg::Str(device.map(String::from)), s(created_at), s(expires_at),
+                          s(created_at)])
+            .await
+            .map(|_| ())
+    }
+
+    pub async fn session(&self, token_hash: &str) -> Result<Option<Map<String, Value>>, String> {
+        Ok(self.rows("sessions", "SELECT * FROM sessions WHERE token_hash = ?", vec![Arg::Str(Some(token_hash.into()))])
+            .await?
+            .into_iter()
+            .next())
+    }
+
+    /// A user's sessions, the most recently used first.
+    pub async fn sessions(&self, user_id: &str) -> Result<Vec<Map<String, Value>>, String> {
+        self.rows("sessions", "SELECT * FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC, created_at DESC",
+                  vec![Arg::Str(Some(user_id.into()))])
+            .await
+    }
+
+    pub async fn touch_session(&self, token_hash: &str, last_seen_at: &str, expires_at: &str) -> Result<(), String> {
+        let s = |v: &str| Arg::Str(Some(v.into()));
+        self.execute("UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?",
+                     vec![s(last_seen_at), s(expires_at), s(token_hash)])
+            .await
+            .map(|_| ())
+    }
+
+    /// Delete one session (`token_hash`), a user's (but `keep`), or those that expired before a time.
+    pub async fn delete_sessions(&self, token_hash: Option<&str>, user_id: Option<&str>, keep: Option<&str>,
+                                 expired_before: Option<&str>) -> Result<u64, String> {
+        if token_hash.is_none() && user_id.is_none() && expired_before.is_none() {
+            return Err("delete_sessions needs a session, a user or a time".into());
+        }
+        let mut wheres = Vec::new();
+        let mut args = Vec::new();
+        for (cond, v) in [("token_hash = ?", token_hash), ("user_id = ?", user_id), ("token_hash <> ?", keep),
+                          ("expires_at < ?", expired_before)] {
+            if let Some(v) = v {
+                wheres.push(cond);
+                args.push(Arg::Str(Some(v.into())));
+            }
+        }
+        self.execute(&format!("DELETE FROM sessions WHERE {}", wheres.join(" AND ")), args).await
     }
 
     // ---- drawings (per source and symbol) ----

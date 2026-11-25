@@ -140,7 +140,7 @@ in each hour; the **Drawdown** tab draws the fall from the high over time.
 The box under the chart says how far the numbers are checked:
 
 - **Rebuilt from prices**: the trades with M1 bars for their whole life. The
-  bars are the ones Wednesday stored while running (the `m1_bars` table), matched
+  bars are the ones Wednesday stored while running (the `bars` table, timeframe `1m`), matched
   by symbol: `XAUUSD.m`, `XAUUSDm`, `XAUUSD#` and `GOLD` are all XAUUSD, and the
   stream with the most bars is used. Trades without bars count at their closed result, and the
   drawdown badge says **closed only** when none could be rebuilt.
@@ -197,5 +197,5 @@ outside it; removing the picture or the journal deletes the files.
 
 `journals`, `journal_trades`, `journal_cash` and `journal_notes` in Wednesday's
 database, and the chart pictures in `data/snapshots/`. A sample portfolio from an
-older version keeps its bars in `m1_bars` under the source `sample`. Times are unix seconds of the broker's server clock, as MT5 reports
+older version keeps its bars in `bars` under the source `sample`. Times are unix seconds of the broker's server clock, as MT5 reports
 them. Nothing leaves the machine.

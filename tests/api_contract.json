@@ -5,6 +5,11 @@
     "symbol?"
    ]
   },
+  "DELETE /api/markets": {
+   "query": [
+    "symbol"
+   ]
+  },
   "GET /api/candles": {
    "query": [
     "before?",
@@ -75,6 +80,24 @@
     }
    }
   },
+  "POST /api/auth/login": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/auth/setup": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
   "POST /api/calendar/import": {
    "query": [
     "zone?"
@@ -107,7 +130,25 @@
     }
    }
   },
+  "POST /api/markets": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
   "PUT /api/alerts": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/auth/password": {
    "body": {
     "application/json": {
      "additionalProperties": true,
@@ -182,6 +223,15 @@
     }
    }
   },
+  "PUT /api/markets": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
   "PUT /api/settings": {
    "body": {
     "application/json": {
@@ -221,6 +271,15 @@
    },
    "token_set": "bool",
    "token_source": "null"
+  },
+  "GET /api/auth/sessions": {
+   "sessions": []
+  },
+  "GET /api/auth/status": {
+   "logged_in": "bool",
+   "login": "bool",
+   "setup": "bool",
+   "user": "null"
   },
   "GET /api/bias": {
    "bias": "null"
@@ -559,6 +618,18 @@
   },
   "GET /api/licence": {
    "available": "bool"
+  },
+  "GET /api/markets": {
+   "markets": [
+    {
+     "keep_live": "bool",
+     "label": "string",
+     "name": "string",
+     "position": "number",
+     "symbol": "string",
+     "venue": "string"
+    }
+   ]
   },
   "GET /api/plugins": {
    "api": "number",
@@ -1027,7 +1098,30 @@
          "touches": "number"
         },
         "inside": [],
-        "recent": []
+        "recent": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "string",
+          "ended_time_unix": "number",
+          "kind": "string",
+          "label": "string",
+          "meta": {
+           "body": "number",
+           "entry": "number",
+           "priority": "string",
+           "risk": "number",
+           "sl": "number",
+           "sl_capped": "bool",
+           "swing": "string"
+          },
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ]
        }
       },
       "timeframe": "string"
@@ -1417,7 +1511,30 @@
          "touches": "number"
         },
         "inside": [],
-        "recent": []
+        "recent": [
+         {
+          "bottom": "number",
+          "confirmed_time": "string",
+          "detector": "string",
+          "ended_time": "string",
+          "ended_time_unix": "number",
+          "kind": "string",
+          "label": "string",
+          "meta": {
+           "body": "number",
+           "entry": "number",
+           "priority": "string",
+           "risk": "number",
+           "sl": "number",
+           "sl_capped": "bool",
+           "swing": "string"
+          },
+          "time": "string",
+          "time_unix": "number",
+          "top": "number",
+          "touches": "number"
+         }
+        ]
        }
       },
       "timeframe": "string"
@@ -1430,6 +1547,22 @@
    "tick_seconds": "number",
    "trade_bias": "null",
    "version": "number"
+  },
+  "GET /api/series": {
+   "series": [
+    {
+     "active": "bool",
+     "backfill": "null",
+     "bars": "number",
+     "error": "null",
+     "first": "string",
+     "last": "string",
+     "source": "string",
+     "symbol": "string",
+     "tf": "string",
+     "updated_at": "null"
+    }
+   ]
   },
   "GET /api/sessions": {
    "clock": "string",
@@ -1582,6 +1715,13 @@
   "PUT /api/alerts",
   "GET /api/alerts/chats",
   "POST /api/alerts/test",
+  "POST /api/auth/login",
+  "POST /api/auth/logout",
+  "PUT /api/auth/password",
+  "GET /api/auth/sessions",
+  "DELETE /api/auth/sessions/{session_id}",
+  "POST /api/auth/setup",
+  "GET /api/auth/status",
   "GET /api/bias",
   "PUT /api/bias",
   "GET /api/calendar",
@@ -1618,6 +1758,10 @@
   "DELETE /api/licence",
   "GET /api/licence",
   "PUT /api/licence",
+  "DELETE /api/markets",
+  "GET /api/markets",
+  "POST /api/markets",
+  "PUT /api/markets",
   "GET /api/markets/candles",
   "GET /api/markets/tick",
   "GET /api/plugins",
@@ -1625,6 +1769,7 @@
   "GET /api/replay",
   "GET /api/replay/range",
   "GET /api/scan",
+  "GET /api/series",
   "GET /api/sessions",
   "GET /api/settings",
   "PUT /api/settings",

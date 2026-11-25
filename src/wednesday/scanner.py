@@ -152,8 +152,10 @@ def split_by_price(levels: list[Level], price: float) -> tuple[Level | None, Lev
     return nearest_above, nearest_below, inside
 
 
-def scan_timeframe(m1: pd.DataFrame, tf: Timeframe, price: float, cfg: ScanConfig) -> tuple[TimeframeResult, pd.DataFrame]:
-    candles = resample_ohlcv(m1, tf).tail(cfg.lookback)
+def scan_timeframe(m1: pd.DataFrame, tf: Timeframe, price: float, cfg: ScanConfig,
+                   candles: pd.DataFrame | None = None) -> tuple[TimeframeResult, pd.DataFrame]:
+    """Scan ``tf`` on M1 resampled, or on ``candles`` (closed, the source's own) when given."""
+    candles = (resample_ohlcv(m1, tf) if candles is None else candles).tail(cfg.lookback)
     ctx = Context(candles)  # shared structure: swings/BOS are computed once for all detectors
     recent_from = candles.index[-cfg.recent_bars] if len(candles) >= cfg.recent_bars > 0 else None
     sets = {}
@@ -168,12 +170,19 @@ def scan_timeframe(m1: pd.DataFrame, tf: Timeframe, price: float, cfg: ScanConfi
     return TimeframeResult(tf, len(candles), sets, bias, swings), candles
 
 
-def scan(m1: pd.DataFrame, cfg: ScanConfig, price: float | None = None) -> ScanResult:
-    """Scan every timeframe from high to low against the current price."""
+def scan(m1: pd.DataFrame, cfg: ScanConfig, price: float | None = None,
+         native: dict[str, pd.DataFrame] | None = None) -> ScanResult:
+    """Scan every timeframe from high to low against the current price.
+
+    ``native`` holds closed candles the source built itself, by timeframe name ("4H"); those
+    timeframes are scanned on them instead of resampled M1 (TradingView's 4H follow its sessions).
+    """
     if m1.empty:
         raise ValueError("No M1 data to scan")
     if price is None:
         price = float(m1["close"].iloc[-1])
+    native = native or {}
     ordered = sorted(cfg.timeframes, key=lambda tf: tf.minutes, reverse=True)
-    results = [scan_timeframe(m1, tf, price, cfg)[0] for tf in ordered]
+    results = [scan_timeframe(m1, tf, price, cfg, native.get(tf.name) if len(native.get(tf.name, ())) else None)[0]
+               for tf in ordered]
     return ScanResult(m1.index[-1], price, cfg.detectors, results)

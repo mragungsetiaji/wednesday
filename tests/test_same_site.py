@@ -42,17 +42,19 @@ def test_cross_site_rules():
     assert not cross_site("POST", {"host": "a", "sec-fetch-site": "same-origin"})
 
 
-def test_there_is_no_login(engine, tmp_path):
+def test_there_is_no_login_on_loopback(engine, tmp_path):
     client = TestClient(create_app(engine, ui_dir=tmp_path))
     assert client.get("/api/status").status_code == 200
-    assert client.get("/api/auth/status").status_code in (404, 405)  # the dashboard's catch-all, not a route
-    assert not [r for r in client.app.routes if getattr(r, "path", "").startswith("/api/auth")]
+    assert client.get("/api/auth/status").json() == {"login": False, "logged_in": False, "setup": False,
+                                                     "user": None}
+    assert client.post("/api/auth/login", json={"username": "a", "password": "b"}).status_code == 409
 
 
-def test_cli_refuses_a_network_dashboard_without_insecure():
-    args = lambda host, insecure=False: argparse.Namespace(host=host, insecure=insecure)  # noqa: E731
+def test_the_login_is_on_for_a_network_host():
+    args = lambda host, insecure=False, login=False: argparse.Namespace(  # noqa: E731
+        host=host, insecure=insecure, login=login)
     for host in ("127.0.0.1", "localhost", "::1"):
-        cli.check_host(args(host))
-    with pytest.raises(SystemExit, match="has no login"):
-        cli.check_host(args("0.0.0.0"))
-    cli.check_host(args("0.0.0.0", insecure=True))
+        assert not cli.login_on(args(host))
+    assert cli.login_on(args("127.0.0.1", login=True))
+    assert cli.login_on(args("0.0.0.0"))
+    assert not cli.login_on(args("0.0.0.0", insecure=True))

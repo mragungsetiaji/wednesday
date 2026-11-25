@@ -47,6 +47,28 @@ uv run wednesday --source tradingview --symbol OANDA:XAUUSD
 uv run wednesday --source synthetic --once             # development: random walk, one scan
 ```
 
+## Markets
+
+**Settings > Markets** holds the chart's symbol menu (the `markets` table): which
+TradingView symbols it lists, in what order, and the label, name and venue shown for
+each. The same instrument can be listed from several venues, such as `FX:XAUUSD`
+(FXCM) and `OANDA:XAUUSD`; each keeps its own candles and drawings. **Add a market**
+takes TradingView's name with its exchange prefix and checks it with TradingView
+first; the name and venue come from TradingView and can be changed. Deleting one
+takes it off the menu and keeps its stored candles. The scanned market can't be
+deleted, nor the last one left.
+
+A market's candles load when you pick it. **Keep live** stores a market's 1-minute bars
+and its candles per timeframe even while another market is scanned
+(`wed-engine/src/keeper.rs`, `keeper.py`), once a minute, so its history has no gap
+when you come back to it. Nothing about a kept market is scanned. TradingView keeps
+only a few days of 1-minute bars, so a market left without **Keep live** for longer
+comes back with a gap in its 1-minute history; its higher timeframes fill in again.
+
+Routes: `GET /api/markets`; `POST /api/markets` `{symbol, label?}` adds one;
+`PUT /api/markets` `{markets: [...]}` saves the order, labels and **Keep live** of the
+whole list; `DELETE /api/markets?symbol=` removes one. Each answers with the list.
+
 ## Feed clock
 
 Bar times are kept in the feed's own clock. TradingView gives UTC, which is the
@@ -124,8 +146,10 @@ The symbol takes TradingView's exchange prefix. `FX:` is FXCM:
 
 `FXCM:XAUUSD` doesn't exist; the source then says to use `FX:XAUUSD`. Without a
 TradingView account the server gives about 7,000 one-minute bars (~5 trading
-days), so the 4H timeframe fills in as stored history grows. Bar
-times are UTC. The candle still forming is dropped; the live price comes from
+days), so each timeframe is fetched as TradingView builds it (5M, 15M, 30M, 1H,
+4H and 1D, see [Storage](#storage)): the 4H candles open on TradingView's
+sessions (03:00, 07:00, ... UTC for FXCM gold) and reach years back from the
+first start. Bar times are UTC. The candle still forming is dropped; the live price comes from
 TradingView's quote and builds the forming candle between scans.
 
 The same connection feeds a full-screen chart set to another symbol (`FX:XAGUSD`
@@ -136,11 +160,27 @@ scanned or stored.
 
 ## Storage
 
-Every fetched M1 bar is stored per source and symbol. A restart resumes from
-the database instead of refetching, and TradingView's few days stop being a
-limit: history keeps growing while the screener runs. This stored history is the
-only history there is; there is no import. The 4H timeframe with the default
-lookback wants ~48k M1 bars, about 5 weeks. Synthetic data is never stored.
+Every fetched bar is stored per source, symbol and timeframe (the `bars` table).
+A restart resumes from the database instead of refetching. There is no import.
+
+With TradingView, each timeframe has its own series: the 1-minute bars of the
+scan, and the 5M, 15M, 30M, 1H, 4H and 1D candles as TradingView builds them
+(`wed-engine/src/ingest.rs`, `ingest.py`). A timeframe is fetched again once a
+new candle of it has closed, and only closed candles are kept; the scan reads a
+timeframe's own candles, and the chart adds the forming one from the live
+1-minute bars. Once a minute the ingest also loads one page (5,000 candles) of
+older history, highest timeframe first, until TradingView has nothing older.
+The `series` table keeps each series' first and last candle, its backfill state
+(`pending`, `running`, `done`) and its last error. A timeframe TradingView won't
+send is noted there and the scan resamples 1-minute bars for it meanwhile.
+
+**Settings > Data source** lists these series under Storage, grouped by source and
+ticker: each timeframe's stored candles, its latest one, whether it is ingesting
+live, how far its history backfill has gone (waiting, loading, done) and its last
+error. It refreshes every 30 seconds, from `GET /api/series`.
+
+Synthetic data is never stored and has no timeframes of its own: the scan
+resamples its 1-minute bars, as `tests/golden/` expects.
 
 | Backend | How |
 | --- | --- |
@@ -154,12 +194,11 @@ The database also keeps the saved settings and the Telegram alert log.
 
 The chart opens on the last `--lookback` candles of a timeframe, the ones the
 scan uses. Drag it to the left and older candles load as you reach the edge,
-300 at a time, with no effect on the scan. They come from the M1 bars in
-memory first, then:
+300 at a time, with no effect on the scan. They come from memory first, then:
 
-- **TradingView**: the M1 bars stored in the database, so as far back as the
-  screener has been running on that symbol.
-- **Synthetic data**: only what is in memory.
+- **TradingView**: the timeframe's own candles stored in the database, as far
+  back as the backfill has reached.
+- **Synthetic data**: only what is in memory, resampled from 1-minute bars.
 
 Older candles show prices only; levels are drawn from the latest scan.
 

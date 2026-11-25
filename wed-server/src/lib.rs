@@ -6,14 +6,16 @@
 //! front of a Python server (`--backend`, [`app`]): the routes in [`PORTED`] are answered here and
 //! everything else goes to Python unchanged, to compare the two.
 //!
-//! What a route answers must match `tests/api_contract.json`. There is no login (the dashboard
-//! runs on the trader's machine); cross-site writes are refused as `same_site.py` refuses them, so
-//! another web page in the browser can't drive the dashboard.
+//! What a route answers must match `tests/api_contract.json`. On 127.0.0.1 there is no login; on a
+//! network host every `/api` route but a few asks for a session ([`auth`]). Cross-site writes are
+//! refused either way, as `same_site.py` refuses them, so another web page in the browser can't
+//! drive the dashboard.
 //!
 //! In front of Python, routes that keep their data in the database ([`store`]) are served here
 //! only when this server could open the same database; otherwise they go to Python like the rest.
 
 pub use wednesday_alerts as alerts;
+pub mod auth;
 pub mod bias;
 pub use wednesday_calendar as calendar;
 pub use wednesday_base::config;
@@ -52,6 +54,13 @@ use store::Store;
 /// The routes this server answers itself, as `"METHOD /path"`; everything else goes to Python.
 pub const PORTED: &[&str] = &[
     "GET /api/health",
+    "GET /api/auth/status",
+    "POST /api/auth/login",
+    "POST /api/auth/setup",
+    "POST /api/auth/logout",
+    "GET /api/auth/sessions",
+    "DELETE /api/auth/sessions/{session_id}",
+    "PUT /api/auth/password",
     "GET /api/workspaces",
     "GET /api/workspaces/{name}",
     "PUT /api/workspaces/{name}",
@@ -128,6 +137,11 @@ pub const ENGINE_ROUTES: &[&str] = &[
     "POST /api/journals/{journal_id}/entries",
     "GET /api/markets/candles",
     "GET /api/markets/tick",
+    "GET /api/markets",
+    "POST /api/markets",
+    "PUT /api/markets",
+    "DELETE /api/markets",
+    "GET /api/series",
 ];
 
 /// The version the dashboard and `/api/health` report; `scripts/set_version.py` keeps it in step.
@@ -144,6 +158,8 @@ struct App {
     journals: journal::service::Cache,
     engine: Option<Arc<engine::Runtime>>,
     markets: Arc<engine::markets::Markets>,
+    /// The login ([`auth`]); off on 127.0.0.1 and in front of Python.
+    auth: Arc<auth::Auth>,
 }
 
 /// The server: ported routes, then the Python server at `backend` for the rest. Without a
@@ -155,17 +171,23 @@ pub fn app(backend: SocketAddr, store: Option<Store>) -> Router {
 /// The server with the scan engine running here (`runtime`): the engine's routes are answered by
 /// it, and the Python server follows it (`WEDNESDAY_FOLLOW`).
 pub fn app_with(backend: SocketAddr, store: Option<Store>, runtime: Option<Arc<engine::Runtime>>) -> Router {
-    build(Some(backend), None, store, runtime)
+    build(Some(backend), None, store, runtime, Arc::new(auth::Auth::off()))
 }
 
 /// The whole server, without Python: the engine's and the other ported routes, the dashboard
 /// build in `ui` for everything else, FastAPI's 404 for an unknown `/api` route.
 pub fn standalone(ui: std::path::PathBuf, store: Option<Store>, runtime: Arc<engine::Runtime>) -> Router {
-    build(None, Some(Arc::new(ui)), store, Some(runtime))
+    standalone_with(ui, store, runtime, Arc::new(auth::Auth::off()))
+}
+
+/// [`standalone`] with a login (`auth`): every `/api` route but the public ones needs a session.
+pub fn standalone_with(ui: std::path::PathBuf, store: Option<Store>, runtime: Arc<engine::Runtime>,
+                       auth: Arc<auth::Auth>) -> Router {
+    build(None, Some(Arc::new(ui)), store, Some(runtime), auth)
 }
 
 fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store: Option<Store>,
-         runtime: Option<Arc<engine::Runtime>>) -> Router {
+         runtime: Option<Arc<engine::Runtime>>, auth: Arc<auth::Auth>) -> Router {
     let mut connector = HttpConnector::new();
     connector.set_nodelay(true);
     let client = Client::builder(TokioExecutor::new()).build(connector);
@@ -189,6 +211,8 @@ fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store
             .route("/api/distribution", get(analysis_distribution))
             .route("/api/markets/candles", get(markets_candles))
             .route("/api/markets/tick", get(markets_tick))
+            .route("/api/series", get(series_list))
+            .route("/api/markets", get(markets_list).post(markets_add).put(markets_save).delete(markets_remove))
             .route("/api/drawings", get(drawings_list))
             .route("/api/drawings/alerts", get(drawings_alerts))
             .route("/api/drawings/{id}", axum::routing::put(drawing_put).delete(drawing_delete))
@@ -213,8 +237,17 @@ fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store
             .route("/api/alerts/chats", get(alerts_chats))
             .route("/api/alerts/test", axum::routing::post(alerts_test));
     }
+    let state = App { backend, ui, client, store, journals: Default::default(), engine: runtime,
+                      markets: Default::default(), auth };
     router
         .route("/api/health", get(health))
+        .route("/api/auth/status", get(auth::status))
+        .route("/api/auth/login", axum::routing::post(auth::login))
+        .route("/api/auth/setup", axum::routing::post(auth::setup))
+        .route("/api/auth/logout", axum::routing::post(auth::logout))
+        .route("/api/auth/sessions", get(auth::sessions))
+        .route("/api/auth/sessions/{id}", axum::routing::delete(auth::end_session))
+        .route("/api/auth/password", axum::routing::put(auth::password))
         .route("/api/workspaces", get(workspaces_list))
         .route("/api/workspaces/{name}", get(workspace_get).put(workspace_put).delete(workspace_delete))
         .route("/api/drawing-templates", get(templates_list))
@@ -238,8 +271,8 @@ fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store
         .route("/api/plugin-host/settings/{key}", get(plugin_host_settings).put(plugin_host_settings).delete(plugin_host_settings))
         .route_layer(axum::middleware::map_response(served_here))
         .fallback(forward)
-        .with_state(App { backend, ui, client, store, journals: Default::default(), engine: runtime,
-                          markets: Default::default() })
+        .layer(axum::middleware::from_fn_with_state(state.clone(), auth::need_session))
+        .with_state(state)
 }
 
 /// Which server answered, for anyone debugging the move: `x-wednesday-server: rust` or `python`.
@@ -273,12 +306,19 @@ pub async fn serve_with_engine(listener: tokio::net::TcpListener, backend: Socke
 /// Serve [`standalone`] on `listener` until the process ends.
 pub async fn serve_standalone(listener: tokio::net::TcpListener, ui: std::path::PathBuf, store: Option<Store>,
                               runtime: Arc<engine::Runtime>) -> std::io::Result<()> {
+    serve_standalone_with(listener, ui, store, runtime, Arc::new(auth::Auth::off())).await
+}
+
+/// [`serve_standalone`] with a login (`wednesday-rs` on a network host).
+pub async fn serve_standalone_with(listener: tokio::net::TcpListener, ui: std::path::PathBuf, store: Option<Store>,
+                                   runtime: Arc<engine::Runtime>, auth: Arc<auth::Auth>) -> std::io::Result<()> {
     // The plugins start once this listens: they call it back (plugins/).
     let home = store.as_ref().map_or_else(config::home_dir, |s| s.home().to_path_buf());
     let host = plugins::Host::new(plugins::Options::new(&home, listener.local_addr()?.port(), store.clone()));
-    let app = standalone(ui, store, runtime).layer(axum::Extension(host.clone()));
+    let app = standalone_with(ui, store, runtime, auth).layer(axum::Extension(host.clone()));
     host.start();
-    let served = axum::serve(listener, app).await;
+    // The client's address, for the login's rate limit.
+    let served = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await;
     host.shutdown().await;
     served
 }
@@ -1258,6 +1298,55 @@ async fn markets_candles(State(app): State<App>, axum::extract::Query(q): Query)
 
 async fn markets_tick(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
     engine_answer(engine::markets::tick(&app.markets, runtime_of(&app), &q).await)
+}
+
+/// The database the markets list lives in, or Python's 409 without one (`market_store()`).
+fn market_store(app: &App) -> Result<&Store, Response> {
+    app.store.as_ref().ok_or_else(|| detail(StatusCode::CONFLICT, "The markets list needs a database"))
+}
+
+/// The stored series and how their ingest is going (Settings > Data source).
+async fn series_list(State(app): State<App>) -> Response {
+    let series = match &app.store {
+        Some(store) => match store.series_status().await {
+            Ok(rows) => rows,
+            Err(e) => return detail(StatusCode::INTERNAL_SERVER_ERROR, e),
+        },
+        None => Vec::new(),
+    };
+    Json(json!({"series": series})).into_response()
+}
+
+async fn markets_list(State(app): State<App>) -> Response {
+    let store = match market_store(&app) { Ok(s) => s, Err(r) => return r };
+    engine_answer(engine::markets::list(store).await)
+}
+
+async fn markets_add(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
+    let store = match market_store(&app) { Ok(s) => s, Err(r) => return r };
+    engine_answer(engine::markets::add(&app.markets, store, &body).await)
+}
+
+async fn markets_save(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
+    let store = match market_store(&app) { Ok(s) => s, Err(r) => return r };
+    engine_answer(engine::markets::save(store, &body).await)
+}
+
+async fn markets_remove(State(app): State<App>, axum::extract::Query(q): Query, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let store = match market_store(&app) { Ok(s) => s, Err(r) => return r };
+    let scanned = runtime_of(&app).engine().symbol.clone();
+    engine_answer(engine::markets::remove(store, &scanned, &q).await)
 }
 
 /// For the Python server that follows this engine: the closed M1 bars it scanned, with the price

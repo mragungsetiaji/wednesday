@@ -149,6 +149,57 @@ async fn sqlite_as_python_has_it() {
     check(&py, "sqlite:///data/rust.db", &dir, false).await;
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn an_old_m1_bars_table_moves_to_bars() {
+    let dir = temp("migrate");
+    let url = "sqlite:///old.db";
+    let old = Store::connect(url, &dir).await.unwrap();
+    old.execute("CREATE TABLE m1_bars (source VARCHAR(32), symbol VARCHAR(64), time BIGINT, open FLOAT, high FLOAT, \
+                 low FLOAT, close FLOAT, volume FLOAT, PRIMARY KEY (source, symbol, time))", vec![]).await.unwrap();
+    old.execute("INSERT INTO m1_bars VALUES ('tradingview', 'FX:XAUUSD', 1772445600, 1, 2, 0.5, 1.5, 3)", vec![])
+        .await.unwrap();
+    drop(old);
+    let store = Store::open(url, &dir).await.unwrap();
+    let bars = wednesday_rs::engine::load_bars(&store, "tradingview", "FX:XAUUSD", 10, None).await.unwrap();
+    assert_eq!(bars.len(), 1);
+    assert_eq!(bars[0].close, 1.5);
+    let rows = store.rows("schema_migrations", "SELECT version, name FROM schema_migrations", vec![]).await.unwrap();
+    assert_eq!(Value::from(rows), json!([{"version": 1, "name": "bars_from_m1_bars"}, {"version": 2, "name": "seed_markets"}]));
+    drop(store);
+    Store::open(url, &dir).await.unwrap(); // nothing runs twice
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn native_candles_page_back_from_their_own_series() {
+    use wednesday_rs::engine::{charts, ingest, save_series};
+    use wednesday_rs::scan::{Bar, TIMEFRAMES};
+    let dir = temp("native");
+    let store = Store::open("sqlite:///native.db", &dir).await.unwrap();
+    let start = 1_790_000_000 / 14_400 * 14_400 + 3 * 3600; // a 4H candle opening at 03:00 UTC
+    let bar = |i: i64| Bar { time: chrono::DateTime::from_timestamp(start + i * 14_400, 0).unwrap().naive_utc(),
+                             open: i as f64, high: i as f64 + 1.0, low: i as f64 - 1.0, close: i as f64, volume: 1.0 };
+    let stored: Vec<Bar> = (0..10).map(bar).collect();
+    save_series(&store, "tradingview", "FX:XAUUSD", "4h", &stored).await.unwrap();
+    ingest::note_series(Some(&store), "tradingview", "FX:XAUUSD", "4h", ingest::Backfill::Done, None).await;
+    let stream = charts::Stream { store: &store, source: "tradingview", symbol: "FX:XAUUSD" };
+    let memory = &stored[7..];
+    let page = charts::native_before(memory, Some(stream), TIMEFRAMES[0], (start + 9 * 14_400).into(), 4).await.unwrap();
+    let times: Vec<i64> = page["candles"].as_array().unwrap().iter().map(|c| c["time"].as_i64().unwrap()).collect();
+    assert_eq!(times, (5..9).map(|i| start + i * 14_400).collect::<Vec<_>>()); // 7, 8 from memory; 5, 6 stored
+    assert_eq!(page["has_more"], json!(true));
+    let last = charts::native_before(memory, Some(stream), TIMEFRAMES[0], start.into(), 4).await.unwrap();
+    assert_eq!((last["candles"].as_array().unwrap().len(), &last["has_more"]), (0, &json!(false)));
+    let rows = store.rows("series", "SELECT tf, first_time, last_time, backfill FROM series", vec![]).await.unwrap();
+    assert_eq!(Value::from(rows), json!([{"tf": "4h", "first_time": start, "last_time": start + 9 * 14_400,
+                                          "backfill": "done"}]));
+    let status = store.series_status().await.unwrap();
+    assert_eq!(status.len(), 1);
+    let s = &status[0];
+    assert_eq!((&s["source"], &s["symbol"], &s["tf"], &s["bars"]), (&json!("tradingview"), &json!("FX:XAUUSD"), &json!("4h"), &json!(10)));
+    assert_eq!((&s["active"], &s["backfill"], &s["error"]), (&json!(true), &json!("done"), &Value::Null));
+    assert!(s["first"].as_str().unwrap() < s["last"].as_str().unwrap());
+}
+
 struct Postgres {
     data: PathBuf,
 }

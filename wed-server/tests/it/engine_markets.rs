@@ -210,3 +210,49 @@ async fn live_silver_from_tradingview() {
     m.close().await;
     rt.engine().stop();
 }
+
+/// The dropdown's list (`/api/markets`): seeded by migration 2, then added to, saved and deleted
+/// from as `tests/test_markets_list.py` does with Python.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_markets_list() {
+    let Some(node) = node_or_skip("markets list") else { return };
+    let dir = std::env::temp_dir().join(format!("wed-markets-list-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let store = wednesday_rs::store::Store::open(&format!("sqlite:///{}", dir.join("w.db").display()), &dir).await.unwrap();
+    let m = fake(&node);
+    let obj = |v: Value| v.as_object().unwrap().clone();
+    let status = |a: Answer| answered(a).0;
+
+    let listed = markets::list(&store).await.unwrap()["markets"].clone();
+    assert_eq!(listed[0], json!({"symbol": "FX:XAUUSD", "label": "XAU", "name": "Gold spot", "venue": "FXCM",
+                                 "position": 0, "keep_live": false}));
+    assert_eq!(listed.as_array().unwrap().len(), 7);
+
+    let added = markets::add(&m, &store, &obj(json!({"symbol": "fx:xagusd"}))).await;
+    assert_eq!(status(added), 409);
+    let added = markets::add(&m, &store, &obj(json!({"symbol": "fx:eurusd", "venue": null}))).await.unwrap();
+    assert_eq!(added["markets"][7], json!({"symbol": "FX:EURUSD", "label": "EURUSD", "name": "Some market",
+                                          "venue": null, "position": 7, "keep_live": false}));
+    assert_eq!(status(markets::add(&m, &store, &obj(json!({"symbol": "EURUSD"}))).await), 400);
+    assert_eq!(status(markets::add(&m, &store, &obj(json!({"symbol": "FX:NOPE"}))).await), 404);
+    assert_eq!(status(markets::add(&m, &store, &obj(json!({"symbol": "FX:GBPUSD", "label": "x".repeat(17)}))).await), 422);
+
+    let mut rows = added["markets"].as_array().unwrap().clone();
+    let last = rows.pop().unwrap();
+    let mut first = last.as_object().unwrap().clone();
+    first.insert("label".into(), "EUR".into());
+    first.insert("keep_live".into(), true.into());
+    rows.insert(0, Value::Object(first));
+    let saved = markets::save(&store, &obj(json!({"markets": rows.clone()}))).await.unwrap();
+    assert_eq!((&saved["markets"][0]["symbol"], &saved["markets"][0]["label"], &saved["markets"][0]["keep_live"]),
+               (&json!("FX:EURUSD"), &json!("EUR"), &json!(true)));
+    assert_eq!(status(markets::save(&store, &obj(json!({"markets": rows[1..]}))).await), 422);
+
+    let q = |s: &str| query(json!({"symbol": s}));
+    assert_eq!(status(markets::remove(&store, "FX:XAUUSD", &q("FX:XAUUSD")).await), 409);
+    assert_eq!(status(markets::remove(&store, "FX:XAUUSD", &q("FX:GBPUSD")).await), 404);
+    let left = markets::remove(&store, "FX:XAUUSD", &q("FX:EURUSD")).await.unwrap();
+    assert!(!left["markets"].as_array().unwrap().iter().any(|r| r["symbol"] == "FX:EURUSD"));
+    let _ = std::fs::remove_dir_all(&dir);
+}

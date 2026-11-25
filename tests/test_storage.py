@@ -42,6 +42,35 @@ def test_store_bars_roundtrip_and_upsert(store):
     assert stat["last"] == "2026-03-02T10:06:00"
 
 
+def test_store_keeps_each_timeframe_apart(store):
+    store.save_bars("tradingview", "FX:XAUUSD", bars("2026-03-02 10:00", 3))
+    four = bars("2026-03-02 03:00", 2).set_axis(pd.DatetimeIndex(["2026-03-02 03:00", "2026-03-02 07:00"]))
+    store.save_bars("tradingview", "FX:XAUUSD", four, tf="4h")
+    assert len(store.load_bars("tradingview", "FX:XAUUSD", 100)) == 3
+    assert list(store.load_bars("tradingview", "FX:XAUUSD", 100, tf="4h").index.hour) == [3, 7]
+    assert store.bar_bounds("tradingview", "FX:XAUUSD", "4h")[0] == 2
+    assert [s["bars"] for s in store.bar_stats()] == [3]  # the M1 streams
+    assert store.delete_bars("tradingview") == 5
+
+
+def test_an_old_m1_bars_table_moves_to_bars(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE m1_bars (source VARCHAR(32), symbol VARCHAR(64), time BIGINT, open FLOAT, "
+                   "high FLOAT, low FLOAT, close FLOAT, volume FLOAT, PRIMARY KEY (source, symbol, time))")
+        db.execute("INSERT INTO m1_bars VALUES ('tradingview', 'FX:XAUUSD', 1772445600, 1, 2, 0.5, 1.5, 3)")
+    s = Store(f"sqlite:///{path}")
+    out = s.load_bars("tradingview", "FX:XAUUSD", 10)
+    assert list(out["close"]) == [1.5] and out.index[0] == pd.Timestamp(1772445600, unit="s")
+    with sqlite3.connect(path) as db:
+        names = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert "m1_bars" not in names
+        assert db.execute("SELECT version, name FROM schema_migrations").fetchall() == [(1, "bars_from_m1_bars"), (2, "seed_markets")]
+    Store(f"sqlite:///{path}")  # opening again runs nothing twice
+
+
 def test_store_settings_and_describe(store):
     assert store.get_setting(SETTINGS_KEY) is None
     store.set_setting(SETTINGS_KEY, {"source": "mt5"})

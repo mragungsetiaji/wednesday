@@ -6,7 +6,7 @@ import type { LinkGroup } from "../windowLink";
 import { useDrawings, type Drawings } from "../drawingsData";
 import type { LiveFeed } from "../liveData";
 import { useMarketCandles, useMarketLive } from "../marketData";
-import { TICKERS } from "../marketSymbol";
+import { useMarkets } from "../marketsList";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "../chartData";
 import { fmtPrice } from "../format";
 import { Direction, LayersIcon, PopOutIcon } from "../icons";
@@ -233,7 +233,8 @@ function SymbolBox({ label, value, main, onChange }: {
 }) {
   const id = useId();
   const shown = (value ?? main).toUpperCase();
-  const listed = TICKERS.some((t) => t.symbol === shown);
+  const tickers = useMarkets();
+  const listed = tickers.some((t) => t.symbol === shown);
   return (
     <span className="pane-symbol">
       <select id={id} value={shown} aria-label={`${label} market`}
@@ -241,8 +242,8 @@ function SymbolBox({ label, value, main, onChange }: {
         onKeyDown={(e) => e.stopPropagation() /* arrow keys pick a market, not the chart's shortcuts */}
         onChange={(e) => onChange(e.target.value === main.toUpperCase() ? null : e.target.value)}>
         {!listed && <option value={shown}>{shown}</option>}
-        {TICKERS.map((t) => (
-          <option key={t.symbol} value={t.symbol}>{t.short} · {t.name}{t.symbol === main.toUpperCase() ? " (scanned)" : ""}</option>
+        {tickers.map((t) => (
+          <option key={t.symbol} value={t.symbol}>{t.short} · {t.name}{t.venue ? ` (${t.venue})` : ""}{t.symbol === main.toUpperCase() ? " (scanned)" : ""}</option>
         ))}
       </select>
     </span>

@@ -447,8 +447,8 @@ impl Market {
 /// `Store.load_bar_range`: stored M1 bars with open times in [start, end] (feed-clock unix seconds).
 pub async fn load_bar_range(store: &Store, source: &str, symbol: &str, start: i64, end: i64) -> Result<Vec<Bar>, String> {
     let rows = store
-        .rows("m1_bars", "SELECT time, open, high, low, close, volume FROM m1_bars \
-                          WHERE source = ? AND symbol = ? AND time >= ? AND time <= ? ORDER BY time",
+        .rows("bars", "SELECT time, open, high, low, close, volume FROM bars \
+                       WHERE source = ? AND symbol = ? AND tf = '1m' AND time >= ? AND time <= ? ORDER BY time",
               vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into())), Arg::Int(Some(start)), Arg::Int(Some(end))])
         .await?;
     Ok(rows

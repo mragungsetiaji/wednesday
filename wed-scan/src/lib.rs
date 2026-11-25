@@ -22,7 +22,7 @@ pub use candles::{resample, Bar, Timeframe, TIMEFRAMES};
 pub use clock::{unix, Clock, Time};
 pub use detectors::{DetectorParams, Detector, DETECTORS};
 pub use levels::Level;
-pub use scanner::{scan, ScanConfig, ScanResult};
+pub use scanner::{scan, scan_native, Native, ScanConfig, ScanResult};
 
 /// Python's `round(x, digits)`: the nearest decimal, read from the float's exact value.
 pub fn round_to(x: f64, digits: usize) -> f64 {

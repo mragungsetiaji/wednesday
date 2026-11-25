@@ -153,9 +153,60 @@ export const saveWorkspace = (name: string, layout: Record<string, unknown>, win
   send<Workspace>("PUT", `/api/workspaces/${encodeURIComponent(name)}`, { layout, windows });
 export const deleteWorkspace = (name: string) => send<{ deleted: boolean }>("DELETE", `/api/workspaces/${encodeURIComponent(name)}`);
 
-function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-  return fetch(url, init);
+/** Sent when an API call answers 401: the session ended, so the login screen comes back. */
+export const LOGGED_OUT_EVENT = "wednesday:logged-out";
+
+async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(url, init);
+  if (res.status === 401 && !url.startsWith("/api/auth/")) window.dispatchEvent(new Event(LOGGED_OUT_EVENT));
+  return res;
 }
+
+// The login: on when the dashboard is served on a network host (or with --login).
+export interface AuthUser {
+  username: string;
+  name: string | null;
+  email: string | null;
+  role: string;
+}
+export interface AuthStatus {
+  login: boolean; // the server asks for a login
+  logged_in: boolean;
+  setup: boolean; // no account yet: create one with the setup code from the server's log
+  user: AuthUser | null;
+}
+export interface Device {
+  id: string;
+  device: string | null;
+  created_at: string;
+  last_seen_at: string | null;
+  current: boolean;
+}
+/** One stored series (a source, ticker and timeframe) and how its ingest is going, from `/api/series`. */
+export interface SeriesStatus {
+  source: string;
+  symbol: string;
+  tf: string;
+  bars: number;
+  first: string | null; // feed clock
+  last: string | null;
+  active: boolean; // ingesting live now
+  backfill: string | null; // "pending", "running" or "done"
+  updated_at: string | null;
+  error: string | null;
+}
+export const fetchSeries = () => getJson<{ series: SeriesStatus[] }>("/api/series");
+
+export const fetchAuthStatus = () => getJson<AuthStatus>("/api/auth/status");
+export const logIn = (username: string, password: string) =>
+  send<AuthStatus>("POST", "/api/auth/login", { username, password });
+export const setUp = (code: string, username: string, password: string) =>
+  send<AuthStatus>("POST", "/api/auth/setup", { code, username, password });
+export const logOut = () => send<AuthStatus>("POST", "/api/auth/logout");
+export const fetchDevices = () => getJson<{ sessions: Device[] }>("/api/auth/sessions");
+export const endDevice = (id: string) => send<{ sessions: Device[] }>("DELETE", `/api/auth/sessions/${encodeURIComponent(id)}`);
+export const changePassword = (current: string, next: string) =>
+  send<{ sessions: Device[] }>("PUT", "/api/auth/password", { current, new: next });
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await apiFetch(url, { cache: "no-store" });
@@ -417,6 +468,25 @@ async function send<T>(method: string, url: string, body?: unknown): Promise<T> 
   }
   return res.json() as Promise<T>;
 }
+
+// ---- The symbol menu's markets (Settings > Markets) ----
+
+export interface Market {
+  symbol: string; // TradingView's name, e.g. OANDA:XAUUSD
+  label: string; // what the menu shows, e.g. XAU
+  name: string | null;
+  venue: string | null; // FXCM, OANDA: who quotes it
+  position: number;
+  keep_live: boolean; // its candles are stored even while another market is scanned
+}
+export interface MarketsResponse {
+  markets: Market[];
+}
+export const fetchMarkets = () => getJson<MarketsResponse>("/api/markets");
+export const addMarket = (m: { symbol: string; label?: string }) => send<MarketsResponse>("POST", "/api/markets", m);
+export const saveMarkets = (markets: Market[]) => send<MarketsResponse>("PUT", "/api/markets", { markets });
+export const deleteMarket = (symbol: string) =>
+  send<MarketsResponse>("DELETE", `/api/markets?symbol=${encodeURIComponent(symbol)}`);
 
 // ---- Chart drawings ----
 

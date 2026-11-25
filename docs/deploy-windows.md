@@ -65,19 +65,20 @@ the `web\dist` folder over):
 cd web; npm install; npm run build; cd ..
 ```
 
-With `XAU_SERVE=1` in `.env`, the logon task serves it on port 8000. The
-dashboard has no login, so keep `XAU_HOST=127.0.0.1` and reach it by one of:
+With `XAU_SERVE=1` in `.env`, the logon task serves it on port 8000. On
+`XAU_HOST=127.0.0.1` the dashboard has no login; reach it by one of:
 
 - a browser inside the RDP session: `http://127.0.0.1:8000`
 - an SSH tunnel from your PC (needs OpenSSH Server on the VPS):
   `ssh -L 8000:127.0.0.1:8000 user@vps`, then open `http://127.0.0.1:8000` locally
-- a VPN to the VPS (WireGuard, Tailscale), with Wednesday bound to the VPN address
-  and `--insecure`
+- a VPN to the VPS (WireGuard, Tailscale), with Wednesday bound to the VPN address;
+  the login is then on (see [Access](dashboard.md#access) for the first account)
 
-Wednesday refuses to start on any other address unless you pass `--insecure`:
-anyone who reaches the port could change the data source, set the bias and
-delete data. Never open the port to the internet. State-changing
-requests from another web site are refused either way.
+On any address other than `127.0.0.1` Wednesday asks for a login. Still, never open
+the port to the internet without HTTPS in front. `--insecure` turns the login off on
+such an address: anyone who reaches the port could then change the data source, set
+the bias and delete data. State-changing requests from another web site are refused
+either way.
 
 Settings and every stored M1 bar live in `data\xau.db` (SQLite). Back that file
 up with the rest of the folder; deleting it only means the history is fetched

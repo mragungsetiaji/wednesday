@@ -19,11 +19,13 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
+from .auth import Auth
+from .auth import install as install_auth
 from .same_site import install as install_same_site
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
 from .journal.market import freeze
-from .markets import MarketError, Markets, clean_symbol
+from .markets import MarketError, Markets, clean_market, clean_symbol
 from .replay import ReplayCache, view as replay_view
 from .workspaces import WorkspaceError, Workspaces
 from .news import CalendarSettings
@@ -34,7 +36,8 @@ from .drawing_templates import DrawingTemplates, TemplateError
 from .engine import RECONNECT_ATTEMPTS, Engine, Runtime
 from .journal.api import journal_router
 from .features import catalog as feature_catalog
-from .history import older_candles
+from .history import older_candles, older_native
+from .ingest import forming
 from . import plugin_install
 from .plugins import PLUGIN_API, features, load_new_plugins, load_plugins
 from .quarters import NEW_YORK, quarter_blocks, quarters_payload, utc_to_feed
@@ -84,13 +87,15 @@ def clock_offset(clock: str) -> int:
 
 
 def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | None = None,
-               clock: str = "UTC", snapshots: Snapshots | None = None) -> FastAPI:
+               clock: str = "UTC", snapshots: Snapshots | None = None, auth: Auth | None = None) -> FastAPI:
     """Serve a fixed :class:`Engine`, or a :class:`Runtime` whose data source the dashboard can change.
-    There is no login (the dashboard runs on the trader's machine); cross-site writes are refused."""
+    ``auth`` is the login (on for a network host, ``auth.py``); without it there is none, as on
+    127.0.0.1. Cross-site writes are refused either way."""
     app = FastAPI(title="Wednesday", docs_url="/api/docs", openapi_url="/api/openapi.json")
     runtime = target if isinstance(target, Runtime) else None
     cfg = target.cfg
-    install_same_site(app)
+    install_auth(app, auth or Auth(target.store if runtime is None else runtime.store, enabled=False))
+    install_same_site(app)  # added last, so it runs first
 
     @app.get("/api/health")
     def health() -> dict:
@@ -290,17 +295,29 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         timeframe = TIMEFRAMES_BY_NAME.get(tf.upper())
         if timeframe is None:
             raise HTTPException(404, f"unknown timeframe {tf!r}")
+        engine = current()
+        native = engine.state.native.get(timeframe.name)
+        if native is not None and native.empty:
+            native = None
         if before is not None:
             try:
-                older, more = older_candles(current(), timeframe, before, limit)
+                if native is not None:
+                    older, more = older_native(engine, native, timeframe, before, limit)
+                else:
+                    older, more = older_candles(engine, timeframe, before, limit)
             except RuntimeError as exc:  # the feed is down
                 raise HTTPException(503, str(exc)) from exc
             return {"timeframe": timeframe.name, "candles": _candle_rows(older), "has_more": more}
-        _, result, m1 = current().snapshot()
+        _, result, m1 = engine.snapshot()
         if result is None or m1 is None:
             raise HTTPException(503, "no data yet")
-        # Include the still-forming candle so the chart matches the live price.
-        candles = resample_ohlcv(m1, timeframe, drop_incomplete=False).tail(limit)
+        # Include the still-forming candle so the chart matches the live price: built from M1 on
+        # the grid of the source's own candles when it has them.
+        if native is not None:
+            live = forming(native, m1, timeframe.minutes)
+            candles = (pd.concat([native, live]) if len(live) else native).tail(limit)
+        else:
+            candles = resample_ohlcv(m1, timeframe, drop_incomplete=False).tail(limit)
         tf_result = next((r for r in result.results if r.timeframe.name == timeframe.name), None)
         levels = [lv.to_dict() for s in tf_result.sets.values() for lv in s.active] if tf_result else []
         swings = [sw.to_dict() for sw in tf_result.swings] if tf_result else []
@@ -340,6 +357,67 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         """The live price of a pane's own symbol (unix time on the feed's clock)."""
         sym = market_call(lambda: clean_symbol(symbol))
         return market_call(lambda: markets.tick(sym, current_clock()))
+
+    # ---- markets: the symbol dropdown's list (Settings > Markets, storage.markets) ----
+    def market_store():
+        store = runtime.store if runtime else target.store
+        if store is None:
+            raise HTTPException(409, "The markets list needs a database")
+        return store
+
+    def markets_payload(store) -> dict:
+        return {"markets": store.markets()}
+
+    @app.get("/api/markets")
+    def get_markets() -> dict:
+        return markets_payload(market_store())
+
+    @app.post("/api/markets")
+    def add_market(body: dict = Body(...)) -> dict:
+        """Add a TradingView symbol to the dropdown; it is checked with TradingView first."""
+        store = market_store()
+        sym = market_call(lambda: clean_symbol(str(body.get("symbol") or "")))
+        if any(m["symbol"] == sym for m in store.markets()):
+            raise HTTPException(409, f"{sym} is already in the list")
+        info = market_call(lambda: markets.info(sym))
+        try:
+            row = clean_market({"label": sym.split(":", 1)[1], "name": info.get("description"),
+                                "venue": info.get("exchange"), **{k: v for k, v in body.items() if v is not None},
+                                "symbol": sym})
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        store.add_market(row)
+        return markets_payload(store)
+
+    @app.put("/api/markets")
+    def put_markets(body: dict = Body(...)) -> dict:
+        """Reorder, rename and set keep_live: the same symbols as listed, in their new order."""
+        store = market_store()
+        given = body.get("markets")
+        if not isinstance(given, list):
+            raise HTTPException(422, "markets must be a list")
+        try:
+            rows = [clean_market(m if isinstance(m, dict) else {}) for m in given]
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if sorted(r["symbol"] for r in rows) != sorted(m["symbol"] for m in store.markets()):
+            raise HTTPException(422, "List every market once: add or delete one with POST or DELETE")
+        store.save_markets(rows)
+        return markets_payload(store)
+
+    @app.delete("/api/markets")
+    def delete_market(symbol: str = Query(...)) -> dict:
+        store = market_store()
+        sym = market_call(lambda: clean_symbol(symbol))
+        listed = store.markets()
+        if not any(m["symbol"] == sym for m in listed):
+            raise HTTPException(404, f"{sym} isn't in the list")
+        if sym == current().symbol:
+            raise HTTPException(409, f"{sym} is being scanned: pick another symbol in Settings first")
+        if len(listed) == 1:
+            raise HTTPException(409, "Keep at least one market in the list")
+        store.delete_market(sym)
+        return markets_payload(store)
 
     # ---- bar replay: the market as it stood at a past minute (replay.py) ----
     replay_cache = ReplayCache()
@@ -610,6 +688,12 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     @app.get("/api/settings")
     def get_settings() -> dict:
         return settings_payload()
+
+    @app.get("/api/series")
+    def get_series() -> dict:
+        """The stored series and how their ingest is going (Settings > Data source)."""
+        store = runtime.store if runtime else engine.store
+        return {"series": store.series_status() if store else []}
 
     @app.put("/api/settings")
     def put_settings(body: dict = Body(...)) -> dict:

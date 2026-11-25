@@ -24,8 +24,9 @@ test("ticks build the forming M1 candle", () => {
   assert.deepEqual(bar, { time: t0 + 60, open: 48.35, high: 48.35, low: 48.35, close: 48.35 });
 });
 
-test("the chart's market menu: six markets, shown without the exchange", () => {
-  assert.deepEqual(TICKERS.map((t) => t.short), ["XAU", "XAG", "DXY", "NQ", "S&P", "DJI"]);
+test("the chart's market menu until the server's list loads: gold from two venues, then the rest", () => {
+  assert.deepEqual(TICKERS.map((t) => t.short), ["XAU", "XAU", "XAG", "DXY", "NQ", "S&P", "DJI"]);
+  assert.deepEqual(TICKERS.slice(0, 2).map((t) => t.venue), ["FXCM", "OANDA"]);
   assert.equal(new Set(TICKERS.map((t) => t.symbol)).size, TICKERS.length);
   assert.ok(TICKERS.every((t) => paneSymbol(t.symbol, "") === t.symbol), "each is a valid TradingView symbol");
   assert.equal(tickerName("FX:XAUUSD"), "XAUUSD");

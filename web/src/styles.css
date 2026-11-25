@@ -4793,3 +4793,39 @@ fieldset:disabled .switch {
   margin: 2px 0 0;
   max-width: 240px;
 }
+
+/* Settings > Markets: editable rows */
+.markets-table input[type="text"] {
+  width: 100%;
+  min-width: 4rem;
+}
+.markets-table td.end {
+  white-space: nowrap;
+}
+.markets-table .button.quiet {
+  padding-inline: 0.4rem;
+}
+
+/* The login screen and Settings > Login. */
+.login-card {
+  max-width: 360px;
+}
+.login-card .field input {
+  width: 100%;
+}
+.login-password {
+  max-width: 360px;
+  margin-top: var(--s6);
+}
+.login-password h3 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+/* Settings > Data source > Storage: a source · ticker heading over its timeframes. */
+.data th.series-group {
+  text-align: left;
+  font-weight: 600;
+  padding-top: var(--s3);
+  color: var(--text);
+}

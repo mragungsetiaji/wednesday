@@ -17,6 +17,7 @@ mod fake_telegram;
 mod plugin_kit;
 
 mod alerts;
+mod auth;
 mod alerts_golden;
 mod calendar_fetch;
 mod calendar_golden;

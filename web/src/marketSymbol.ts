@@ -7,21 +7,29 @@ export interface Ticker {
   symbol: string; // TradingView's name, with its exchange prefix
   short: string; // what the menu shows
   name: string;
+  venue?: string | null; // who quotes it (FXCM, OANDA): the same short can be listed twice
 }
 
 /**
- * The markets the chart's symbol menu offers; picking one moves the whole engine (scan, levels,
- * alerts) to it. `FX:` is FXCM spot; the indices are OANDA's CFDs, which trade nearly round the
- * clock like gold.
+ * The markets the chart's symbol menu offers until the server's list (`/api/markets`, Settings >
+ * Markets) has loaded, and when it can't be had; picking one moves the whole engine (scan,
+ * levels, alerts) to it. `FX:` is FXCM spot; the indices are OANDA's CFDs, which trade nearly
+ * round the clock like gold. The same as the server's first list (`DEFAULT_MARKETS`).
  */
 export const TICKERS: Ticker[] = [
-  { symbol: "FX:XAUUSD", short: "XAU", name: "Gold spot" },
-  { symbol: "FX:XAGUSD", short: "XAG", name: "Silver spot" },
-  { symbol: "TVC:DXY", short: "DXY", name: "US Dollar Index" },
-  { symbol: "OANDA:NAS100USD", short: "NQ", name: "Nasdaq 100" },
-  { symbol: "OANDA:SPX500USD", short: "S&P", name: "S&P 500" },
-  { symbol: "OANDA:US30USD", short: "DJI", name: "Dow Jones 30" },
+  { symbol: "FX:XAUUSD", short: "XAU", name: "Gold spot", venue: "FXCM" },
+  { symbol: "OANDA:XAUUSD", short: "XAU", name: "Gold spot", venue: "OANDA" },
+  { symbol: "FX:XAGUSD", short: "XAG", name: "Silver spot", venue: "FXCM" },
+  { symbol: "TVC:DXY", short: "DXY", name: "US Dollar Index", venue: "TVC" },
+  { symbol: "OANDA:NAS100USD", short: "NQ", name: "Nasdaq 100", venue: "OANDA" },
+  { symbol: "OANDA:SPX500USD", short: "S&P", name: "S&P 500", venue: "OANDA" },
+  { symbol: "OANDA:US30USD", short: "DJI", name: "Dow Jones 30", venue: "OANDA" },
 ];
+
+/** A market of the server's list as the menus show it. */
+export function tickerOf(m: { symbol: string; label: string; name: string | null; venue: string | null }): Ticker {
+  return { symbol: m.symbol, short: m.label, name: m.name ?? tickerName(m.symbol), venue: m.venue };
+}
 
 /** TradingView symbols the full-screen pane's symbol box suggests. */
 export const SUGGESTED_SYMBOLS = TICKERS.map((t) => t.symbol);

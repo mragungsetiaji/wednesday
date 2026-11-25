@@ -21,6 +21,7 @@ import pandas as pd
 from .bias import BIAS_KEY, TradeBias, active
 from .drawing_alerts import DrawingAlerts
 from .feeds import DataFeed, M1Buffer, build_feed, follow_url, followed_settings
+from .ingest import Ingest
 from .plugins import Hooks
 from .scanner import ScanConfig, ScanResult, scan
 from .settings import DataSettings
@@ -47,6 +48,7 @@ class EngineState:
     version: int = 0  # bumps on every successful scan
     result: ScanResult | None = None
     m1: pd.DataFrame | None = None
+    native: dict = field(default_factory=dict)  # the source's own closed candles by timeframe ("4H")
     scanned_at: datetime | None = None
     error: str | None = None
     error_at: datetime | None = None
@@ -70,6 +72,7 @@ class Engine:
         self.store = store
         key = (feed.name, symbol) if feed.persist else None
         self.buffer = M1Buffer(feed, max_bars=cfg.required_m1_bars(), store=store if key else None, key=key)
+        self.ingest = Ingest(feed.name, symbol, store if key else None)
         self.state = EngineState()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -91,20 +94,23 @@ class Engine:
         Errors are recorded in the state and re-raised."""
         return self._scan(*self._fetch())
 
-    def _fetch(self) -> tuple[pd.DataFrame, float | None]:
-        """The feed's part of a scan, on the feed thread: new M1 bars and the last price."""
+    def _fetch(self) -> tuple[pd.DataFrame, float | None, dict]:
+        """The feed's part of a scan, on the feed thread: new M1 bars, the source's own candles
+        of each timeframe (``ingest.py``) and the last price."""
         try:
             m1 = self.buffer.update()
+            self.ingest.refresh(self.feed)
             price = self.feed.last_price()
         except Exception as exc:
             self._record_error(exc)
             raise
-        return m1, price
+        return m1, price, dict(self.ingest.native)
 
-    def _scan(self, m1: pd.DataFrame, price: float | None) -> ScanResult:
+    def _scan(self, m1: pd.DataFrame, price: float | None, native: dict | None = None) -> ScanResult:
         """The heavy part, which never touches the feed: scan the bars and publish the result."""
+        native = native or {}
         try:
-            result = scan(m1, self.cfg, price)
+            result = scan(m1, self.cfg, price, native)
         except Exception as exc:
             self._record_error(exc)
             raise
@@ -112,6 +118,7 @@ class Engine:
             self.state.version += 1
             self.state.result = result
             self.state.m1 = m1
+            self.state.native = native
             self.state.scanned_at = datetime.now(timezone.utc)
             self.state.error = None
             self.state.error_at = None
@@ -246,6 +253,7 @@ class Engine:
                     failures = 0
                     self._set_conn("connected")
                     worker.submit(fetched)
+                    self.ingest.backfill(self.feed)  # one page of older history a minute
                     if not self.poll:
                         log.info("%s: polling off, keeping this scan", self.feed.name)
                         while not self._stop.is_set():
@@ -263,6 +271,7 @@ class Engine:
                 self._wait(seconds_to_next_minute(delay))
         finally:
             worker.stop()
+            self.ingest.stopped()
             if connected:
                 self.feed.close()
 
@@ -348,6 +357,7 @@ class Runtime:
         self._lock = threading.Lock()
         self.settings = settings
         self.engine = self._build(settings)
+        self.keeper = None  # keeper.Keeper, from start()
 
     def _build(self, settings: DataSettings) -> Engine:
         feed = build_feed(settings)
@@ -424,6 +434,12 @@ class Runtime:
 
     def start(self) -> None:
         self.engine.start(self.delay, self._after_scan)
+        # The markets kept live beside the scanned one. Following Rust, its keeper does it.
+        if self.store is not None and self.poll and not self.following and self.keeper is None:
+            from .keeper import Keeper
+
+            self.keeper = Keeper(self.store, lambda: (self.settings.source, self.engine.symbol))
+            self.keeper.start()
 
     def run_forever(self) -> None:
         """Console mode: scan in the calling thread."""
@@ -431,6 +447,8 @@ class Runtime:
 
     def stop(self) -> None:
         self.hooks.shutdown()
+        if self.keeper is not None:
+            self.keeper.stop()
         self.engine.stop()
 
     def reconnect(self) -> None:

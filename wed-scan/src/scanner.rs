@@ -109,7 +109,12 @@ pub fn candles_for(m1: &[Bar], tf: Timeframe, lookback: usize) -> Vec<Bar> {
 }
 
 pub fn scan_timeframe(m1: &[Bar], tf: Timeframe, price: f64, cfg: &ScanConfig) -> TimeframeResult {
-    let candles = candles_for(m1, tf, cfg.lookback);
+    scan_candles(candles_for(m1, tf, cfg.lookback), tf, price, cfg)
+}
+
+/// Scan closed candles of `tf` (the last `cfg.lookback` of them).
+pub fn scan_candles(candles: Vec<Bar>, tf: Timeframe, price: f64, cfg: &ScanConfig) -> TimeframeResult {
+    let candles = candles[candles.len().saturating_sub(cfg.lookback)..].to_vec();
     let ctx = Context::new(&candles);
     let recent_from =
         (cfg.recent_bars > 0 && candles.len() >= cfg.recent_bars).then(|| candles[candles.len() - cfg.recent_bars].time);
@@ -138,9 +143,26 @@ pub fn scan_timeframe(m1: &[Bar], tf: Timeframe, price: f64, cfg: &ScanConfig) -
 
 /// Scan every timeframe from high to low against `price` (the last close when None).
 pub fn scan(m1: &[Bar], cfg: &ScanConfig, price: Option<f64>) -> Result<ScanResult, String> {
+    scan_native(m1, &Native::new(), cfg, price)
+}
+
+/// Closed candles the source built itself, by timeframe name ("4H"): TradingView's own 4H
+/// candles follow its sessions, which resampling M1 can't reproduce.
+pub type Native = std::collections::HashMap<String, Vec<Bar>>;
+
+/// [`scan`], with a timeframe in `native` scanned on those candles instead of resampled M1
+/// (`scan(..., native=...)` in scanner.py).
+pub fn scan_native(m1: &[Bar], native: &Native, cfg: &ScanConfig, price: Option<f64>) -> Result<ScanResult, String> {
     let last = m1.last().ok_or("No M1 data to scan")?;
     let price = price.unwrap_or(last.close);
-    let results = cfg.ordered().into_iter().map(|tf| scan_timeframe(m1, tf, price, cfg)).collect();
+    let results = cfg
+        .ordered()
+        .into_iter()
+        .map(|tf| match native.get(tf.name).filter(|c| !c.is_empty()) {
+            Some(candles) => scan_candles(candles.clone(), tf, price, cfg),
+            None => scan_timeframe(m1, tf, price, cfg),
+        })
+        .collect();
     Ok(ScanResult { time: last.time, price, detectors: cfg.detectors.clone(), results })
 }
 

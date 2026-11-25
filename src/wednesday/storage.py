@@ -1,4 +1,4 @@
-"""Persistence: saved settings and the M1 bar history.
+"""Persistence: settings, accounts, the bar history per source, symbol and timeframe, and the rest.
 
 SQLAlchemy Core keeps this database-agnostic: SQLite by default
 (``sqlite:///data/xau.db``), PostgreSQL by pointing ``XAU_DB_URL`` at it
@@ -11,6 +11,7 @@ server time for MT5), the same convention the API uses.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -45,12 +46,16 @@ settings_table = Table(
     Column("value", Text, nullable=False),  # JSON
 )
 
+# The source's own candles, one series per (source, symbol, timeframe): "1m" as the feed streams
+# it, and the higher timeframes the source builds itself (TradingView's 4H and D1 follow its
+# sessions, which resampling 1m would not). Never resampled before they are stored.
 bars_table = Table(
-    "m1_bars",
+    "bars",
     metadata,
     Column("source", String(32), primary_key=True),
     Column("symbol", String(64), primary_key=True),
-    Column("time", BigInteger, primary_key=True),  # unix seconds, bar open
+    Column("tf", String(8), primary_key=True),  # "1m", "5m", "15m", "30m", "1h", "4h", "1d"
+    Column("time", BigInteger, primary_key=True),  # unix seconds, bar open, feed clock
     Column("open", Float, nullable=False),
     Column("high", Float, nullable=False),
     Column("low", Float, nullable=False),
@@ -58,6 +63,77 @@ bars_table = Table(
     Column("volume", Float, nullable=False),
 )
 
+# What the ingest knows about each stored series (ingest.py): how far back it reaches and
+# whether the history is still being fetched.
+series_table = Table(
+    "series",
+    metadata,
+    Column("source", String(32), primary_key=True),
+    Column("symbol", String(64), primary_key=True),
+    Column("tf", String(8), primary_key=True),
+    Column("active", Boolean, nullable=False, default=False),  # being kept up to date now
+    Column("first_time", BigInteger, nullable=True),
+    Column("last_time", BigInteger, nullable=True),
+    Column("backfill", String(16), nullable=False, default="pending"),  # pending, running, done
+    Column("updated_at", String(40), nullable=True),
+    Column("error", Text, nullable=True),
+)
+
+# How Settings lists a symbol's series: longest timeframe first.
+TF_ORDER = {"1d": 0, "4h": 1, "1h": 2, "30m": 3, "15m": 4, "5m": 5, "1m": 6}
+
+# The tickers the dropdown offers (markets.py). Nothing is fetched for one until it is picked.
+markets_table = Table(
+    "markets",
+    metadata,
+    Column("source", String(32), primary_key=True),
+    Column("symbol", String(64), primary_key=True),  # the source's id, e.g. "FX:XAUUSD"
+    Column("label", String(64), nullable=False),  # "XAUUSD"
+    Column("name", String(128), nullable=True),  # "Gold spot"
+    Column("venue", String(64), nullable=True),  # "FXCM"
+    Column("position", Integer, nullable=False, default=0),
+    Column("keep_live", Boolean, nullable=False, default=False),  # stream it even when not picked
+    Column("added_at", String(40), nullable=False),
+)
+
+# ---- Accounts (auth.py) -------------------------------------------------------------------
+# The login for a dashboard reached over the network. Passwords are argon2id hashes; API keys
+# and bot tokens never come here (secret_store.py).
+users_table = Table(
+    "users",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("username", String(64), nullable=False, unique=True),
+    Column("email", String(255), nullable=True),
+    Column("name", String(120), nullable=True),
+    Column("password_hash", Text, nullable=False),
+    Column("role", String(16), nullable=False, default="owner"),
+    Column("disabled", Boolean, nullable=False, default=False),
+    Column("created_at", String(40), nullable=False),
+    Column("password_at", String(40), nullable=False),
+    Column("last_login_at", String(40), nullable=True),
+)
+
+# A signed-in device: the cookie holds the token, the table only its SHA-256.
+sessions_table = Table(
+    "sessions",
+    metadata,
+    Column("token_hash", String(64), primary_key=True),
+    Column("user_id", String(36), nullable=False, index=True),
+    Column("device", String(255), nullable=True),
+    Column("created_at", String(40), nullable=False),
+    Column("expires_at", String(40), nullable=False),
+    Column("last_seen_at", String(40), nullable=True),
+)
+
+# Data migrations already applied (see MIGRATIONS); the Rust store keeps the same list.
+migrations_table = Table(
+    "schema_migrations",
+    metadata,
+    Column("version", Integer, primary_key=True),
+    Column("name", String(64), nullable=False),
+    Column("applied_at", String(40), nullable=False),
+)
 
 alerts_table = Table(
     "alert_log",
@@ -247,6 +323,7 @@ class Store:
                 cur.close()
         metadata.create_all(self.engine)
         self._add_missing_columns()
+        self._migrate()
 
     def _add_missing_columns(self) -> None:
         """create_all makes missing tables only; add nullable columns that newer versions added
@@ -264,6 +341,21 @@ class Store:
                     if col.name not in have and col.nullable:
                         kind = col.type.compile(dialect=self.engine.dialect)
                         conn.exec_driver_sql(f'ALTER TABLE {table.name} ADD COLUMN "{col.name}" {kind}')
+
+    def _migrate(self) -> None:
+        """Apply the data migrations this database hasn't had yet, in order, each in one
+        transaction with its row in ``schema_migrations`` (wed-store runs the same list)."""
+        from sqlalchemy import inspect
+
+        with self.engine.connect() as conn:
+            done = {v for (v,) in conn.execute(select(migrations_table.c.version))}
+        for version, name, run in MIGRATIONS:
+            if version in done:
+                continue
+            with self.engine.begin() as conn:
+                run(conn, set(inspect(conn).get_table_names()))
+                conn.execute(migrations_table.insert().values(
+                    version=version, name=name, applied_at=datetime.now(timezone.utc).isoformat()))
 
     @property
     def backend(self) -> str:
@@ -287,24 +379,26 @@ class Store:
             conn.execute(settings_table.delete().where(settings_table.c.key == key))
 
     # ---- bars -----------------------------------------------------------
-    def save_bars(self, source: str, symbol: str, df: pd.DataFrame) -> int:
+    def save_bars(self, source: str, symbol: str, df: pd.DataFrame, tf: str = "1m") -> int:
         if df.empty:
             return 0
         # Explicit unit: pandas may hold ns or us resolution depending on how the index was built.
         times = pd.DatetimeIndex(df.index).as_unit("s").asi8.tolist()
         rows = [
-            {"source": source, "symbol": symbol, "time": int(t), **{c: float(v) for c, v in zip(OHLCV_COLUMNS, vals)}}
+            {"source": source, "symbol": symbol, "tf": tf, "time": int(t),
+             **{c: float(v) for c, v in zip(OHLCV_COLUMNS, vals)}}
             for t, vals in zip(times, df[OHLCV_COLUMNS].itertuples(index=False, name=None))
         ]
         for i in range(0, len(rows), 5000):
-            self._upsert(bars_table, rows[i : i + 5000], ["source", "symbol", "time"])
+            self._upsert(bars_table, rows[i : i + 5000], ["source", "symbol", "tf", "time"])
         return len(rows)
 
-    def load_bars(self, source: str, symbol: str, limit: int, before: int | None = None) -> pd.DataFrame:
-        """The latest ``limit`` stored M1 bars, or the latest opening before ``before`` (unix seconds)."""
+    def load_bars(self, source: str, symbol: str, limit: int, before: int | None = None,
+                  tf: str = "1m") -> pd.DataFrame:
+        """The latest ``limit`` stored bars, or the latest opening before ``before`` (unix seconds)."""
         t = bars_table
         q = select(t.c.time, t.c.open, t.c.high, t.c.low, t.c.close, t.c.volume).where(
-            t.c.source == source, t.c.symbol == symbol)
+            t.c.source == source, t.c.symbol == symbol, t.c.tf == tf)
         if before is not None:
             q = q.where(t.c.time < before)
         q = q.order_by(t.c.time.desc()).limit(limit)
@@ -317,12 +411,12 @@ class Store:
         df.index.name = None
         return df.sort_index().astype(float)
 
-    def load_bar_range(self, source: str, symbol: str, start: int, end: int) -> pd.DataFrame:
-        """Stored M1 bars with open times in [start, end] (unix seconds of the feed clock)."""
+    def load_bar_range(self, source: str, symbol: str, start: int, end: int, tf: str = "1m") -> pd.DataFrame:
+        """Stored bars with open times in [start, end] (unix seconds of the feed clock)."""
         t = bars_table
         q = (
             select(t.c.time, t.c.open, t.c.high, t.c.low, t.c.close, t.c.volume)
-            .where(t.c.source == source, t.c.symbol == symbol, t.c.time >= start, t.c.time <= end)
+            .where(t.c.source == source, t.c.symbol == symbol, t.c.tf == tf, t.c.time >= start, t.c.time <= end)
             .order_by(t.c.time)
         )
         with self.engine.connect() as conn:
@@ -333,7 +427,7 @@ class Store:
         return df.astype(float)
 
     def delete_bars(self, source: str, symbol: str | None = None) -> int:
-        """Drop a stored bar stream (every symbol of ``source`` when ``symbol`` is None)."""
+        """Drop stored bars, every timeframe (every symbol of ``source`` when ``symbol`` is None)."""
         t = bars_table
         q = t.delete().where(t.c.source == source)
         if symbol is not None:
@@ -341,19 +435,145 @@ class Store:
         with self.engine.begin() as conn:
             return conn.execute(q).rowcount
 
-    def bar_bounds(self, source: str, symbol: str) -> tuple[int, int | None, int | None]:
-        """Stored M1 bars of one stream: count, first and last open time (unix seconds)."""
+    def bar_bounds(self, source: str, symbol: str, tf: str = "1m") -> tuple[int, int | None, int | None]:
+        """Stored bars of one series: count, first and last open time (unix seconds)."""
         t = bars_table
-        q = select(func.count(), func.min(t.c.time), func.max(t.c.time)).where(t.c.source == source, t.c.symbol == symbol)
+        q = select(func.count(), func.min(t.c.time), func.max(t.c.time)).where(
+            t.c.source == source, t.c.symbol == symbol, t.c.tf == tf)
         with self.engine.connect() as conn:
             n, first, last = conn.execute(q).one()
         return int(n), first, last
+
+    # ---- markets: the dropdown's list (Settings > Markets) ---------------------------
+    MARKET_FIELDS = ("symbol", "label", "name", "venue", "position", "keep_live")
+
+    def markets(self, source: str = "tradingview") -> list[dict]:
+        """The dropdown's markets of ``source``, in menu order."""
+        t = markets_table
+        q = select(*[t.c[f] for f in self.MARKET_FIELDS]).where(t.c.source == source).order_by(t.c.position, t.c.symbol)
+        with self.engine.connect() as conn:
+            return [{**dict(r), "keep_live": bool(r["keep_live"])} for r in conn.execute(q).mappings().all()]
+
+    def add_market(self, market: dict, source: str = "tradingview") -> None:
+        """Add ``market`` (symbol, label, name, venue, keep_live) at the end of the list."""
+        t = markets_table
+        with self.engine.begin() as conn:
+            last = conn.execute(select(func.max(t.c.position)).where(t.c.source == source)).scalar()
+            conn.execute(t.insert().values(
+                source=source, symbol=market["symbol"], label=market["label"], name=market.get("name"),
+                venue=market.get("venue"), position=(-1 if last is None else last) + 1,
+                keep_live=bool(market.get("keep_live")), added_at=datetime.now(timezone.utc).isoformat()))
+
+    def save_markets(self, markets: list[dict], source: str = "tradingview") -> None:
+        """Rewrite the listed markets' label, name, venue and keep_live, in the given order."""
+        t = markets_table
+        with self.engine.begin() as conn:
+            for position, m in enumerate(markets):
+                conn.execute(t.update().where(t.c.source == source, t.c.symbol == m["symbol"]).values(
+                    label=m["label"], name=m.get("name"), venue=m.get("venue"), position=position,
+                    keep_live=bool(m.get("keep_live"))))
+
+    def delete_market(self, symbol: str, source: str = "tradingview") -> bool:
+        """Take ``symbol`` off the list (its stored bars stay)."""
+        t = markets_table
+        with self.engine.begin() as conn:
+            return conn.execute(t.delete().where(t.c.source == source, t.c.symbol == symbol)).rowcount > 0
+
+    # ---- accounts: users and their sessions (auth.py) -------------------------------
+    def users_count(self) -> int:
+        with self.engine.connect() as conn:
+            return int(conn.execute(select(func.count()).select_from(users_table)).scalar() or 0)
+
+    def user(self, *, user_id: str | None = None, username: str | None = None) -> dict | None:
+        """One user by id or by (lowercased) username."""
+        t = users_table
+        q = select(t).where(t.c.id == user_id) if user_id is not None else select(t).where(t.c.username == username)
+        with self.engine.connect() as conn:
+            row = conn.execute(q).mappings().first()
+        return {**dict(row), "disabled": bool(row["disabled"])} if row else None
+
+    def add_user(self, row: dict) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(users_table.insert().values(**row))
+
+    def update_user(self, user_id: str, **values) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(users_table.update().where(users_table.c.id == user_id).values(**values))
+
+    def add_session(self, row: dict) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(sessions_table.insert().values(**row))
+
+    def session(self, token_hash: str) -> dict | None:
+        t = sessions_table
+        with self.engine.connect() as conn:
+            row = conn.execute(select(t).where(t.c.token_hash == token_hash)).mappings().first()
+        return dict(row) if row else None
+
+    def sessions(self, user_id: str) -> list[dict]:
+        """A user's sessions, the most recently used first."""
+        t = sessions_table
+        q = select(t).where(t.c.user_id == user_id).order_by(t.c.last_seen_at.desc(), t.c.created_at.desc())
+        with self.engine.connect() as conn:
+            return [dict(r) for r in conn.execute(q).mappings().all()]
+
+    def touch_session(self, token_hash: str, last_seen_at: str, expires_at: str) -> None:
+        t = sessions_table
+        with self.engine.begin() as conn:
+            conn.execute(t.update().where(t.c.token_hash == token_hash).values(
+                last_seen_at=last_seen_at, expires_at=expires_at))
+
+    def delete_sessions(self, *, token_hash: str | None = None, user_id: str | None = None,
+                        keep: str | None = None, expired_before: str | None = None) -> int:
+        """Delete one session, a user's (but ``keep``), or those that expired before a time."""
+        if token_hash is None and user_id is None and expired_before is None:
+            raise ValueError("delete_sessions needs a session, a user or a time")
+        t = sessions_table
+        q = t.delete()
+        if token_hash is not None:
+            q = q.where(t.c.token_hash == token_hash)
+        if user_id is not None:
+            q = q.where(t.c.user_id == user_id)
+        if keep is not None:
+            q = q.where(t.c.token_hash != keep)
+        if expired_before is not None:
+            q = q.where(t.c.expires_at < expired_before)
+        with self.engine.begin() as conn:
+            return conn.execute(q).rowcount
+
+    # ---- series: what the ingest keeps per (source, symbol, timeframe) ------------
+    def note_series(self, source: str, symbol: str, tf: str, backfill: str, error: str | None = None,
+                    active: bool = True) -> None:
+        """Record a series' reach (from ``bars``), its backfill state and its last error."""
+        _, first, last = self.bar_bounds(source, symbol, tf)
+        self._upsert(series_table, [{
+            "source": source, "symbol": symbol, "tf": tf, "active": active, "first_time": first,
+            "last_time": last, "backfill": backfill, "updated_at": datetime.now(timezone.utc).isoformat(),
+            "error": error}], ["source", "symbol", "tf"])
+
+    def series(self, source: str | None = None, symbol: str | None = None) -> list[dict]:
+        """Series rows, by source, symbol and timeframe."""
+        t = series_table
+        q = select(t)
+        if source is not None:
+            q = q.where(t.c.source == source)
+        if symbol is not None:
+            q = q.where(t.c.symbol == symbol)
+        with self.engine.connect() as conn:
+            rows = conn.execute(q.order_by(t.c.source, t.c.symbol, t.c.tf)).mappings().all()
+        return [dict(r) for r in rows]
+
+    def deactivate_series(self, source: str, symbol: str) -> None:
+        """The stream's engine stopped: its series are no longer kept up to date."""
+        t = series_table
+        with self.engine.begin() as conn:
+            conn.execute(t.update().where(t.c.source == source, t.c.symbol == symbol).values(active=False))
 
     def bar_days(self, source: str, symbol: str) -> list[tuple[int, int]]:
         """Stored M1 bars per day: (day as unix seconds of its midnight, bar count), oldest first."""
         t = bars_table
         day = (t.c.time // 86400).label("day")
-        q = (select(day, func.count()).where(t.c.source == source, t.c.symbol == symbol)
+        q = (select(day, func.count()).where(t.c.source == source, t.c.symbol == symbol, t.c.tf == "1m")
              .group_by(day).order_by(day))
         with self.engine.connect() as conn:
             return [(int(d) * 86400, int(n)) for d, n in conn.execute(q).all()]
@@ -361,15 +581,17 @@ class Store:
     def last_bar(self, source: str, symbol: str) -> tuple[int, float] | None:
         """The newest stored bar of a stream: (open time unix, close), or None."""
         t = bars_table
-        q = (select(t.c.time, t.c.close).where(t.c.source == source, t.c.symbol == symbol)
+        q = (select(t.c.time, t.c.close).where(t.c.source == source, t.c.symbol == symbol, t.c.tf == "1m")
              .order_by(t.c.time.desc()).limit(1))
         with self.engine.connect() as conn:
             row = conn.execute(q).first()
         return (int(row[0]), float(row[1])) if row else None
 
     def bar_stats(self) -> list[dict]:
+        """The stored M1 streams: source, symbol, bars, first and last open time."""
         t = bars_table
-        q = select(t.c.source, t.c.symbol, func.count(), func.min(t.c.time), func.max(t.c.time)).group_by(t.c.source, t.c.symbol)
+        q = (select(t.c.source, t.c.symbol, func.count(), func.min(t.c.time), func.max(t.c.time))
+             .where(t.c.tf == "1m").group_by(t.c.source, t.c.symbol).order_by(t.c.source, t.c.symbol))
         with self.engine.connect() as conn:
             rows = conn.execute(q).all()
 
@@ -377,6 +599,31 @@ class Store:
             return pd.Timestamp(ts, unit="s").isoformat() if ts is not None else None
 
         return [{"source": s, "symbol": sym, "bars": n, "first": iso(a), "last": iso(b)} for s, sym, n, a, b in rows]
+
+    def series_status(self) -> list[dict]:
+        """Every stored series with its ingest state (Settings > Data source): bars, first and last
+        open time from ``bars``, and from ``series`` whether it is kept live, the backfill and the
+        last error. A series with bars but no ``series`` row (copied from ``m1_bars``) has no state."""
+        b = bars_table
+        q = (select(b.c.source, b.c.symbol, b.c.tf, func.count(), func.min(b.c.time), func.max(b.c.time))
+             .group_by(b.c.source, b.c.symbol, b.c.tf))
+        with self.engine.connect() as conn:
+            counts = {(s, sym, tf): (n, a, z) for s, sym, tf, n, a, z in conn.execute(q).all()}
+        state = {(r["source"], r["symbol"], r["tf"]): r for r in self.series()}
+
+        def iso(ts):
+            return pd.Timestamp(ts, unit="s").isoformat() if ts is not None else None
+
+        out = []
+        for key in set(counts) | set(state):
+            n, first, last = counts.get(key, (0, None, None))
+            row = state.get(key, {})
+            out.append({"source": key[0], "symbol": key[1], "tf": key[2], "bars": int(n),
+                        "first": iso(first), "last": iso(last), "active": bool(row.get("active", False)),
+                        "backfill": row.get("backfill"), "updated_at": row.get("updated_at"),
+                        "error": row.get("error")})
+        out.sort(key=lambda r: (r["source"], r["symbol"], TF_ORDER.get(r["tf"], len(TF_ORDER)), r["tf"]))
+        return out
 
     # ---- alerts ---------------------------------------------------------
     def alert_sent(self, key: str) -> bool:
@@ -582,3 +829,47 @@ class Store:
                   for c in table.columns if c.name not in keys}
         with self.engine.begin() as conn:
             conn.execute(stmt.on_conflict_do_update(index_elements=keys, set_=update), rows)
+
+
+# ---- data migrations ------------------------------------------------------------------------
+# (version, name, run(conn, existing table names)); never renumber or edit an applied one.
+# wed-store/src/lib.rs keeps the same list.
+
+def _bars_from_m1_bars(conn, tables: set[str]) -> None:
+    """Versions before 0.5 kept only M1 bars, in ``m1_bars``: move them to ``bars`` as "1m"."""
+    if "m1_bars" not in tables:
+        return
+    conn.exec_driver_sql(
+        "INSERT INTO bars (source, symbol, tf, time, open, high, low, close, volume) "
+        "SELECT source, symbol, '1m', time, open, high, low, close, volume FROM m1_bars WHERE 1 = 1 "
+        "ON CONFLICT DO NOTHING")  # the WHERE: SQLite reads ON after a bare SELECT as a join
+    conn.exec_driver_sql("DROP TABLE m1_bars")
+
+
+# The dropdown's markets on a new database (web/src/marketSymbol.ts had them before 0.5): FXCM's
+# and OANDA's gold side by side. Settings > Markets changes the list. The Rust store seeds the same.
+DEFAULT_MARKETS = (
+    ("FX:XAUUSD", "XAU", "Gold spot", "FXCM"),
+    ("OANDA:XAUUSD", "XAU", "Gold spot", "OANDA"),
+    ("FX:XAGUSD", "XAG", "Silver spot", "FXCM"),
+    ("TVC:DXY", "DXY", "US Dollar Index", "TVC"),
+    ("OANDA:NAS100USD", "NQ", "Nasdaq 100", "OANDA"),
+    ("OANDA:SPX500USD", "S&P", "S&P 500", "OANDA"),
+    ("OANDA:US30USD", "DJI", "Dow Jones 30", "OANDA"),
+)
+
+
+def _seed_markets(conn, tables: set[str]) -> None:
+    if conn.execute(select(func.count()).select_from(markets_table)).scalar():
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(markets_table.insert(), [
+        {"source": "tradingview", "symbol": symbol, "label": label, "name": name, "venue": venue,
+         "position": position, "keep_live": False, "added_at": now}
+        for position, (symbol, label, name, venue) in enumerate(DEFAULT_MARKETS)])
+
+
+MIGRATIONS = (
+    (1, "bars_from_m1_bars", _bars_from_m1_bars),
+    (2, "seed_markets", _seed_markets),
+)
