@@ -20,7 +20,18 @@ use sqlx::{PgPool, Row, SqlitePool};
 const SCHEMA: &str = include_str!("../schema.json");
 
 /// The data migrations, as `MIGRATIONS` in storage.py: never renumber or edit an applied one.
-const MIGRATIONS: [(i64, &str); 1] = [(1, "bars_from_m1_bars")];
+const MIGRATIONS: [(i64, &str); 2] = [(1, "bars_from_m1_bars"), (2, "seed_markets")];
+
+/// The dropdown's first markets (`DEFAULT_MARKETS` in storage.py): symbol, label, name, venue.
+pub const DEFAULT_MARKETS: [(&str, &str, &str, &str); 7] = [
+    ("FX:XAUUSD", "XAU", "Gold spot", "FXCM"),
+    ("OANDA:XAUUSD", "XAU", "Gold spot", "OANDA"),
+    ("FX:XAGUSD", "XAG", "Silver spot", "FXCM"),
+    ("TVC:DXY", "DXY", "US Dollar Index", "TVC"),
+    ("OANDA:NAS100USD", "NQ", "Nasdaq 100", "OANDA"),
+    ("OANDA:SPX500USD", "S&P", "S&P 500", "OANDA"),
+    ("OANDA:US30USD", "DJI", "Dow Jones 30", "OANDA"),
+];
 
 #[derive(Clone, Debug)]
 pub enum Arg {
@@ -188,6 +199,19 @@ impl Store {
                       ON CONFLICT DO NOTHING".to_string(), vec![]),
                     ("DROP TABLE m1_bars".to_string(), vec![]),
                 ],
+                // The dropdown's first markets, when the list is empty.
+                2 if self.rows("markets", "SELECT symbol FROM markets LIMIT 1", vec![]).await?.is_empty() =>
+                {
+                    let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.6f+00:00").to_string();
+                    DEFAULT_MARKETS.iter().enumerate().map(|(i, (symbol, label, name, venue))| (
+                        "INSERT INTO markets (source, symbol, label, name, venue, position, keep_live, added_at) \
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)".to_string(),
+                        vec![Arg::Str(Some("tradingview".into())), Arg::Str(Some((*symbol).into())),
+                             Arg::Str(Some((*label).into())), Arg::Str(Some((*name).into())),
+                             Arg::Str(Some((*venue).into())), Arg::Int(Some(i as i64)), Arg::Bool(false),
+                             Arg::Str(Some(now.clone()))],
+                    )).collect()
+                }
                 _ => vec![],
             };
             let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.6f+00:00").to_string();
@@ -530,6 +554,54 @@ impl Store {
 
     pub async fn delete_setting(&self, key: &str) -> Result<(), String> {
         self.execute("DELETE FROM settings WHERE key = ?", vec![Arg::Str(Some(key.into()))]).await.map(|_| ())
+    }
+
+    // ---- markets: the dropdown's list (Settings > Markets) ----
+
+    /// The markets of `source` in menu order (`Store.markets` in storage.py).
+    pub async fn markets(&self, source: &str) -> Result<Vec<Map<String, Value>>, String> {
+        let mut rows = self
+            .rows("markets", "SELECT symbol, label, name, venue, position, keep_live FROM markets \
+                              WHERE source = ? ORDER BY position, symbol", vec![Arg::Str(Some(source.into()))])
+            .await?;
+        for r in &mut rows {
+            let live = r.get("keep_live").and_then(Value::as_bool).unwrap_or(false);
+            r.insert("keep_live".into(), live.into());
+        }
+        Ok(rows)
+    }
+
+    /// Add a market at the end of the list (`add_market`).
+    pub async fn add_market(&self, source: &str, m: &Map<String, Value>) -> Result<(), String> {
+        let last = self.markets(source).await?.iter().filter_map(|r| r.get("position")?.as_i64()).max();
+        let s = |k: &str| Arg::Str(m.get(k).and_then(Value::as_str).map(String::from));
+        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.6f+00:00").to_string();
+        self.execute("INSERT INTO markets (source, symbol, label, name, venue, position, keep_live, added_at) \
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     vec![Arg::Str(Some(source.into())), s("symbol"), s("label"), s("name"), s("venue"),
+                          Arg::Int(Some(last.map_or(0, |p| p + 1))),
+                          Arg::Bool(m.get("keep_live").and_then(Value::as_bool).unwrap_or(false)), Arg::Str(Some(now))])
+            .await
+            .map(|_| ())
+    }
+
+    /// Rewrite the listed markets' label, name, venue and keep_live, in the given order (`save_markets`).
+    pub async fn save_markets(&self, source: &str, markets: &[Map<String, Value>]) -> Result<(), String> {
+        let stmts = markets.iter().enumerate().map(|(i, m)| {
+            let s = |k: &str| Arg::Str(m.get(k).and_then(Value::as_str).map(String::from));
+            ("UPDATE markets SET label = ?, name = ?, venue = ?, position = ?, keep_live = ? \
+              WHERE source = ? AND symbol = ?".to_string(),
+             vec![s("label"), s("name"), s("venue"), Arg::Int(Some(i as i64)),
+                  Arg::Bool(m.get("keep_live").and_then(Value::as_bool).unwrap_or(false)),
+                  Arg::Str(Some(source.into())), s("symbol")])
+        }).collect();
+        self.transaction(stmts).await
+    }
+
+    /// Take a market off the list; its stored bars stay (`delete_market`).
+    pub async fn delete_market(&self, source: &str, symbol: &str) -> Result<bool, String> {
+        Ok(self.execute("DELETE FROM markets WHERE source = ? AND symbol = ?",
+                        vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))]).await? > 0)
     }
 
     // ---- drawings (per source and symbol) ----

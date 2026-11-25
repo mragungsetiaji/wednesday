@@ -10,6 +10,7 @@ pub mod analysis;
 pub mod charts;
 pub mod feed;
 pub mod ingest;
+pub mod keeper;
 pub mod markets;
 pub mod tradingview;
 
@@ -746,7 +747,11 @@ impl Runtime {
 
     pub fn start(settings: DataSettings, opts: Options, store: Option<Store>) -> Result<Arc<Runtime>, String> {
         let engine = start(&settings, &opts, store.clone())?;
-        Ok(Arc::new(Runtime { store, opts, current: Mutex::new((settings, engine)), extras: Default::default() }))
+        let rt = Arc::new(Runtime { store, opts, current: Mutex::new((settings, engine)), extras: Default::default() });
+        if rt.opts.poll {
+            keeper::spawn(Arc::downgrade(&rt)); // the markets kept live beside the scanned one
+        }
+        Ok(rt)
     }
 
     pub fn engine(&self) -> Arc<Engine> {

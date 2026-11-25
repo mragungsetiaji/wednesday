@@ -164,7 +164,7 @@ async fn an_old_m1_bars_table_moves_to_bars() {
     assert_eq!(bars.len(), 1);
     assert_eq!(bars[0].close, 1.5);
     let rows = store.rows("schema_migrations", "SELECT version, name FROM schema_migrations", vec![]).await.unwrap();
-    assert_eq!(Value::from(rows), json!([{"version": 1, "name": "bars_from_m1_bars"}]));
+    assert_eq!(Value::from(rows), json!([{"version": 1, "name": "bars_from_m1_bars"}, {"version": 2, "name": "seed_markets"}]));
     drop(store);
     Store::open(url, &dir).await.unwrap(); // nothing runs twice
 }

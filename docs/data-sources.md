@@ -47,6 +47,28 @@ uv run wednesday --source tradingview --symbol OANDA:XAUUSD
 uv run wednesday --source synthetic --once             # development: random walk, one scan
 ```
 
+## Markets
+
+**Settings > Markets** holds the chart's symbol menu (the `markets` table): which
+TradingView symbols it lists, in what order, and the label, name and venue shown for
+each. The same instrument can be listed from several venues, such as `FX:XAUUSD`
+(FXCM) and `OANDA:XAUUSD`; each keeps its own candles and drawings. **Add a market**
+takes TradingView's name with its exchange prefix and checks it with TradingView
+first; the name and venue come from TradingView and can be changed. Deleting one
+takes it off the menu and keeps its stored candles. The scanned market can't be
+deleted, nor the last one left.
+
+A market's candles load when you pick it. **Keep live** stores a market's 1-minute bars
+and its candles per timeframe even while another market is scanned
+(`wed-engine/src/keeper.rs`, `keeper.py`), once a minute, so its history has no gap
+when you come back to it. Nothing about a kept market is scanned. TradingView keeps
+only a few days of 1-minute bars, so a market left without **Keep live** for longer
+comes back with a gap in its 1-minute history; its higher timeframes fill in again.
+
+Routes: `GET /api/markets`; `POST /api/markets` `{symbol, label?}` adds one;
+`PUT /api/markets` `{markets: [...]}` saves the order, labels and **Keep live** of the
+whole list; `DELETE /api/markets?symbol=` removes one. Each answers with the list.
+
 ## Feed clock
 
 Bar times are kept in the feed's own clock. TradingView gives UTC, which is the

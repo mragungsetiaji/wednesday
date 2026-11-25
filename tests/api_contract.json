@@ -5,6 +5,11 @@
     "symbol?"
    ]
   },
+  "DELETE /api/markets": {
+   "query": [
+    "symbol"
+   ]
+  },
   "GET /api/candles": {
    "query": [
     "before?",
@@ -107,6 +112,15 @@
     }
    }
   },
+  "POST /api/markets": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
   "PUT /api/alerts": {
    "body": {
     "application/json": {
@@ -174,6 +188,15 @@
    }
   },
   "PUT /api/licence": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "PUT /api/markets": {
    "body": {
     "application/json": {
      "additionalProperties": true,
@@ -559,6 +582,18 @@
   },
   "GET /api/licence": {
    "available": "bool"
+  },
+  "GET /api/markets": {
+   "markets": [
+    {
+     "keep_live": "bool",
+     "label": "string",
+     "name": "string",
+     "position": "number",
+     "symbol": "string",
+     "venue": "string"
+    }
+   ]
   },
   "GET /api/plugins": {
    "api": "number",
@@ -1618,6 +1653,10 @@
   "DELETE /api/licence",
   "GET /api/licence",
   "PUT /api/licence",
+  "DELETE /api/markets",
+  "GET /api/markets",
+  "POST /api/markets",
+  "PUT /api/markets",
   "GET /api/markets/candles",
   "GET /api/markets/tick",
   "GET /api/plugins",

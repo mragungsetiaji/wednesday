@@ -29,9 +29,11 @@ off. The chart carries no legend under it; the readout at its top left names wha
 under the pointer.
 
 The chart has no page header: its top bar starts with the market. Click the symbol
-(`XAUUSD`) to pick another: **XAU** (gold, `FX:XAUUSD`), **XAG** (silver,
-`FX:XAGUSD`), **DXY** (`TVC:DXY`), **NQ** (Nasdaq 100, `OANDA:NAS100USD`), **S&P**
-(`OANDA:SPX500USD`) or **DJI** (Dow Jones 30, `OANDA:US30USD`). Picking one moves the
+(`XAUUSD`) to pick another from the list in **Settings > Markets**. It starts with
+**XAU** from two venues (gold, `FX:XAUUSD` from FXCM and `OANDA:XAUUSD`), **XAG**
+(silver, `FX:XAGUSD`), **DXY** (`TVC:DXY`), **NQ** (Nasdaq 100, `OANDA:NAS100USD`),
+**S&P** (`OANDA:SPX500USD`) and **DJI** (Dow Jones 30, `OANDA:US30USD`); the venue
+beside each name tells the two golds apart. Picking one moves the
 whole screener to it, as **Settings > Data source** does: the feed reconnects and the
 scan, levels and alerts follow the new market after its first scan. The indices are
 OANDA's CFDs, which trade nearly round the clock like gold. The same menu lists the
@@ -357,7 +359,7 @@ timeframe, the others are remembered in this browser, as is the layout. **Esc** 
   price), and their OHLC and quarter readouts follow. A chart whose candles
   don't reach back that far just hides its crosshair.
 - **Another market in a chart**: the menu next to a chart's timeframe tabs picks its
-  market from the same list as the main chart (XAU, XAG, DXY, NQ, S&P, DJI), for
+  market from the same list as the main chart (Settings > Markets), for
   example silver on the right next to gold on the left. That chart shows the other
   market's candles and live price from TradingView, labelled **Not scanned**: levels,
   setups, alerts and the bias belong to the scanned market. It can be drawn on: its

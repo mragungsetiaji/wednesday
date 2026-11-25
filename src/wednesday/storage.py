@@ -441,6 +441,41 @@ class Store:
             n, first, last = conn.execute(q).one()
         return int(n), first, last
 
+    # ---- markets: the dropdown's list (Settings > Markets) ---------------------------
+    MARKET_FIELDS = ("symbol", "label", "name", "venue", "position", "keep_live")
+
+    def markets(self, source: str = "tradingview") -> list[dict]:
+        """The dropdown's markets of ``source``, in menu order."""
+        t = markets_table
+        q = select(*[t.c[f] for f in self.MARKET_FIELDS]).where(t.c.source == source).order_by(t.c.position, t.c.symbol)
+        with self.engine.connect() as conn:
+            return [{**dict(r), "keep_live": bool(r["keep_live"])} for r in conn.execute(q).mappings().all()]
+
+    def add_market(self, market: dict, source: str = "tradingview") -> None:
+        """Add ``market`` (symbol, label, name, venue, keep_live) at the end of the list."""
+        t = markets_table
+        with self.engine.begin() as conn:
+            last = conn.execute(select(func.max(t.c.position)).where(t.c.source == source)).scalar()
+            conn.execute(t.insert().values(
+                source=source, symbol=market["symbol"], label=market["label"], name=market.get("name"),
+                venue=market.get("venue"), position=(-1 if last is None else last) + 1,
+                keep_live=bool(market.get("keep_live")), added_at=datetime.now(timezone.utc).isoformat()))
+
+    def save_markets(self, markets: list[dict], source: str = "tradingview") -> None:
+        """Rewrite the listed markets' label, name, venue and keep_live, in the given order."""
+        t = markets_table
+        with self.engine.begin() as conn:
+            for position, m in enumerate(markets):
+                conn.execute(t.update().where(t.c.source == source, t.c.symbol == m["symbol"]).values(
+                    label=m["label"], name=m.get("name"), venue=m.get("venue"), position=position,
+                    keep_live=bool(m.get("keep_live"))))
+
+    def delete_market(self, symbol: str, source: str = "tradingview") -> bool:
+        """Take ``symbol`` off the list (its stored bars stay)."""
+        t = markets_table
+        with self.engine.begin() as conn:
+            return conn.execute(t.delete().where(t.c.source == source, t.c.symbol == symbol)).rowcount > 0
+
     # ---- series: what the ingest keeps per (source, symbol, timeframe) ------------
     def note_series(self, source: str, symbol: str, tf: str, backfill: str, error: str | None = None,
                     active: bool = True) -> None:
@@ -721,6 +756,30 @@ def _bars_from_m1_bars(conn, tables: set[str]) -> None:
     conn.exec_driver_sql("DROP TABLE m1_bars")
 
 
+# The dropdown's markets on a new database (web/src/marketSymbol.ts had them before 0.5): FXCM's
+# and OANDA's gold side by side. Settings > Markets changes the list. The Rust store seeds the same.
+DEFAULT_MARKETS = (
+    ("FX:XAUUSD", "XAU", "Gold spot", "FXCM"),
+    ("OANDA:XAUUSD", "XAU", "Gold spot", "OANDA"),
+    ("FX:XAGUSD", "XAG", "Silver spot", "FXCM"),
+    ("TVC:DXY", "DXY", "US Dollar Index", "TVC"),
+    ("OANDA:NAS100USD", "NQ", "Nasdaq 100", "OANDA"),
+    ("OANDA:SPX500USD", "S&P", "S&P 500", "OANDA"),
+    ("OANDA:US30USD", "DJI", "Dow Jones 30", "OANDA"),
+)
+
+
+def _seed_markets(conn, tables: set[str]) -> None:
+    if conn.execute(select(func.count()).select_from(markets_table)).scalar():
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(markets_table.insert(), [
+        {"source": "tradingview", "symbol": symbol, "label": label, "name": name, "venue": venue,
+         "position": position, "keep_live": False, "added_at": now}
+        for position, (symbol, label, name, venue) in enumerate(DEFAULT_MARKETS)])
+
+
 MIGRATIONS = (
     (1, "bars_from_m1_bars", _bars_from_m1_bars),
+    (2, "seed_markets", _seed_markets),
 )

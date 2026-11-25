@@ -23,7 +23,7 @@ from .same_site import install as install_same_site
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
 from .journal.market import freeze
-from .markets import MarketError, Markets, clean_symbol
+from .markets import MarketError, Markets, clean_market, clean_symbol
 from .replay import ReplayCache, view as replay_view
 from .workspaces import WorkspaceError, Workspaces
 from .news import CalendarSettings
@@ -353,6 +353,67 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         """The live price of a pane's own symbol (unix time on the feed's clock)."""
         sym = market_call(lambda: clean_symbol(symbol))
         return market_call(lambda: markets.tick(sym, current_clock()))
+
+    # ---- markets: the symbol dropdown's list (Settings > Markets, storage.markets) ----
+    def market_store():
+        store = runtime.store if runtime else target.store
+        if store is None:
+            raise HTTPException(409, "The markets list needs a database")
+        return store
+
+    def markets_payload(store) -> dict:
+        return {"markets": store.markets()}
+
+    @app.get("/api/markets")
+    def get_markets() -> dict:
+        return markets_payload(market_store())
+
+    @app.post("/api/markets")
+    def add_market(body: dict = Body(...)) -> dict:
+        """Add a TradingView symbol to the dropdown; it is checked with TradingView first."""
+        store = market_store()
+        sym = market_call(lambda: clean_symbol(str(body.get("symbol") or "")))
+        if any(m["symbol"] == sym for m in store.markets()):
+            raise HTTPException(409, f"{sym} is already in the list")
+        info = market_call(lambda: markets.info(sym))
+        try:
+            row = clean_market({"label": sym.split(":", 1)[1], "name": info.get("description"),
+                                "venue": info.get("exchange"), **{k: v for k, v in body.items() if v is not None},
+                                "symbol": sym})
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        store.add_market(row)
+        return markets_payload(store)
+
+    @app.put("/api/markets")
+    def put_markets(body: dict = Body(...)) -> dict:
+        """Reorder, rename and set keep_live: the same symbols as listed, in their new order."""
+        store = market_store()
+        given = body.get("markets")
+        if not isinstance(given, list):
+            raise HTTPException(422, "markets must be a list")
+        try:
+            rows = [clean_market(m if isinstance(m, dict) else {}) for m in given]
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if sorted(r["symbol"] for r in rows) != sorted(m["symbol"] for m in store.markets()):
+            raise HTTPException(422, "List every market once: add or delete one with POST or DELETE")
+        store.save_markets(rows)
+        return markets_payload(store)
+
+    @app.delete("/api/markets")
+    def delete_market(symbol: str = Query(...)) -> dict:
+        store = market_store()
+        sym = market_call(lambda: clean_symbol(symbol))
+        listed = store.markets()
+        if not any(m["symbol"] == sym for m in listed):
+            raise HTTPException(404, f"{sym} isn't in the list")
+        if sym == current().symbol:
+            raise HTTPException(409, f"{sym} is being scanned: pick another symbol in Settings first")
+        if len(listed) == 1:
+            raise HTTPException(409, "Keep at least one market in the list")
+        store.delete_market(sym)
+        return markets_payload(store)
 
     # ---- bar replay: the market as it stood at a past minute (replay.py) ----
     replay_cache = ReplayCache()

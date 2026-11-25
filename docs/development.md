@@ -58,6 +58,7 @@ src/wednesday/
   storage.py      SQLAlchemy store: settings, M1 history, alert log, journals (SQLite / PostgreSQL)
   history.py      older candles for the chart as it scrolls left (memory, then stored bars)
   ingest.py       each timeframe's own candles from the source, stored per series, and the backfill
+  keeper.py       the markets kept live (Settings > Markets): stored beside the scanned one
   journal/        MT5 accounts: HTML report import, gain and drawdown rebuilt from M1 bars, /api/journals; sample.py builds a made-up portfolio for tests and the docs screenshot
   plugins.py      loads plugins (entry point group wednesday.plugins): routes, hooks, jobs
   cli.py          command line entry point

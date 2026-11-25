@@ -5,7 +5,8 @@ import { CHART_TYPES, useChartType } from "../chartType";
 import { DEFAULT_CHART_SETTINGS, useChartSettings, type ChartSettings } from "../chartSettings";
 import { useIndicators } from "../indicatorPrefs";
 import { cleanLength, cleanMult, indicatorLabel, INDICATOR_COLORS, INDICATOR_KINDS, LINE_WIDTHS, lineWidth, MAX_LENGTH, type Indicator, type IndicatorKind } from "../indicators";
-import { TICKERS, tickerName } from "../marketSymbol";
+import { tickerName } from "../marketSymbol";
+import { useMarkets } from "../marketsList";
 import { TcIcon } from "../tcIcons";
 import { useThemeChoice, type ThemeChoice } from "../theme";
 import { CrossIcon } from "../icons";
@@ -14,7 +15,7 @@ import { usePopover } from "./usePopover";
 
 /**
  * The symbol at the start of the chart's top bar: a menu of the markets the engine can scan
- * ([`TICKERS`]), with what feeds the chart below them. Picking one calls `onPick`; without it
+ * (Settings > Markets, [`useMarkets`]), with what feeds the chart below them. Picking one calls `onPick`; without it
  * (a pane that can't switch) the menu only shows the info.
  */
 export function SymbolMenu({ symbol, rows, onPick, busy = false }: {
@@ -26,6 +27,7 @@ export function SymbolMenu({ symbol, rows, onPick, busy = false }: {
   const { open, setOpen, ref } = usePopover<HTMLDivElement>();
   const id = useId();
   const current = symbol.trim().toUpperCase();
+  const tickers = useMarkets();
   return (
     <div className="tb-menu tb-symbol" ref={ref}>
       <button type="button" className="tb-btn tb-symbol-btn" aria-expanded={open} aria-controls={id} aria-haspopup="menu"
@@ -35,7 +37,7 @@ export function SymbolMenu({ symbol, rows, onPick, busy = false }: {
       </button>
       {open && (
         <div className="chart-pop symbol-pop" id={id} role="menu" aria-label="Market">
-          {onPick && TICKERS.map((t) => (
+          {onPick && tickers.map((t) => (
             <button key={t.symbol} type="button" role="menuitemradio" aria-checked={t.symbol === current}
               className={`draw-flyout-item symbol-item${t.symbol === current ? " is-active" : ""}`}
               onClick={() => {
@@ -43,7 +45,7 @@ export function SymbolMenu({ symbol, rows, onPick, busy = false }: {
                 if (t.symbol !== current) onPick(t.symbol);
               }}>
               <span className="symbol-item-short">{t.short}</span>
-              <span className="symbol-item-name">{t.name}</span>
+              <span className="symbol-item-name">{t.name}{t.venue && <span className="muted"> · {t.venue}</span>}</span>
               <span className="symbol-item-tv">{t.symbol}</span>
             </button>
           ))}

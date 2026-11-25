@@ -9,6 +9,7 @@ import { AccountSettings } from "./AccountSettings";
 import { AlertsSettings } from "./AlertsSettings";
 import { CalendarSettingsForm } from "./CalendarSettingsForm";
 import { JournalSettings } from "./JournalSettings";
+import { MarketsSettings } from "./MarketsSettings";
 
 const EMPTY: DataSettings = { source: "tradingview", symbol: null, clock: null, tick_seconds: null };
 
@@ -27,9 +28,10 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const fmtTick = (s: number) => (s === 0 || s >= 60 ? "once a minute, with each scan" : `${s}s`);
 
-type Section = "data" | "alerts" | "calendar" | "journal" | "plan" | "plugins";
+type Section = "data" | "markets" | "alerts" | "calendar" | "journal" | "plan" | "plugins";
 const SECTIONS: { id: Section; title: string }[] = [
   { id: "data", title: "Data source" },
+  { id: "markets", title: "Markets" },
   { id: "alerts", title: "Telegram alerts" },
   { id: "calendar", title: "News calendar" },
   { id: "journal", title: "Journal" },
@@ -73,6 +75,7 @@ export function SettingsPage() {
       </nav>
       <div className="settings-content">
         <div hidden={section !== "data"}><DataSourceSettings /></div>
+        <div hidden={section !== "markets"}><MarketsSettings /></div>
         <div hidden={section !== "alerts"}><AlertsSettings /></div>
         <div hidden={section !== "calendar"}><CalendarSettingsForm /></div>
         <div hidden={section !== "journal"}><JournalSettings /></div>

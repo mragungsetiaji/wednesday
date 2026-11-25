@@ -418,6 +418,25 @@ async function send<T>(method: string, url: string, body?: unknown): Promise<T> 
   return res.json() as Promise<T>;
 }
 
+// ---- The symbol menu's markets (Settings > Markets) ----
+
+export interface Market {
+  symbol: string; // TradingView's name, e.g. OANDA:XAUUSD
+  label: string; // what the menu shows, e.g. XAU
+  name: string | null;
+  venue: string | null; // FXCM, OANDA: who quotes it
+  position: number;
+  keep_live: boolean; // its candles are stored even while another market is scanned
+}
+export interface MarketsResponse {
+  markets: Market[];
+}
+export const fetchMarkets = () => getJson<MarketsResponse>("/api/markets");
+export const addMarket = (m: { symbol: string; label?: string }) => send<MarketsResponse>("POST", "/api/markets", m);
+export const saveMarkets = (markets: Market[]) => send<MarketsResponse>("PUT", "/api/markets", { markets });
+export const deleteMarket = (symbol: string) =>
+  send<MarketsResponse>("DELETE", `/api/markets?symbol=${encodeURIComponent(symbol)}`);
+
 // ---- Chart drawings ----
 
 /** The first tools, which the editor draws itself, then the rest (shapes.ts). */

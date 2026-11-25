@@ -4793,3 +4793,15 @@ fieldset:disabled .switch {
   margin: 2px 0 0;
   max-width: 240px;
 }
+
+/* Settings > Markets: editable rows */
+.markets-table input[type="text"] {
+  width: 100%;
+  min-width: 4rem;
+}
+.markets-table td.end {
+  white-space: nowrap;
+}
+.markets-table .button.quiet {
+  padding-inline: 0.4rem;
+}

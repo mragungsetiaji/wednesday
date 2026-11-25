@@ -6,7 +6,8 @@
 //! the feed's clock so the panes line up.
 //!
 //! Routes: `GET /api/markets/candles` ([`candles`]) and `GET /api/markets/tick` ([`tick`]), with
-//! FastAPI's query validation, statuses and messages.
+//! FastAPI's query validation, statuses and messages. The dropdown's own list of markets
+//! (`/api/markets`, Settings > Markets) is [`list`], [`add`], [`save`] and [`remove`].
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,6 +19,7 @@ use serde_json::{json, Map, Value};
 
 use super::feed::{FeedError, Helper};
 use super::{Answer, Refusal, Runtime};
+use wednesday_store::Store;
 use wednesday_base::py::py_repr;
 use wednesday_scan::clock::{localize, NEW_YORK};
 use wednesday_scan::{Clock, Time, TIMEFRAMES};
@@ -110,10 +112,16 @@ impl Markets {
         Ok(value)
     }
 
+    /// TradingView's description of `symbol` (full_name, description, exchange, pricescale); a 404
+    /// when it has no such symbol.
+    pub async fn info(&self, symbol: &str) -> Result<Value, Refusal> {
+        let args = obj(json!({"symbol": symbol}));
+        self.cached(Key::Info(symbol.into()), INFO_SECONDS, self.call("info", 30.0, args)).await
+    }
+
     /// Decimals the symbol is quoted with (2 for gold, 3 for silver on FXCM).
     pub async fn precision(&self, symbol: &str) -> Result<i64, Refusal> {
-        let args = obj(json!({"symbol": symbol}));
-        let info = self.cached(Key::Info(symbol.into()), INFO_SECONDS, self.call("info", 30.0, args)).await?;
+        let info = self.info(symbol).await?;
         let scale = match info.get("pricescale").and_then(Value::as_f64) {
             Some(s) if s != 0.0 => s,
             _ => 100.0,
@@ -440,4 +448,124 @@ mod tests {
         assert_eq!(clean_symbol("it's").unwrap_err().detail,
                    "\"it's\" isn't a TradingView symbol. Use the exchange prefix, e.g. FX:XAGUSD.");
     }
+}
+
+// ---- the dropdown's markets list (`/api/markets` in server.py, `Store.markets`) ----
+
+/// The longest each text field of a market may be (`MARKET_TEXT`).
+const MARKET_TEXT: [(&str, usize); 3] = [("label", 16), ("name", 64), ("venue", 32)];
+
+/// A markets list row from the dashboard (`clean_market`): the message says what is wrong.
+pub fn clean_market(m: &Map<String, Value>) -> Result<Map<String, Value>, String> {
+    let symbol = clean_symbol(m.get("symbol").and_then(Value::as_str).unwrap_or(""))
+        .map_err(|r| r.detail.as_str().unwrap_or_default().to_string())?;
+    let mut row = Map::new();
+    row.insert("symbol".into(), symbol.clone().into());
+    for (key, longest) in MARKET_TEXT {
+        let value = match m.get(key) {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => Some(s.trim_matches(py_space).to_string()).filter(|s| !s.is_empty()),
+            Some(_) => return Err(format!("{key} must be text")),
+        };
+        if value.as_ref().is_some_and(|v| v.chars().count() > longest) {
+            return Err(format!("{key} is longer than {longest} characters"));
+        }
+        row.insert(key.into(), value.map_or(Value::Null, Value::String));
+    }
+    if row["label"].is_null() {
+        return Err(format!("Give {symbol} a label"));
+    }
+    let live = match m.get("keep_live") {
+        None => false,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => return Err("keep_live must be true or false".into()),
+    };
+    row.insert("keep_live".into(), live.into());
+    Ok(row)
+}
+
+fn db(e: String) -> Refusal {
+    log::error!("markets list: {e}");
+    internal()
+}
+
+fn listed(rows: Vec<Map<String, Value>>) -> Value {
+    json!({"markets": rows})
+}
+
+/// `GET /api/markets`.
+pub async fn list(store: &Store) -> Answer {
+    Ok(listed(store.markets("tradingview").await.map_err(db)?))
+}
+
+/// `POST /api/markets`: add a TradingView symbol, checked with TradingView first.
+pub async fn add(m: &Markets, store: &Store, body: &Map<String, Value>) -> Answer {
+    let sym = clean_symbol(&match body.get("symbol") {
+        None | Some(Value::Null) => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(v) => v.to_string(),
+    })?;
+    let rows = store.markets("tradingview").await.map_err(db)?;
+    if rows.iter().any(|r| r.get("symbol").and_then(Value::as_str) == Some(sym.as_str())) {
+        return Err(Refusal::new(409, format!("{sym} is already in the list")));
+    }
+    let info = m.info(&sym).await?;
+    let mut given = Map::new();
+    given.insert("label".into(), sym.split_once(':').map_or("", |p| p.1).into());
+    given.insert("name".into(), info.get("description").cloned().unwrap_or(Value::Null));
+    given.insert("venue".into(), info.get("exchange").cloned().unwrap_or(Value::Null));
+    for (k, v) in body {
+        if !v.is_null() {
+            given.insert(k.clone(), v.clone());
+        }
+    }
+    given.insert("symbol".into(), sym.into());
+    let row = clean_market(&given).map_err(|e| Refusal::new(422, e))?;
+    store.add_market("tradingview", &row).await.map_err(db)?;
+    list(store).await
+}
+
+/// `PUT /api/markets`: reorder, rename and set keep_live; the same symbols, in their new order.
+pub async fn save(store: &Store, body: &Map<String, Value>) -> Answer {
+    let Some(Value::Array(given)) = body.get("markets") else {
+        return Err(Refusal::new(422, "markets must be a list"));
+    };
+    let empty = Map::new();
+    let rows = given
+        .iter()
+        .map(|m| clean_market(m.as_object().unwrap_or(&empty)))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| Refusal::new(422, e))?;
+    let symbols = |rows: &[Map<String, Value>]| {
+        let mut s: Vec<String> = rows.iter().filter_map(|r| r.get("symbol")?.as_str().map(String::from)).collect();
+        s.sort();
+        s
+    };
+    if symbols(&rows) != symbols(&store.markets("tradingview").await.map_err(db)?) {
+        return Err(Refusal::new(422, "List every market once: add or delete one with POST or DELETE"));
+    }
+    store.save_markets("tradingview", &rows).await.map_err(db)?;
+    list(store).await
+}
+
+/// `DELETE /api/markets?symbol=`: never the scanned symbol, nor the last one left.
+pub async fn remove(store: &Store, scanned: &str, q: &HashMap<String, String>) -> Answer {
+    let mut errors = Vec::new();
+    let symbol = required(q, "symbol", &mut errors);
+    if !errors.is_empty() {
+        return Err(Refusal::new(422, Value::Array(errors)));
+    }
+    let sym = clean_symbol(&symbol.unwrap_or_default())?;
+    let rows = store.markets("tradingview").await.map_err(db)?;
+    if !rows.iter().any(|r| r.get("symbol").and_then(Value::as_str) == Some(sym.as_str())) {
+        return Err(Refusal::new(404, format!("{sym} isn't in the list")));
+    }
+    if sym == scanned {
+        return Err(Refusal::new(409, format!("{sym} is being scanned: pick another symbol in Settings first")));
+    }
+    if rows.len() == 1 {
+        return Err(Refusal::new(409, "Keep at least one market in the list"));
+    }
+    store.delete_market("tradingview", &sym).await.map_err(db)?;
+    list(store).await
 }

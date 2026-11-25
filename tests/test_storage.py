@@ -67,7 +67,7 @@ def test_an_old_m1_bars_table_moves_to_bars(tmp_path):
     with sqlite3.connect(path) as db:
         names = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
         assert "m1_bars" not in names
-        assert db.execute("SELECT version, name FROM schema_migrations").fetchall() == [(1, "bars_from_m1_bars")]
+        assert db.execute("SELECT version, name FROM schema_migrations").fetchall() == [(1, "bars_from_m1_bars"), (2, "seed_markets")]
     Store(f"sqlite:///{path}")  # opening again runs nothing twice
 
 

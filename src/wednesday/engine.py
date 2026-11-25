@@ -357,6 +357,7 @@ class Runtime:
         self._lock = threading.Lock()
         self.settings = settings
         self.engine = self._build(settings)
+        self.keeper = None  # keeper.Keeper, from start()
 
     def _build(self, settings: DataSettings) -> Engine:
         feed = build_feed(settings)
@@ -433,6 +434,12 @@ class Runtime:
 
     def start(self) -> None:
         self.engine.start(self.delay, self._after_scan)
+        # The markets kept live beside the scanned one. Following Rust, its keeper does it.
+        if self.store is not None and self.poll and not self.following and self.keeper is None:
+            from .keeper import Keeper
+
+            self.keeper = Keeper(self.store, lambda: (self.settings.source, self.engine.symbol))
+            self.keeper.start()
 
     def run_forever(self) -> None:
         """Console mode: scan in the calling thread."""
@@ -440,6 +447,8 @@ class Runtime:
 
     def stop(self) -> None:
         self.hooks.shutdown()
+        if self.keeper is not None:
+            self.keeper.stop()
         self.engine.stop()
 
     def reconnect(self) -> None:

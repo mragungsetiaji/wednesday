@@ -42,6 +42,34 @@ def clean_symbol(symbol: str) -> str:
     return s
 
 
+MARKET_TEXT = {"label": 16, "name": 64, "venue": 32}  # longest each may be
+
+
+def clean_market(m: dict) -> dict:
+    """A markets list row from the dashboard: a TradingView symbol, a short label, an optional
+    name and venue, keep_live a bool. ValueError says what is wrong."""
+    try:
+        symbol = clean_symbol(str(m.get("symbol") or ""))
+    except MarketError as exc:
+        raise ValueError(str(exc)) from exc
+    row = {"symbol": symbol}
+    for key, longest in MARKET_TEXT.items():
+        value = m.get(key)
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{key} must be text")
+        value = (value or "").strip() or None
+        if value and len(value) > longest:
+            raise ValueError(f"{key} is longer than {longest} characters")
+        row[key] = value
+    if not row["label"]:
+        raise ValueError(f"Give {symbol} a label")
+    live = m.get("keep_live", False)
+    if not isinstance(live, bool):
+        raise ValueError("keep_live must be true or false")
+    row["keep_live"] = live
+    return row
+
+
 class Markets:
     """One TradingView connection for every pane's own symbol, opened on first use. ``command``
     puts a stand-in process in TradingView's place (tests): it returns (command, None) or
@@ -84,10 +112,14 @@ class Markets:
                 del self._cache[k]
         return value
 
+    def info(self, symbol: str) -> dict:
+        """TradingView's description of ``symbol`` (full_name, description, exchange, pricescale);
+        MarketError 404 when it has no such symbol."""
+        return self._cached(("info", symbol), 3600, lambda: self._call("info", 30, symbol=symbol)) or {}
+
     def precision(self, symbol: str) -> int:
         """Decimals the symbol is quoted with (2 for gold, 3 for silver on FXCM)."""
-        info = self._cached(("info", symbol), 3600, lambda: self._call("info", 30, symbol=symbol))
-        scale = (info or {}).get("pricescale") or 100
+        scale = self.info(symbol).get("pricescale") or 100
         return max(0, min(8, round(math.log10(scale))))
 
     def candles(self, symbol: str, tf: Timeframe, limit: int, clock: str,

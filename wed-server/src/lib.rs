@@ -128,6 +128,10 @@ pub const ENGINE_ROUTES: &[&str] = &[
     "POST /api/journals/{journal_id}/entries",
     "GET /api/markets/candles",
     "GET /api/markets/tick",
+    "GET /api/markets",
+    "POST /api/markets",
+    "PUT /api/markets",
+    "DELETE /api/markets",
 ];
 
 /// The version the dashboard and `/api/health` report; `scripts/set_version.py` keeps it in step.
@@ -189,6 +193,7 @@ fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store
             .route("/api/distribution", get(analysis_distribution))
             .route("/api/markets/candles", get(markets_candles))
             .route("/api/markets/tick", get(markets_tick))
+            .route("/api/markets", get(markets_list).post(markets_add).put(markets_save).delete(markets_remove))
             .route("/api/drawings", get(drawings_list))
             .route("/api/drawings/alerts", get(drawings_alerts))
             .route("/api/drawings/{id}", axum::routing::put(drawing_put).delete(drawing_delete))
@@ -1258,6 +1263,43 @@ async fn markets_candles(State(app): State<App>, axum::extract::Query(q): Query)
 
 async fn markets_tick(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
     engine_answer(engine::markets::tick(&app.markets, runtime_of(&app), &q).await)
+}
+
+/// The database the markets list lives in, or Python's 409 without one (`market_store()`).
+fn market_store(app: &App) -> Result<&Store, Response> {
+    app.store.as_ref().ok_or_else(|| detail(StatusCode::CONFLICT, "The markets list needs a database"))
+}
+
+async fn markets_list(State(app): State<App>) -> Response {
+    let store = match market_store(&app) { Ok(s) => s, Err(r) => return r };
+    engine_answer(engine::markets::list(store).await)
+}
+
+async fn markets_add(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
+    let store = match market_store(&app) { Ok(s) => s, Err(r) => return r };
+    engine_answer(engine::markets::add(&app.markets, store, &body).await)
+}
+
+async fn markets_save(State(app): State<App>, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
+    let store = match market_store(&app) { Ok(s) => s, Err(r) => return r };
+    engine_answer(engine::markets::save(store, &body).await)
+}
+
+async fn markets_remove(State(app): State<App>, axum::extract::Query(q): Query, req: Request) -> Response {
+    if let Some(refused) = app.guard(req.method(), req.headers()) {
+        return refused;
+    }
+    let store = match market_store(&app) { Ok(s) => s, Err(r) => return r };
+    let scanned = runtime_of(&app).engine().symbol.clone();
+    engine_answer(engine::markets::remove(store, &scanned, &q).await)
 }
 
 /// For the Python server that follows this engine: the closed M1 bars it scanned, with the price
