@@ -113,6 +113,17 @@ impl Feed {
         }
     }
 
+    /// Up to `count` candles the source builds itself at `resolution` ("5", "60", "240", "D"),
+    /// opening before `to` (unix seconds) when given, oldest first, the forming one included; None
+    /// when the source has none of its own (synthetic: its timeframes are resampled from M1).
+    pub async fn fetch_native(&mut self, resolution: &str, count: usize, to: Option<i64>)
+        -> Result<Option<Vec<Bar>>, FeedError> {
+        match self {
+            Feed::TradingView(f) => f.fetch_native(resolution, count, to).await.map(Some),
+            Feed::Synthetic(_) => Ok(None),
+        }
+    }
+
     /// Every live price since the last call, oldest first (`new_ticks`), or the latest one
     /// (`last_tick`); empty when the feed has none.
     pub async fn new_ticks(&mut self) -> Result<Vec<Tick>, FeedError> {
@@ -506,11 +517,18 @@ impl TradingViewFeed {
     }
 
     async fn candles(&mut self, timeframe: &str, count: usize) -> Result<Vec<Bar>, FeedError> {
+        self.candles_to(timeframe, count, None).await
+    }
+
+    async fn candles_to(&mut self, timeframe: &str, count: usize, to: Option<i64>) -> Result<Vec<Bar>, FeedError> {
         // Deep loads come in batches of a few thousand bars; give them time.
         let timeout = 30.0 + count as f64 / 200.0;
         let mut args = Map::new();
         args.insert("timeframe".into(), timeframe.into());
         args.insert("count".into(), count.into());
+        if let Some(to) = to {
+            args.insert("to".into(), to.into());
+        }
         args.insert("timeoutMs".into(), ((timeout * 1000.0) as i64 - 5000).into());
         let rows = self.call("candles", timeout, args).await?;
         Ok(parse_rows(&rows))
@@ -523,6 +541,15 @@ impl TradingViewFeed {
             return Err(FeedError::runtime(format!("TradingView returned no 1m data for {}", self.symbol)));
         }
         Ok(tail(normalize(bars), count))
+    }
+
+    /// [`Feed::fetch_native`]: no candles in the range is an empty list, not an error.
+    pub async fn fetch_native(&mut self, resolution: &str, count: usize, to: Option<i64>) -> Result<Vec<Bar>, FeedError> {
+        match self.candles_to(resolution, count, to).await {
+            Ok(bars) => Ok(normalize(bars)),
+            Err(e) if e.code.as_deref() == Some("NO_DATA") => Ok(Vec::new()),
+            Err(e) => Err(e),
+        }
     }
 
     /// Daily bars indexed by New York trading day, whatever the feed's clock.

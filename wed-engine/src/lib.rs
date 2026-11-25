@@ -9,6 +9,7 @@
 pub mod analysis;
 pub mod charts;
 pub mod feed;
+pub mod ingest;
 pub mod markets;
 pub mod tradingview;
 
@@ -22,9 +23,10 @@ use serde_json::{json, Map, Value};
 use tokio::sync::{mpsc, oneshot, watch};
 
 use wednesday_base::py::py_repr;
-use wednesday_scan::{scan, Bar, Clock, Detector, DetectorParams, ScanConfig, ScanResult, Time};
+use wednesday_scan::{scan_native, Bar, Native, Clock, Detector, DetectorParams, ScanConfig, ScanResult, Time};
 use wednesday_store::{Arg, Store};
 use feed::{Feed, FeedError, Tick};
+use ingest::Ingest;
 
 /// After losing a connection that doesn't retry by itself, the feed gets this many tries.
 pub const RECONNECT_ATTEMPTS: u32 = 3;
@@ -358,6 +360,8 @@ pub struct State {
     pub version: u64,
     pub result: Option<Arc<ScanResult>>,
     pub m1: Arc<Vec<Bar>>,
+    /// The source's own closed candles by scan timeframe ("4H"), empty for synthetic.
+    pub native: Arc<Native>,
     pub scanned_at: Option<DateTime<Utc>>,
     pub error: Option<String>,
     pub error_at: Option<DateTime<Utc>>,
@@ -369,7 +373,7 @@ pub struct State {
 
 impl Default for State {
     fn default() -> Self {
-        State { version: 0, result: None, m1: Arc::new(vec![]), scanned_at: None, error: None, error_at: None,
+        State { version: 0, result: None, m1: Arc::new(vec![]), native: Arc::new(Native::new()), scanned_at: None, error: None, error_at: None,
                 conn: "connecting", attempt: 0, live: None, tick: 0 }
     }
 }
@@ -451,8 +455,10 @@ pub fn start(settings: &DataSettings, opts: &Options, store: Option<Store>) -> R
         stop,
         commands,
     });
+    let ingest = Ingest::new(feed.name(), &settings.resolved_symbol(), if feed.persist() { store.clone() } else { None });
     let runner = Runner {
         engine: engine.clone(),
+        ingest,
         cfg: Arc::new(opts.cfg.clone()),
         store: if feed.persist() { store } else { None },
         buffer: None,
@@ -465,13 +471,17 @@ pub fn start(settings: &DataSettings, opts: &Options, store: Option<Store>) -> R
     tokio::spawn(async move {
         let mut runner = runner;
         runner.run(&mut feed).await;
+        runner.ingest.stopped().await;
         feed.close().await;
     });
     Ok(engine)
 }
 
+type Scan = (Arc<Vec<Bar>>, Option<f64>, Arc<Native>);
+
 struct Runner {
     engine: Arc<Engine>,
+    ingest: Ingest,
     cfg: Arc<ScanConfig>,
     store: Option<Store>,
     buffer: Option<Vec<Bar>>,
@@ -479,7 +489,7 @@ struct Runner {
     tick_every: Option<StdDuration>,
     stop: watch::Receiver<bool>,
     commands: mpsc::Receiver<Command>,
-    scans: Option<watch::Sender<Option<(Arc<Vec<Bar>>, Option<f64>)>>>,
+    scans: Option<watch::Sender<Option<Scan>>>,
 }
 
 fn record_error(engine: &Engine, e: &str) {
@@ -508,14 +518,14 @@ impl Runner {
 
     /// The scan worker: scans fetched bars one at a time, only the newest when it falls behind.
     fn start_scans(&mut self) {
-        let (tx, mut rx) = watch::channel::<Option<(Arc<Vec<Bar>>, Option<f64>)>>(None);
+        let (tx, mut rx) = watch::channel::<Option<Scan>>(None);
         let engine = self.engine.clone();
         let cfg = self.cfg.clone();
         tokio::spawn(async move {
             while rx.changed().await.is_ok() {
-                let Some((m1, price)) = rx.borrow_and_update().clone() else { continue };
-                let (cfg2, bars) = (cfg.clone(), m1.clone());
-                let result = tokio::task::spawn_blocking(move || scan(&bars, &cfg2, price)).await;
+                let Some((m1, price, native)) = rx.borrow_and_update().clone() else { continue };
+                let (cfg2, bars, nat) = (cfg.clone(), m1.clone(), native.clone());
+                let result = tokio::task::spawn_blocking(move || scan_native(&bars, &nat, &cfg2, price)).await;
                 match result {
                     Ok(Ok(result)) => {
                         let mut st = engine.state.lock().unwrap();
@@ -523,6 +533,7 @@ impl Runner {
                         st.result = Some(Arc::new(result));
                         let last = m1.last().map(|b| b.time);
                         st.m1 = m1;
+                        st.native = native;
                         st.scanned_at = Some(Utc::now());
                         st.error = None;
                         st.error_at = None;
@@ -592,10 +603,11 @@ impl Runner {
         Ok(Arc::new(bars))
     }
 
-    async fn fetch(&mut self, feed: &mut Feed) -> Result<(Arc<Vec<Bar>>, Option<f64>), FeedError> {
+    async fn fetch(&mut self, feed: &mut Feed) -> Result<Scan, FeedError> {
         let m1 = self.update(feed).await?;
+        self.ingest.refresh(feed).await;
         let price = feed.last_price().await?;
-        Ok((m1, price))
+        Ok((m1, price, Arc::new(self.ingest.native.clone())))
     }
 
     /// Fold a live price into the forming M1 candle.
@@ -677,6 +689,8 @@ impl Runner {
                 if let Some(tx) = &self.scans {
                     tx.send_replace(Some(fetched));
                 }
+                // One page of older history a minute, after the scan has what it needs.
+                self.ingest.backfill(feed).await;
                 Ok(())
             }
             .await;

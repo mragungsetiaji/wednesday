@@ -34,7 +34,8 @@ from .drawing_templates import DrawingTemplates, TemplateError
 from .engine import RECONNECT_ATTEMPTS, Engine, Runtime
 from .journal.api import journal_router
 from .features import catalog as feature_catalog
-from .history import older_candles
+from .history import older_candles, older_native
+from .ingest import forming
 from . import plugin_install
 from .plugins import PLUGIN_API, features, load_new_plugins, load_plugins
 from .quarters import NEW_YORK, quarter_blocks, quarters_payload, utc_to_feed
@@ -290,17 +291,29 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         timeframe = TIMEFRAMES_BY_NAME.get(tf.upper())
         if timeframe is None:
             raise HTTPException(404, f"unknown timeframe {tf!r}")
+        engine = current()
+        native = engine.state.native.get(timeframe.name)
+        if native is not None and native.empty:
+            native = None
         if before is not None:
             try:
-                older, more = older_candles(current(), timeframe, before, limit)
+                if native is not None:
+                    older, more = older_native(engine, native, timeframe, before, limit)
+                else:
+                    older, more = older_candles(engine, timeframe, before, limit)
             except RuntimeError as exc:  # the feed is down
                 raise HTTPException(503, str(exc)) from exc
             return {"timeframe": timeframe.name, "candles": _candle_rows(older), "has_more": more}
-        _, result, m1 = current().snapshot()
+        _, result, m1 = engine.snapshot()
         if result is None or m1 is None:
             raise HTTPException(503, "no data yet")
-        # Include the still-forming candle so the chart matches the live price.
-        candles = resample_ohlcv(m1, timeframe, drop_incomplete=False).tail(limit)
+        # Include the still-forming candle so the chart matches the live price: built from M1 on
+        # the grid of the source's own candles when it has them.
+        if native is not None:
+            live = forming(native, m1, timeframe.minutes)
+            candles = (pd.concat([native, live]) if len(live) else native).tail(limit)
+        else:
+            candles = resample_ohlcv(m1, timeframe, drop_incomplete=False).tail(limit)
         tf_result = next((r for r in result.results if r.timeframe.name == timeframe.name), None)
         levels = [lv.to_dict() for s in tf_result.sets.values() for lv in s.active] if tf_result else []
         swings = [sw.to_dict() for sw in tf_result.swings] if tf_result else []

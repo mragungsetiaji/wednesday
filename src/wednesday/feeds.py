@@ -62,6 +62,12 @@ class DataFeed(ABC):
         the feed has none, or its days don't end at the New York close."""
         return None
 
+    def fetch_native(self, resolution: str, count: int, to: int | None = None) -> pd.DataFrame | None:
+        """Up to ``count`` candles the source builds itself at ``resolution`` ("5", "60", "240",
+        "D"), opening before ``to`` (unix seconds) when given, oldest first, the forming one
+        included. None when the source has none of its own: its timeframes are resampled from M1."""
+        return None
+
     def describe(self) -> dict:
         """Connection details shown by ``--check``."""
         return {"feed": self.name}
@@ -186,10 +192,12 @@ class TradingViewFeed(DataFeed):
             self.connect()
         return self._helper.call(op, timeout, symbol=self.symbol, **args)
 
-    def _candles(self, timeframe: str, count: int) -> pd.DataFrame:
+    def _candles(self, timeframe: str, count: int, to: int | None = None) -> pd.DataFrame:
         # Deep loads come in batches of a few thousand bars; give them time.
         timeout = 30 + count / 200
-        rows = self._call("candles", timeout, timeframe=timeframe, count=count, timeoutMs=int(timeout * 1000) - 5000)
+        extra = {} if to is None else {"to": to}
+        rows = self._call("candles", timeout, timeframe=timeframe, count=count, timeoutMs=int(timeout * 1000) - 5000,
+                          **extra)
         df = pd.DataFrame(rows or [], columns=["time", *OHLCV_COLUMNS])
         df.index = pd.to_datetime(df.pop("time"), unit="s")  # UTC
         return df
@@ -201,6 +209,18 @@ class TradingViewFeed(DataFeed):
         if df.empty:
             raise RuntimeError(f"TradingView returned no 1m data for {self.symbol}")
         return normalize_ohlcv(df).tail(count)
+
+    def fetch_native(self, resolution: str, count: int, to: int | None = None) -> pd.DataFrame | None:
+        try:
+            return normalize_ohlcv(self._candles(resolution, count, to))
+        except TradingViewError as exc:
+            if exc.code == "NO_DATA":  # nothing in that range: an empty series, not an error
+                return self._candles_empty()
+            raise
+
+    @staticmethod
+    def _candles_empty() -> pd.DataFrame:
+        return pd.DataFrame(columns=OHLCV_COLUMNS, index=pd.DatetimeIndex([]), dtype=float)
 
     def daily_history(self, clock: str, count: int) -> pd.DataFrame | None:
         # A gold daily bar opens at 18:00 New York and closes at 17:00 the next day: +7 hours

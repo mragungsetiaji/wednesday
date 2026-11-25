@@ -1,6 +1,6 @@
 # Design: accounts and a market-data store
 
-Status: **proposal**, not built.
+Status: **being built** on `design-storage-users`; steps 1 to 4 of the [build order](#build-order) are done.
 
 Wednesday stays one trader's tool, used from several devices (PC and laptop). Two
 additions to the Rust server (`wed-server`, `wed-store`), and the Python reference
@@ -270,7 +270,12 @@ The Python reference (`storage.py`) gets the same tables and migrations, and
 2. Read path from `bars`, so the scan and charts open from the database.
 3. Ingest per timeframe for the picked ticker: backfill, live closes, gap fill,
    priority order, stop on leaving unless `keep_live`.
-4. The scan on native timeframes (Rust and Python), with `tests/golden` written again.
+4. The scan on native timeframes (Rust and Python). `tests/golden` stays as it is: the
+   synthetic source has no timeframes of its own, so the golden scans still resample M1.
+
+Done: steps 1 to 4. A gap longer than one page (5,000 candles) between the stored and
+the fetched candles isn't filled yet; the backfill only reaches back from the first
+stored candle.
 5. The dropdown from `markets`, with the venue shown, and Settings > Markets.
 6. `users` and `sessions`, the setup code and `--create-user`, route guard, login page,
    Settings > Account.

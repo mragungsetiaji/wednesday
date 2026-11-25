@@ -264,10 +264,55 @@ pub async fn candles(rt: &Arc<Runtime>, q: &HashMap<String, String>) -> Answer {
     let tf = timeframe(tf_name)?;
     let engine = rt.engine();
     let st = engine.state();
+    if let Some(native) = st.native.get(tf.name).filter(|c| !c.is_empty()) {
+        return match before {
+            Some(before) => native_before(native, stream_of(rt, &engine), tf, before, limit).await,
+            None => latest_native(native, &st.m1, st.result.as_deref(), tf, limit),
+        };
+    }
     match before {
         Some(before) => candles_before(&st.m1, stream_of(rt, &engine), tf, before, limit).await,
         None => latest_candles(&st.m1, st.result.as_deref(), tf, limit),
     }
+}
+
+/// [`latest_candles`] on the source's own candles of `tf`, then the forming one built from M1 on
+/// their grid, so the chart shows TradingView's candles and still ends at the live price.
+pub fn latest_native(native: &[Bar], m1: &[Bar], result: Option<&wednesday_scan::ScanResult>, tf: Timeframe,
+                     limit: usize) -> Answer {
+    let Some(result) = result else { return Err(Refusal::new(503, "no data yet")) };
+    let mut all = native.to_vec();
+    all.extend(crate::ingest::forming(native, m1, tf.minutes));
+    let (levels, swings) = levels_and_swings(result, tf);
+    Ok(json!({
+        "timeframe": tf.name,
+        "price": result.price,
+        "candles": candle_rows(tail(&all, limit)),
+        "levels": levels,
+        "swings": swings,
+    }))
+}
+
+/// [`candles_before`] on the source's own candles: those in memory, then the stored ones.
+pub async fn native_before(native: &[Bar], stream: Option<Stream<'_>>, tf: Timeframe, before: i128, limit: usize)
+    -> Answer {
+    let before = i64::try_from(before).map_err(|_| internal())?;
+    let kept: Vec<Bar> = native.iter().filter(|c| unix(c.time) < before).copied().collect();
+    let mut out = tail(&kept, limit).to_vec();
+    let mut more = false;
+    let rest = limit - out.len();
+    if let (Some(s), Some(n), true) = (stream, crate::ingest::native_tf(tf.name), rest > 0) {
+        let edge = out.first().map_or(before, |c| unix(c.time));
+        let older = super::load_series(s.store, s.source, s.symbol, n.tf, rest, Some(edge)).await.map_err(|e| {
+            log::error!("older candles: {e}");
+            internal()
+        })?;
+        more = older.len() == rest;
+        out.splice(0..0, older);
+    } else if rest == 0 {
+        more = true;
+    }
+    Ok(json!({"timeframe": tf.name, "candles": candle_rows(&out), "has_more": more}))
 }
 
 /// [`candles`] with `before`: the older candles' answer.

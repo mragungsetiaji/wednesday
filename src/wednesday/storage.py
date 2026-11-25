@@ -11,6 +11,7 @@ server time for MT5), the same convention the API uses.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -341,7 +342,6 @@ class Store:
     def _migrate(self) -> None:
         """Apply the data migrations this database hasn't had yet, in order, each in one
         transaction with its row in ``schema_migrations`` (wed-store runs the same list)."""
-        from datetime import datetime, timezone
         from sqlalchemy import inspect
 
         with self.engine.connect() as conn:
@@ -440,6 +440,34 @@ class Store:
         with self.engine.connect() as conn:
             n, first, last = conn.execute(q).one()
         return int(n), first, last
+
+    # ---- series: what the ingest keeps per (source, symbol, timeframe) ------------
+    def note_series(self, source: str, symbol: str, tf: str, backfill: str, error: str | None = None,
+                    active: bool = True) -> None:
+        """Record a series' reach (from ``bars``), its backfill state and its last error."""
+        _, first, last = self.bar_bounds(source, symbol, tf)
+        self._upsert(series_table, [{
+            "source": source, "symbol": symbol, "tf": tf, "active": active, "first_time": first,
+            "last_time": last, "backfill": backfill, "updated_at": datetime.now(timezone.utc).isoformat(),
+            "error": error}], ["source", "symbol", "tf"])
+
+    def series(self, source: str | None = None, symbol: str | None = None) -> list[dict]:
+        """Series rows, by source, symbol and timeframe."""
+        t = series_table
+        q = select(t)
+        if source is not None:
+            q = q.where(t.c.source == source)
+        if symbol is not None:
+            q = q.where(t.c.symbol == symbol)
+        with self.engine.connect() as conn:
+            rows = conn.execute(q.order_by(t.c.source, t.c.symbol, t.c.tf)).mappings().all()
+        return [dict(r) for r in rows]
+
+    def deactivate_series(self, source: str, symbol: str) -> None:
+        """The stream's engine stopped: its series are no longer kept up to date."""
+        t = series_table
+        with self.engine.begin() as conn:
+            conn.execute(t.update().where(t.c.source == source, t.c.symbol == symbol).values(active=False))
 
     def bar_days(self, source: str, symbol: str) -> list[tuple[int, int]]:
         """Stored M1 bars per day: (day as unix seconds of its midnight, bar count), oldest first."""

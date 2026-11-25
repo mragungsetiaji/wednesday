@@ -56,7 +56,8 @@ src/wednesday/
   news.py         economic calendar (ForexFactory weekly feed) for the risk-time card; every week kept in calendar_events
   news_stats.py   gold's move after past releases per event type (M1, feed clock), calendar CSV import
   storage.py      SQLAlchemy store: settings, M1 history, alert log, journals (SQLite / PostgreSQL)
-  history.py      older candles for the chart as it scrolls left (memory, then stored M1)
+  history.py      older candles for the chart as it scrolls left (memory, then stored bars)
+  ingest.py       each timeframe's own candles from the source, stored per series, and the backfill
   journal/        MT5 accounts: HTML report import, gain and drawdown rebuilt from M1 bars, /api/journals; sample.py builds a made-up portfolio for tests and the docs screenshot
   plugins.py      loads plugins (entry point group wednesday.plugins): routes, hooks, jobs
   cli.py          command line entry point

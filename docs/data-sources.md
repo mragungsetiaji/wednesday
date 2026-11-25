@@ -124,8 +124,10 @@ The symbol takes TradingView's exchange prefix. `FX:` is FXCM:
 
 `FXCM:XAUUSD` doesn't exist; the source then says to use `FX:XAUUSD`. Without a
 TradingView account the server gives about 7,000 one-minute bars (~5 trading
-days), so the 4H timeframe fills in as stored history grows. Bar
-times are UTC. The candle still forming is dropped; the live price comes from
+days), so each timeframe is fetched as TradingView builds it (5M, 15M, 30M, 1H,
+4H and 1D, see [Storage](#storage)): the 4H candles open on TradingView's
+sessions (03:00, 07:00, ... UTC for FXCM gold) and reach years back from the
+first start. Bar times are UTC. The candle still forming is dropped; the live price comes from
 TradingView's quote and builds the forming candle between scans.
 
 The same connection feeds a full-screen chart set to another symbol (`FX:XAGUSD`
@@ -136,11 +138,22 @@ scanned or stored.
 
 ## Storage
 
-Every fetched M1 bar is stored per source and symbol. A restart resumes from
-the database instead of refetching, and TradingView's few days stop being a
-limit: history keeps growing while the screener runs. This stored history is the
-only history there is; there is no import. The 4H timeframe with the default
-lookback wants ~48k M1 bars, about 5 weeks. Synthetic data is never stored.
+Every fetched bar is stored per source, symbol and timeframe (the `bars` table).
+A restart resumes from the database instead of refetching. There is no import.
+
+With TradingView, each timeframe has its own series: the 1-minute bars of the
+scan, and the 5M, 15M, 30M, 1H, 4H and 1D candles as TradingView builds them
+(`wed-engine/src/ingest.rs`, `ingest.py`). A timeframe is fetched again once a
+new candle of it has closed, and only closed candles are kept; the scan reads a
+timeframe's own candles, and the chart adds the forming one from the live
+1-minute bars. Once a minute the ingest also loads one page (5,000 candles) of
+older history, highest timeframe first, until TradingView has nothing older.
+The `series` table keeps each series' first and last candle, its backfill state
+(`pending`, `running`, `done`) and its last error. A timeframe TradingView won't
+send is noted there and the scan resamples 1-minute bars for it meanwhile.
+
+Synthetic data is never stored and has no timeframes of its own: the scan
+resamples its 1-minute bars, as `tests/golden/` expects.
 
 | Backend | How |
 | --- | --- |
@@ -154,12 +167,11 @@ The database also keeps the saved settings and the Telegram alert log.
 
 The chart opens on the last `--lookback` candles of a timeframe, the ones the
 scan uses. Drag it to the left and older candles load as you reach the edge,
-300 at a time, with no effect on the scan. They come from the M1 bars in
-memory first, then:
+300 at a time, with no effect on the scan. They come from memory first, then:
 
-- **TradingView**: the M1 bars stored in the database, so as far back as the
-  screener has been running on that symbol.
-- **Synthetic data**: only what is in memory.
+- **TradingView**: the timeframe's own candles stored in the database, as far
+  back as the backfill has reached.
+- **Synthetic data**: only what is in memory, resampled from 1-minute bars.
 
 Older candles show prices only; levels are drawn from the latest scan.
 

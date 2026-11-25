@@ -169,6 +169,31 @@ async fn an_old_m1_bars_table_moves_to_bars() {
     Store::open(url, &dir).await.unwrap(); // nothing runs twice
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn native_candles_page_back_from_their_own_series() {
+    use wednesday_rs::engine::{charts, ingest, save_series};
+    use wednesday_rs::scan::{Bar, TIMEFRAMES};
+    let dir = temp("native");
+    let store = Store::open("sqlite:///native.db", &dir).await.unwrap();
+    let start = 1_790_000_000 / 14_400 * 14_400 + 3 * 3600; // a 4H candle opening at 03:00 UTC
+    let bar = |i: i64| Bar { time: chrono::DateTime::from_timestamp(start + i * 14_400, 0).unwrap().naive_utc(),
+                             open: i as f64, high: i as f64 + 1.0, low: i as f64 - 1.0, close: i as f64, volume: 1.0 };
+    let stored: Vec<Bar> = (0..10).map(bar).collect();
+    save_series(&store, "tradingview", "FX:XAUUSD", "4h", &stored).await.unwrap();
+    ingest::note_series(Some(&store), "tradingview", "FX:XAUUSD", "4h", ingest::Backfill::Done, None).await;
+    let stream = charts::Stream { store: &store, source: "tradingview", symbol: "FX:XAUUSD" };
+    let memory = &stored[7..];
+    let page = charts::native_before(memory, Some(stream), TIMEFRAMES[0], (start + 9 * 14_400).into(), 4).await.unwrap();
+    let times: Vec<i64> = page["candles"].as_array().unwrap().iter().map(|c| c["time"].as_i64().unwrap()).collect();
+    assert_eq!(times, (5..9).map(|i| start + i * 14_400).collect::<Vec<_>>()); // 7, 8 from memory; 5, 6 stored
+    assert_eq!(page["has_more"], json!(true));
+    let last = charts::native_before(memory, Some(stream), TIMEFRAMES[0], start.into(), 4).await.unwrap();
+    assert_eq!((last["candles"].as_array().unwrap().len(), &last["has_more"]), (0, &json!(false)));
+    let rows = store.rows("series", "SELECT tf, first_time, last_time, backfill FROM series", vec![]).await.unwrap();
+    assert_eq!(Value::from(rows), json!([{"tf": "4h", "first_time": start, "last_time": start + 9 * 14_400,
+                                          "backfill": "done"}]));
+}
+
 struct Postgres {
     data: PathBuf,
 }
