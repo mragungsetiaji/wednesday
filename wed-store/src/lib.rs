@@ -19,6 +19,9 @@ use sqlx::{PgPool, Row, SqlitePool};
 
 const SCHEMA: &str = include_str!("../schema.json");
 
+/// The data migrations, as `MIGRATIONS` in storage.py: never renumber or edit an applied one.
+const MIGRATIONS: [(i64, &str); 1] = [(1, "bars_from_m1_bars")];
+
 #[derive(Clone, Debug)]
 pub enum Arg {
     Str(Option<String>),
@@ -66,6 +69,7 @@ impl Store {
     pub async fn open(url: &str, home: &Path) -> Result<Store, String> {
         let store = Store::connect(url, home).await?;
         store.create_tables().await?;
+        store.migrate().await?;
         Ok(store)
     }
 
@@ -158,6 +162,38 @@ impl Store {
                     self.execute(&sql, vec![]).await?;
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// Apply the data migrations this database hasn't had yet (`MIGRATIONS` in storage.py, the
+    /// same versions and names), each in one transaction with its `schema_migrations` row.
+    async fn migrate(&self) -> Result<(), String> {
+        let done: Vec<i64> = self
+            .rows("schema_migrations", "SELECT version FROM schema_migrations", vec![])
+            .await?
+            .iter()
+            .filter_map(|r| r.get("version")?.as_i64())
+            .collect();
+        for (version, name) in MIGRATIONS {
+            if done.contains(&version) {
+                continue;
+            }
+            let mut stmts = match version {
+                // Versions before 0.5 kept only M1 bars, in `m1_bars`: move them to `bars` as "1m".
+                // (The WHERE: SQLite reads ON after a bare SELECT as a join.)
+                1 if !self.columns("m1_bars").await?.is_empty() => vec![
+                    ("INSERT INTO bars (source, symbol, tf, time, open, high, low, close, volume) \
+                      SELECT source, symbol, '1m', time, open, high, low, close, volume FROM m1_bars WHERE 1 = 1 \
+                      ON CONFLICT DO NOTHING".to_string(), vec![]),
+                    ("DROP TABLE m1_bars".to_string(), vec![]),
+                ],
+                _ => vec![],
+            };
+            let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S%.6f+00:00").to_string();
+            stmts.push(("INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)".into(),
+                        vec![Arg::Int(Some(version)), Arg::Str(Some(name.into())), Arg::Str(Some(now))]));
+            self.transaction(stmts).await?;
         }
         Ok(())
     }
@@ -382,11 +418,12 @@ impl Store {
         Ok(Value::Object(out))
     }
 
-    // ---- M1 bars ----
+    // ---- bars ----
 
-    /// Per stored stream: source, symbol, bars, and the first and last bar's open time (`bar_stats`).
+    /// Per stored M1 stream: source, symbol, bars, and the first and last bar's open time (`bar_stats`).
     pub async fn bar_stats(&self) -> Result<Vec<Value>, String> {
-        let sql = "SELECT source, symbol, COUNT(*), MIN(time), MAX(time) FROM m1_bars GROUP BY source, symbol ORDER BY source, symbol";
+        let sql = "SELECT source, symbol, COUNT(*), MIN(time), MAX(time) FROM bars WHERE tf = '1m' \
+                   GROUP BY source, symbol ORDER BY source, symbol";
         let err = |e: sqlx::Error| e.to_string();
         let iso = |t: Option<i64>| -> Value {
             t.and_then(|t| chrono::DateTime::from_timestamp(t, 0))
@@ -420,7 +457,7 @@ impl Store {
 
     /// (source, symbol, bars) per stored stream, by source and symbol (`bar_stats` in storage.py).
     pub async fn bar_counts(&self) -> Result<Vec<(String, String, i64)>, String> {
-        let sql = "SELECT source, symbol, COUNT(*) FROM m1_bars GROUP BY source, symbol ORDER BY source, symbol";
+        let sql = "SELECT source, symbol, COUNT(*) FROM bars WHERE tf = '1m' GROUP BY source, symbol ORDER BY source, symbol";
         let err = |e: sqlx::Error| e.to_string();
         macro_rules! go {
             ($pool:expr) => {

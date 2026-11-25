@@ -86,6 +86,73 @@
    ]
   },
   {
+   "name": "bars",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS bars ( source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, tf VARCHAR(8) NOT NULL, time BIGINT NOT NULL, open FLOAT NOT NULL, high FLOAT NOT NULL, low FLOAT NOT NULL, close FLOAT NOT NULL, volume FLOAT NOT NULL, PRIMARY KEY (source, symbol, tf, time) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS bars ( source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, tf VARCHAR(8) NOT NULL, time BIGINT NOT NULL, open FLOAT NOT NULL, high FLOAT NOT NULL, low FLOAT NOT NULL, close FLOAT NOT NULL, volume FLOAT NOT NULL, PRIMARY KEY (source, symbol, tf, time) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "source",
+     "nullable": false,
+     "sqlite": "VARCHAR(32)",
+     "postgresql": "VARCHAR(32)"
+    },
+    {
+     "name": "symbol",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "tf",
+     "nullable": false,
+     "sqlite": "VARCHAR(8)",
+     "postgresql": "VARCHAR(8)"
+    },
+    {
+     "name": "time",
+     "nullable": false,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
+    },
+    {
+     "name": "open",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "high",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "low",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "close",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    },
+    {
+     "name": "volume",
+     "nullable": false,
+     "sqlite": "FLOAT",
+     "postgresql": "FLOAT"
+    }
+   ]
+  },
+  {
    "name": "calendar_events",
    "create": {
     "sqlite": "CREATE TABLE IF NOT EXISTS calendar_events ( time BIGINT NOT NULL, currency VARCHAR(8) NOT NULL, title VARCHAR(200) NOT NULL, impact VARCHAR(16), forecast VARCHAR(40), previous VARCHAR(40), actual VARCHAR(40), source VARCHAR(16), PRIMARY KEY (time, currency, title) )",
@@ -694,10 +761,10 @@
    ]
   },
   {
-   "name": "m1_bars",
+   "name": "markets",
    "create": {
-    "sqlite": "CREATE TABLE IF NOT EXISTS m1_bars ( source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, time BIGINT NOT NULL, open FLOAT NOT NULL, high FLOAT NOT NULL, low FLOAT NOT NULL, close FLOAT NOT NULL, volume FLOAT NOT NULL, PRIMARY KEY (source, symbol, time) )",
-    "postgresql": "CREATE TABLE IF NOT EXISTS m1_bars ( source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, time BIGINT NOT NULL, open FLOAT NOT NULL, high FLOAT NOT NULL, low FLOAT NOT NULL, close FLOAT NOT NULL, volume FLOAT NOT NULL, PRIMARY KEY (source, symbol, time) )"
+    "sqlite": "CREATE TABLE IF NOT EXISTS markets ( source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, label VARCHAR(64) NOT NULL, name VARCHAR(128), venue VARCHAR(64), position INTEGER NOT NULL, keep_live BOOLEAN NOT NULL, added_at VARCHAR(40) NOT NULL, PRIMARY KEY (source, symbol) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS markets ( source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, label VARCHAR(64) NOT NULL, name VARCHAR(128), venue VARCHAR(64), position INTEGER NOT NULL, keep_live BOOLEAN NOT NULL, added_at VARCHAR(40) NOT NULL, PRIMARY KEY (source, symbol) )"
    },
    "indexes": {
     "sqlite": [],
@@ -717,40 +784,191 @@
      "postgresql": "VARCHAR(64)"
     },
     {
-     "name": "time",
+     "name": "label",
      "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "name",
+     "nullable": true,
+     "sqlite": "VARCHAR(128)",
+     "postgresql": "VARCHAR(128)"
+    },
+    {
+     "name": "venue",
+     "nullable": true,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "position",
+     "nullable": false,
+     "sqlite": "INTEGER",
+     "postgresql": "INTEGER"
+    },
+    {
+     "name": "keep_live",
+     "nullable": false,
+     "sqlite": "BOOLEAN",
+     "postgresql": "BOOLEAN"
+    },
+    {
+     "name": "added_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    }
+   ]
+  },
+  {
+   "name": "schema_migrations",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS schema_migrations ( version INTEGER NOT NULL, name VARCHAR(64) NOT NULL, applied_at VARCHAR(40) NOT NULL, PRIMARY KEY (version) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS schema_migrations ( version SERIAL NOT NULL, name VARCHAR(64) NOT NULL, applied_at VARCHAR(40) NOT NULL, PRIMARY KEY (version) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "version",
+     "nullable": false,
+     "sqlite": "INTEGER",
+     "postgresql": "INTEGER"
+    },
+    {
+     "name": "name",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "applied_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    }
+   ]
+  },
+  {
+   "name": "series",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS series ( source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, tf VARCHAR(8) NOT NULL, active BOOLEAN NOT NULL, first_time BIGINT, last_time BIGINT, backfill VARCHAR(16) NOT NULL, updated_at VARCHAR(40), error TEXT, PRIMARY KEY (source, symbol, tf) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS series ( source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, tf VARCHAR(8) NOT NULL, active BOOLEAN NOT NULL, first_time BIGINT, last_time BIGINT, backfill VARCHAR(16) NOT NULL, updated_at VARCHAR(40), error TEXT, PRIMARY KEY (source, symbol, tf) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "source",
+     "nullable": false,
+     "sqlite": "VARCHAR(32)",
+     "postgresql": "VARCHAR(32)"
+    },
+    {
+     "name": "symbol",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "tf",
+     "nullable": false,
+     "sqlite": "VARCHAR(8)",
+     "postgresql": "VARCHAR(8)"
+    },
+    {
+     "name": "active",
+     "nullable": false,
+     "sqlite": "BOOLEAN",
+     "postgresql": "BOOLEAN"
+    },
+    {
+     "name": "first_time",
+     "nullable": true,
      "sqlite": "BIGINT",
      "postgresql": "BIGINT"
     },
     {
-     "name": "open",
-     "nullable": false,
-     "sqlite": "FLOAT",
-     "postgresql": "FLOAT"
+     "name": "last_time",
+     "nullable": true,
+     "sqlite": "BIGINT",
+     "postgresql": "BIGINT"
     },
     {
-     "name": "high",
+     "name": "backfill",
      "nullable": false,
-     "sqlite": "FLOAT",
-     "postgresql": "FLOAT"
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
     },
     {
-     "name": "low",
-     "nullable": false,
-     "sqlite": "FLOAT",
-     "postgresql": "FLOAT"
+     "name": "updated_at",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
     },
     {
-     "name": "close",
+     "name": "error",
+     "nullable": true,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    }
+   ]
+  },
+  {
+   "name": "sessions",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS sessions ( token_hash VARCHAR(64) NOT NULL, user_id VARCHAR(36) NOT NULL, device VARCHAR(255), created_at VARCHAR(40) NOT NULL, expires_at VARCHAR(40) NOT NULL, last_seen_at VARCHAR(40), PRIMARY KEY (token_hash) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS sessions ( token_hash VARCHAR(64) NOT NULL, user_id VARCHAR(36) NOT NULL, device VARCHAR(255), created_at VARCHAR(40) NOT NULL, expires_at VARCHAR(40) NOT NULL, last_seen_at VARCHAR(40), PRIMARY KEY (token_hash) )"
+   },
+   "indexes": {
+    "sqlite": [
+     "CREATE INDEX IF NOT EXISTS ix_sessions_user_id ON sessions (user_id)"
+    ],
+    "postgresql": [
+     "CREATE INDEX IF NOT EXISTS ix_sessions_user_id ON sessions (user_id)"
+    ]
+   },
+   "columns": [
+    {
+     "name": "token_hash",
      "nullable": false,
-     "sqlite": "FLOAT",
-     "postgresql": "FLOAT"
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
     },
     {
-     "name": "volume",
+     "name": "user_id",
      "nullable": false,
-     "sqlite": "FLOAT",
-     "postgresql": "FLOAT"
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "device",
+     "nullable": true,
+     "sqlite": "VARCHAR(255)",
+     "postgresql": "VARCHAR(255)"
+    },
+    {
+     "name": "created_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "expires_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "last_seen_at",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
     }
    ]
   },
@@ -776,6 +994,79 @@
      "nullable": false,
      "sqlite": "TEXT",
      "postgresql": "TEXT"
+    }
+   ]
+  },
+  {
+   "name": "users",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS users ( id VARCHAR(36) NOT NULL, username VARCHAR(64) NOT NULL, email VARCHAR(255), name VARCHAR(120), password_hash TEXT NOT NULL, role VARCHAR(16) NOT NULL, disabled BOOLEAN NOT NULL, created_at VARCHAR(40) NOT NULL, password_at VARCHAR(40) NOT NULL, last_login_at VARCHAR(40), PRIMARY KEY (id), UNIQUE (username) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS users ( id VARCHAR(36) NOT NULL, username VARCHAR(64) NOT NULL, email VARCHAR(255), name VARCHAR(120), password_hash TEXT NOT NULL, role VARCHAR(16) NOT NULL, disabled BOOLEAN NOT NULL, created_at VARCHAR(40) NOT NULL, password_at VARCHAR(40) NOT NULL, last_login_at VARCHAR(40), PRIMARY KEY (id), UNIQUE (username) )"
+   },
+   "indexes": {
+    "sqlite": [],
+    "postgresql": []
+   },
+   "columns": [
+    {
+     "name": "id",
+     "nullable": false,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    },
+    {
+     "name": "username",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "email",
+     "nullable": true,
+     "sqlite": "VARCHAR(255)",
+     "postgresql": "VARCHAR(255)"
+    },
+    {
+     "name": "name",
+     "nullable": true,
+     "sqlite": "VARCHAR(120)",
+     "postgresql": "VARCHAR(120)"
+    },
+    {
+     "name": "password_hash",
+     "nullable": false,
+     "sqlite": "TEXT",
+     "postgresql": "TEXT"
+    },
+    {
+     "name": "role",
+     "nullable": false,
+     "sqlite": "VARCHAR(16)",
+     "postgresql": "VARCHAR(16)"
+    },
+    {
+     "name": "disabled",
+     "nullable": false,
+     "sqlite": "BOOLEAN",
+     "postgresql": "BOOLEAN"
+    },
+    {
+     "name": "created_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "password_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "last_login_at",
+     "nullable": true,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
     }
    ]
   }

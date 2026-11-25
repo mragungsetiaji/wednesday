@@ -33,7 +33,7 @@ CREATE TABLE bars (
   source  VARCHAR(32) NOT NULL,   -- 'tradingview', later others
   symbol  VARCHAR(64) NOT NULL,   -- 'FX:XAUUSD'
   tf      VARCHAR(8)  NOT NULL,   -- '1m','5m','15m','30m','1h','4h','1d' (the source's own candles)
-  time    BIGINT      NOT NULL,   -- candle open, unix seconds, UTC
+  time    BIGINT      NOT NULL,   -- candle open, unix seconds, feed clock (UTC for TradingView)
   open    DOUBLE PRECISION NOT NULL,
   high    DOUBLE PRECISION NOT NULL,
   low     DOUBLE PRECISION NOT NULL,
@@ -59,10 +59,10 @@ CREATE TABLE series (
 
 - **Only the source's own candles are stored.** Resampled candles are computed when read,
   so the table never holds two versions of one candle.
-- **Times in UTC.** TradingView gives UTC. The feed clock (`XAU_CLOCK`) is applied when
-  bars are read, as now.
-- **`m1_bars` becomes `bars` with `tf = '1m'`.** A migration copies it across, and the
-  old table is dropped one release later.
+- **Times in the feed clock**, as `m1_bars` kept them: UTC for TradingView, so nothing
+  changes for it.
+- **`m1_bars` becomes `bars` with `tf = '1m'`.** Migration 1 (`schema_migrations`) copies it
+  across and drops the old table.
 - **PostgreSQL on the server, SQLite on the desktop.** Both keep working. On PostgreSQL,
   TimescaleDB is used when the extension is present: `bars` becomes a hypertable on
   `time` with compression after 30 days. Without the extension it is a plain table,

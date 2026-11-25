@@ -299,7 +299,13 @@ fn bar_from(r: &Map<String, Value>) -> Option<Bar> {
 /// The latest `limit` stored bars of a stream, or those opening before `before`, oldest first.
 pub async fn load_bars(store: &Store, source: &str, symbol: &str, limit: usize, before: Option<i64>)
     -> Result<Vec<Bar>, String> {
-    let mut args = vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))];
+    load_series(store, source, symbol, "1m", limit, before).await
+}
+
+/// The latest `limit` stored bars of one series (`Store.load_bars` with `tf`), oldest first.
+pub async fn load_series(store: &Store, source: &str, symbol: &str, tf: &str, limit: usize, before: Option<i64>)
+    -> Result<Vec<Bar>, String> {
+    let mut args = vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into())), Arg::Str(Some(tf.into()))];
     let cut = match before {
         Some(b) => {
             args.push(Arg::Int(Some(b)));
@@ -309,7 +315,7 @@ pub async fn load_bars(store: &Store, source: &str, symbol: &str, limit: usize, 
     };
     args.push(Arg::Int(Some(limit as i64)));
     let rows = store
-        .rows("m1_bars", &format!("SELECT time, open, high, low, close, volume FROM m1_bars WHERE source = ? AND symbol = ?{cut} ORDER BY time DESC LIMIT ?"), args)
+        .rows("bars", &format!("SELECT time, open, high, low, close, volume FROM bars WHERE source = ? AND symbol = ? AND tf = ?{cut} ORDER BY time DESC LIMIT ?"), args)
         .await?;
     let mut bars: Vec<Bar> = rows.iter().filter_map(bar_from).collect();
     bars.reverse();
@@ -317,17 +323,23 @@ pub async fn load_bars(store: &Store, source: &str, symbol: &str, limit: usize, 
 }
 
 pub async fn save_bars(store: &Store, source: &str, symbol: &str, bars: &[Bar]) -> Result<(), String> {
+    save_series(store, source, symbol, "1m", bars).await
+}
+
+/// Insert or update bars of one series (`Store.save_bars` with `tf`).
+pub async fn save_series(store: &Store, source: &str, symbol: &str, tf: &str, bars: &[Bar]) -> Result<(), String> {
     if bars.is_empty() {
         return Ok(());
     }
-    let names = ["source", "symbol", "time", "open", "high", "low", "close", "volume"];
+    let names = ["source", "symbol", "tf", "time", "open", "high", "low", "close", "volume"];
     let rows = bars
         .iter()
-        .map(|b| vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into())), Arg::Int(Some(unix(b.time))),
+        .map(|b| vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into())), Arg::Str(Some(tf.into())),
+                      Arg::Int(Some(unix(b.time))),
                       Arg::Float(Some(b.open)), Arg::Float(Some(b.high)), Arg::Float(Some(b.low)),
                       Arg::Float(Some(b.close)), Arg::Float(Some(b.volume))])
         .collect();
-    store.transaction(Store::upsert_many("m1_bars", &names, rows, &["source", "symbol", "time"])).await
+    store.transaction(Store::upsert_many("bars", &names, rows, &["source", "symbol", "tf", "time"])).await
 }
 
 // ---- the engine ----

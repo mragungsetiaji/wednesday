@@ -152,7 +152,7 @@ request to Python, streaming the answer back. Each answer then carries
   A second journal needs the `journal.multi` feature, read from the plugin host's registry
   (`wed-plugins/src/`, see `docs/plugins.md`).
 - **The engine** runs in Rust (`wed-engine/src/`): the feed (`feed.rs`: TradingView over
-  `tradingview.rs`, its websocket; synthetic data), the M1 buffer stored in `m1_bars`, the scan after each minute close,
+  `tradingview.rs`, its websocket; synthetic data), the M1 buffer stored in `bars` (tf `1m`), the scan after each minute close,
   the live price and the forming candle. It answers `/api/status`, `/api/scan`, `/api/tick`,
   `/api/stream`, `/api/settings`, the charts (`charts.rs`: `/api/candles`, `/api/replay`,
   `/api/replay/range`, `/api/clock/feed`), the analysis views (`analysis.rs`: `/api/sessions`,

@@ -370,7 +370,7 @@ async fn bar_streams(store: &Store) -> Result<Vec<(String, String, i64)>, String
 
 async fn load_bars(store: &Store, source: &str, symbol: &str, start: i64, end: i64) -> Result<Bars, String> {
     let rows = store
-        .rows("m1_bars", "SELECT time, open, high, low, close FROM m1_bars WHERE source = ? AND symbol = ? AND time >= ? AND time <= ? ORDER BY time",
+        .rows("bars", "SELECT time, open, high, low, close FROM bars WHERE source = ? AND symbol = ? AND tf = '1m' AND time >= ? AND time <= ? ORDER BY time",
               vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into())), Arg::Int(Some(start)), Arg::Int(Some(end))])
         .await?;
     let col = |k: &str| rows.iter().map(|r| r[k].as_f64().unwrap_or(f64::NAN)).collect::<Vec<_>>();
@@ -489,7 +489,7 @@ pub async fn delete(store: &Store, cache: &Cache, id: &str) -> Result<Value, Fai
     stmts.push(("DELETE FROM journals WHERE id = ?".into(), key()));
     store.transaction(stmts).await?;
     if truthy(j.get("sample")) {
-        store.execute("DELETE FROM m1_bars WHERE source = ?", vec![Arg::Str(Some(SAMPLE_SOURCE.into()))]).await?;
+        store.execute("DELETE FROM bars WHERE source = ?", vec![Arg::Str(Some(SAMPLE_SOURCE.into()))]).await?;
         store.set_setting(SAMPLE_KEY, &json!({"deleted": true})).await?;
     }
     for sid in shots {

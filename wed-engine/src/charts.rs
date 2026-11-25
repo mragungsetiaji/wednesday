@@ -189,20 +189,20 @@ fn bar_of(r: &serde_json::Map<String, Value>) -> Option<Bar> {
 
 /// `Store.load_bar_range`: stored M1 bars opening in [start, end], oldest first.
 async fn load_bar_range(s: Stream<'_>, start: i64, end: i64) -> Result<Vec<Bar>, String> {
-    let sql = "SELECT time, open, high, low, close, volume FROM m1_bars \
-               WHERE source = ? AND symbol = ? AND time >= ? AND time <= ? ORDER BY time";
+    let sql = "SELECT time, open, high, low, close, volume FROM bars \
+               WHERE source = ? AND symbol = ? AND tf = '1m' AND time >= ? AND time <= ? ORDER BY time";
     let args = vec![Arg::Str(Some(s.source.into())), Arg::Str(Some(s.symbol.into())), Arg::Int(Some(start)),
                     Arg::Int(Some(end))];
-    Ok(s.store.rows("m1_bars", sql, args).await?.iter().filter_map(bar_of).collect())
+    Ok(s.store.rows("bars", sql, args).await?.iter().filter_map(bar_of).collect())
 }
 
 /// The first and last stored bar's open time (`Store.bar_bounds` without the count).
 async fn bar_bounds(s: Stream<'_>) -> Result<(Option<i64>, Option<i64>), String> {
     let mut out = [None, None];
     for (slot, order) in out.iter_mut().zip(["ASC", "DESC"]) {
-        let sql = format!("SELECT time FROM m1_bars WHERE source = ? AND symbol = ? ORDER BY time {order} LIMIT 1");
+        let sql = format!("SELECT time FROM bars WHERE source = ? AND symbol = ? AND tf = '1m' ORDER BY time {order} LIMIT 1");
         let args = vec![Arg::Str(Some(s.source.into())), Arg::Str(Some(s.symbol.into()))];
-        *slot = s.store.rows("m1_bars", &sql, args).await?.first().and_then(|r| r.get("time")?.as_i64());
+        *slot = s.store.rows("bars", &sql, args).await?.first().and_then(|r| r.get("time")?.as_i64());
     }
     Ok((out[0], out[1]))
 }

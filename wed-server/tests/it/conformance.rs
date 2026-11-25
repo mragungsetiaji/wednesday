@@ -277,7 +277,7 @@ async fn seed_bars(store: &Store) {
             wednesday_rs::store::Arg::Float(Some(base + 6.0)), wednesday_rs::store::Arg::Float(Some(base - 3.0)),
             wednesday_rs::store::Arg::Float(Some(base + 0.25)), wednesday_rs::store::Arg::Float(Some(10.0)),
         ];
-        store.execute("INSERT INTO m1_bars (source, symbol, time, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        store.execute("INSERT INTO bars (source, symbol, tf, time, open, high, low, close, volume) VALUES (?, ?, '1m', ?, ?, ?, ?, ?, ?)",
                       args).await.unwrap();
     }
 }

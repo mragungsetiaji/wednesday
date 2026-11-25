@@ -149,6 +149,26 @@ async fn sqlite_as_python_has_it() {
     check(&py, "sqlite:///data/rust.db", &dir, false).await;
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn an_old_m1_bars_table_moves_to_bars() {
+    let dir = temp("migrate");
+    let url = "sqlite:///old.db";
+    let old = Store::connect(url, &dir).await.unwrap();
+    old.execute("CREATE TABLE m1_bars (source VARCHAR(32), symbol VARCHAR(64), time BIGINT, open FLOAT, high FLOAT, \
+                 low FLOAT, close FLOAT, volume FLOAT, PRIMARY KEY (source, symbol, time))", vec![]).await.unwrap();
+    old.execute("INSERT INTO m1_bars VALUES ('tradingview', 'FX:XAUUSD', 1772445600, 1, 2, 0.5, 1.5, 3)", vec![])
+        .await.unwrap();
+    drop(old);
+    let store = Store::open(url, &dir).await.unwrap();
+    let bars = wednesday_rs::engine::load_bars(&store, "tradingview", "FX:XAUUSD", 10, None).await.unwrap();
+    assert_eq!(bars.len(), 1);
+    assert_eq!(bars[0].close, 1.5);
+    let rows = store.rows("schema_migrations", "SELECT version, name FROM schema_migrations", vec![]).await.unwrap();
+    assert_eq!(Value::from(rows), json!([{"version": 1, "name": "bars_from_m1_bars"}]));
+    drop(store);
+    Store::open(url, &dir).await.unwrap(); // nothing runs twice
+}
+
 struct Postgres {
     data: PathBuf,
 }
