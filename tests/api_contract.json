@@ -1548,6 +1548,22 @@
    "trade_bias": "null",
    "version": "number"
   },
+  "GET /api/series": {
+   "series": [
+    {
+     "active": "bool",
+     "backfill": "null",
+     "bars": "number",
+     "error": "null",
+     "first": "string",
+     "last": "string",
+     "source": "string",
+     "symbol": "string",
+     "tf": "string",
+     "updated_at": "null"
+    }
+   ]
+  },
   "GET /api/sessions": {
    "clock": "string",
    "killzones": [
@@ -1753,6 +1769,7 @@
   "GET /api/replay",
   "GET /api/replay/range",
   "GET /api/scan",
+  "GET /api/series",
   "GET /api/sessions",
   "GET /api/settings",
   "PUT /api/settings",

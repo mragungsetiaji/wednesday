@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import {
-  fetchAuthStatus, fetchSettings, LOGGED_OUT_EVENT, reconnectFeed, type AuthStatus, saveSettings, type DataSettings, type SettingsResponse,
+  fetchAuthStatus, fetchSeries, fetchSettings, LOGGED_OUT_EVENT, reconnectFeed, type AuthStatus, saveSettings, type DataSettings, type SeriesStatus, type SettingsResponse,
 } from "../api";
 import { fmtFeedTime } from "../format";
 import { usePlugins } from "../plugins";
@@ -329,28 +329,7 @@ function DataSourceSettings() {
                 <div><dt>Database</dt><dd>{data.storage.backend === "sqlite" ? "SQLite" : data.storage.backend}</dd></div>
                 <div><dt>Location</dt><dd><code className="wrap">{data.storage.url}</code></dd></div>
               </dl>
-              {data.storage.series.length > 0 ? (
-                <table className="data compact">
-                  <thead>
-                    <tr>
-                      <th scope="col">Series</th>
-                      <th scope="col" className="end">Bars</th>
-                      <th scope="col" className="end">Latest</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.storage.series.map((s) => (
-                      <tr key={`${s.source}-${s.symbol}`}>
-                        <td>{s.source} · {s.symbol}</td>
-                        <td className="end num">{s.bars.toLocaleString()}</td>
-                        <td className="end num muted">{s.last ? fmtFeedTime(s.last) : ""}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="empty">No bars stored yet.</p>
-              )}
+              <StoredSeries fallback={data.storage.series} />
             </>
           ) : (
             <p className="empty">Storage is off (started with <code>--db none</code>).</p>
@@ -358,6 +337,88 @@ function DataSourceSettings() {
         </section>
       </aside>
     </div>
+  );
+}
+
+/** How the backfill of one series stands, in words. */
+const backfillText = (s: SeriesStatus) =>
+  s.error ? "Failed" : s.backfill === "done" ? "Done" : s.backfill === "running" ? "Loading" : "Waiting";
+
+/**
+ * The stored series, one row per source, ticker and timeframe: bars kept, the range, whether it
+ * is ingesting live and how its history backfill went. Refreshes every 30 seconds.
+ */
+function StoredSeries({ fallback }: { fallback: { source: string; symbol: string; bars: number; first: string | null; last: string | null }[] }) {
+  const [rows, setRows] = useState<SeriesStatus[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () => fetchSeries().then((r) => live && setRows(r.series)).catch(() => undefined);
+    load();
+    const timer = window.setInterval(load, 30_000);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  if (rows && rows.length > 0) {
+    const groups = new Map<string, SeriesStatus[]>();
+    for (const r of rows) {
+      const key = `${r.source} · ${r.symbol}`;
+      groups.set(key, [...(groups.get(key) ?? []), r]);
+    }
+    return (
+      <table className="data compact">
+        <thead>
+          <tr>
+            <th scope="col">TF</th>
+            <th scope="col" className="end">Bars</th>
+            <th scope="col" className="end">Latest</th>
+            <th scope="col">Ingest</th>
+          </tr>
+        </thead>
+        {[...groups].map(([name, list]) => (
+          <tbody key={name}>
+            <tr>
+              <th scope="colgroup" colSpan={4} className="series-group">{name}</th>
+            </tr>
+            {list.map((s) => (
+              <tr key={s.tf}>
+                <td className="num">{s.tf.toUpperCase()}</td>
+                <td className="end num" title={s.first ? `From ${fmtFeedTime(s.first)}` : undefined}>{s.bars.toLocaleString()}</td>
+                <td className="end num muted">{s.last ? fmtFeedTime(s.last) : ""}</td>
+                <td>
+                  {s.active ? "Live" : "Stopped"}
+                  <span className={s.error ? "text-error" : "muted"}>, history {backfillText(s).toLowerCase()}</span>
+                  {s.error && <div className="text-error">{s.error}</div>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        ))}
+      </table>
+    );
+  }
+  if (fallback.length === 0) return <p className="empty">No bars stored yet.</p>;
+  return (
+    <table className="data compact">
+      <thead>
+        <tr>
+          <th scope="col">Series</th>
+          <th scope="col" className="end">Bars</th>
+          <th scope="col" className="end">Latest</th>
+        </tr>
+      </thead>
+      <tbody>
+        {fallback.map((s) => (
+          <tr key={`${s.source}-${s.symbol}`}>
+            <td>{s.source} · {s.symbol}</td>
+            <td className="end num">{s.bars.toLocaleString()}</td>
+            <td className="end num muted">{s.last ? fmtFeedTime(s.last) : ""}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

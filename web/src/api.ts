@@ -182,6 +182,21 @@ export interface Device {
   last_seen_at: string | null;
   current: boolean;
 }
+/** One stored series (a source, ticker and timeframe) and how its ingest is going, from `/api/series`. */
+export interface SeriesStatus {
+  source: string;
+  symbol: string;
+  tf: string;
+  bars: number;
+  first: string | null; // feed clock
+  last: string | null;
+  active: boolean; // ingesting live now
+  backfill: string | null; // "pending", "running" or "done"
+  updated_at: string | null;
+  error: string | null;
+}
+export const fetchSeries = () => getJson<{ series: SeriesStatus[] }>("/api/series");
+
 export const fetchAuthStatus = () => getJson<AuthStatus>("/api/auth/status");
 export const logIn = (username: string, password: string) =>
   send<AuthStatus>("POST", "/api/auth/login", { username, password });

@@ -75,6 +75,12 @@ def test_refresh_stores_each_timeframe_and_backfill_ends(tmp_path):
     ingest.stopped()
     assert not any(r["active"] for r in store.series("tradingview", "FX:XAUUSD"))
 
+    status = store.series_status()
+    assert [r["tf"] for r in status] == [n.tf for n in NATIVE]  # 1m has no bars here, longest first
+    four = next(r for r in status if r["tf"] == "4h")
+    assert four["bars"] == 29 and four["backfill"] == "done" and four["active"] is False
+    assert four["first"] < four["last"] and four["error"] is None
+
 
 def test_a_source_without_its_own_timeframes_is_left_alone():
     class Synthetic:

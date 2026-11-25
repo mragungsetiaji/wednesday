@@ -689,6 +689,12 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     def get_settings() -> dict:
         return settings_payload()
 
+    @app.get("/api/series")
+    def get_series() -> dict:
+        """The stored series and how their ingest is going (Settings > Data source)."""
+        store = runtime.store if runtime else engine.store
+        return {"series": store.series_status() if store else []}
+
     @app.put("/api/settings")
     def put_settings(body: dict = Body(...)) -> dict:
         if runtime is None:

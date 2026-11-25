@@ -141,6 +141,7 @@ pub const ENGINE_ROUTES: &[&str] = &[
     "POST /api/markets",
     "PUT /api/markets",
     "DELETE /api/markets",
+    "GET /api/series",
 ];
 
 /// The version the dashboard and `/api/health` report; `scripts/set_version.py` keeps it in step.
@@ -210,6 +211,7 @@ fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store
             .route("/api/distribution", get(analysis_distribution))
             .route("/api/markets/candles", get(markets_candles))
             .route("/api/markets/tick", get(markets_tick))
+            .route("/api/series", get(series_list))
             .route("/api/markets", get(markets_list).post(markets_add).put(markets_save).delete(markets_remove))
             .route("/api/drawings", get(drawings_list))
             .route("/api/drawings/alerts", get(drawings_alerts))
@@ -1301,6 +1303,18 @@ async fn markets_tick(State(app): State<App>, axum::extract::Query(q): Query) ->
 /// The database the markets list lives in, or Python's 409 without one (`market_store()`).
 fn market_store(app: &App) -> Result<&Store, Response> {
     app.store.as_ref().ok_or_else(|| detail(StatusCode::CONFLICT, "The markets list needs a database"))
+}
+
+/// The stored series and how their ingest is going (Settings > Data source).
+async fn series_list(State(app): State<App>) -> Response {
+    let series = match &app.store {
+        Some(store) => match store.series_status().await {
+            Ok(rows) => rows,
+            Err(e) => return detail(StatusCode::INTERNAL_SERVER_ERROR, e),
+        },
+        None => Vec::new(),
+    };
+    Json(json!({"series": series})).into_response()
 }
 
 async fn markets_list(State(app): State<App>) -> Response {

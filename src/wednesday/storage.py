@@ -79,6 +79,9 @@ series_table = Table(
     Column("error", Text, nullable=True),
 )
 
+# How Settings lists a symbol's series: longest timeframe first.
+TF_ORDER = {"1d": 0, "4h": 1, "1h": 2, "30m": 3, "15m": 4, "5m": 5, "1m": 6}
+
 # The tickers the dropdown offers (markets.py). Nothing is fetched for one until it is picked.
 markets_table = Table(
     "markets",
@@ -596,6 +599,31 @@ class Store:
             return pd.Timestamp(ts, unit="s").isoformat() if ts is not None else None
 
         return [{"source": s, "symbol": sym, "bars": n, "first": iso(a), "last": iso(b)} for s, sym, n, a, b in rows]
+
+    def series_status(self) -> list[dict]:
+        """Every stored series with its ingest state (Settings > Data source): bars, first and last
+        open time from ``bars``, and from ``series`` whether it is kept live, the backfill and the
+        last error. A series with bars but no ``series`` row (copied from ``m1_bars``) has no state."""
+        b = bars_table
+        q = (select(b.c.source, b.c.symbol, b.c.tf, func.count(), func.min(b.c.time), func.max(b.c.time))
+             .group_by(b.c.source, b.c.symbol, b.c.tf))
+        with self.engine.connect() as conn:
+            counts = {(s, sym, tf): (n, a, z) for s, sym, tf, n, a, z in conn.execute(q).all()}
+        state = {(r["source"], r["symbol"], r["tf"]): r for r in self.series()}
+
+        def iso(ts):
+            return pd.Timestamp(ts, unit="s").isoformat() if ts is not None else None
+
+        out = []
+        for key in set(counts) | set(state):
+            n, first, last = counts.get(key, (0, None, None))
+            row = state.get(key, {})
+            out.append({"source": key[0], "symbol": key[1], "tf": key[2], "bars": int(n),
+                        "first": iso(first), "last": iso(last), "active": bool(row.get("active", False)),
+                        "backfill": row.get("backfill"), "updated_at": row.get("updated_at"),
+                        "error": row.get("error")})
+        out.sort(key=lambda r: (r["source"], r["symbol"], TF_ORDER.get(r["tf"], len(TF_ORDER)), r["tf"]))
+        return out
 
     # ---- alerts ---------------------------------------------------------
     def alert_sent(self, key: str) -> bool:

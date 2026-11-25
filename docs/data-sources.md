@@ -174,6 +174,11 @@ The `series` table keeps each series' first and last candle, its backfill state
 (`pending`, `running`, `done`) and its last error. A timeframe TradingView won't
 send is noted there and the scan resamples 1-minute bars for it meanwhile.
 
+**Settings > Data source** lists these series under Storage, grouped by source and
+ticker: each timeframe's stored candles, its latest one, whether it is ingesting
+live, how far its history backfill has gone (waiting, loading, done) and its last
+error. It refreshes every 30 seconds, from `GET /api/series`.
+
 Synthetic data is never stored and has no timeframes of its own: the scan
 resamples its 1-minute bars, as `tests/golden/` expects.
 

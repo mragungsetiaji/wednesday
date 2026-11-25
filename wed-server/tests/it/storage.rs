@@ -192,6 +192,12 @@ async fn native_candles_page_back_from_their_own_series() {
     let rows = store.rows("series", "SELECT tf, first_time, last_time, backfill FROM series", vec![]).await.unwrap();
     assert_eq!(Value::from(rows), json!([{"tf": "4h", "first_time": start, "last_time": start + 9 * 14_400,
                                           "backfill": "done"}]));
+    let status = store.series_status().await.unwrap();
+    assert_eq!(status.len(), 1);
+    let s = &status[0];
+    assert_eq!((&s["source"], &s["symbol"], &s["tf"], &s["bars"]), (&json!("tradingview"), &json!("FX:XAUUSD"), &json!("4h"), &json!(10)));
+    assert_eq!((&s["active"], &s["backfill"], &s["error"]), (&json!(true), &json!("done"), &Value::Null));
+    assert!(s["first"].as_str().unwrap() < s["last"].as_str().unwrap());
 }
 
 struct Postgres {

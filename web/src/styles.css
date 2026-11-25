@@ -4821,3 +4821,11 @@ fieldset:disabled .switch {
   margin: 0;
   font-size: var(--text-md);
 }
+
+/* Settings > Data source > Storage: a source · ticker heading over its timeframes. */
+.data th.series-group {
+  text-align: left;
+  font-weight: 600;
+  padding-top: var(--s3);
+  color: var(--text);
+}

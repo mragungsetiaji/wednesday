@@ -479,6 +479,64 @@ impl Store {
         }
     }
 
+    /// Every stored series with its ingest state (`series_status` in storage.py): bars, first and
+    /// last open time from `bars`, and from `series` whether it is kept live, the backfill and the
+    /// last error. Longest timeframe first within a symbol.
+    pub async fn series_status(&self) -> Result<Vec<Value>, String> {
+        let sql = "SELECT source, symbol, tf, COUNT(*), MIN(time), MAX(time) FROM bars GROUP BY source, symbol, tf";
+        let err = |e: sqlx::Error| e.to_string();
+        let iso = |t: Option<i64>| -> Value {
+            t.and_then(|t| chrono::DateTime::from_timestamp(t, 0))
+                .map(|d| d.naive_utc().format("%Y-%m-%dT%H:%M:%S").to_string().into())
+                .unwrap_or(Value::Null)
+        };
+        type Key = (String, String, String);
+        let mut counts: std::collections::HashMap<Key, (i64, Value, Value)> = Default::default();
+        macro_rules! go {
+            ($pool:expr) => {
+                for r in sqlx::query(sql).fetch_all($pool).await.map_err(err)? {
+                    let key = (r.try_get::<String, _>(0).map_err(err)?, r.try_get::<String, _>(1).map_err(err)?,
+                               r.try_get::<String, _>(2).map_err(err)?);
+                    counts.insert(key, (r.try_get::<i64, _>(3).map_err(err)?,
+                                        iso(r.try_get::<Option<i64>, _>(4).map_err(err)?),
+                                        iso(r.try_get::<Option<i64>, _>(5).map_err(err)?)));
+                }
+            };
+        }
+        match &self.pool {
+            Pool::Sqlite(p) => go!(p),
+            Pool::Postgres(p) => go!(p),
+        }
+        let state: std::collections::HashMap<Key, Map<String, Value>> = self
+            .rows("series", "SELECT * FROM series", vec![])
+            .await?
+            .into_iter()
+            .map(|r| {
+                let get = |k: &str| r.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+                ((get("source"), get("symbol"), get("tf")), r)
+            })
+            .collect();
+        let mut keys: Vec<&Key> = counts.keys().chain(state.keys().filter(|k| !counts.contains_key(*k))).collect();
+        const ORDER: [&str; 7] = ["1d", "4h", "1h", "30m", "15m", "5m", "1m"];
+        let rank = |tf: &str| ORDER.iter().position(|t| *t == tf).unwrap_or(ORDER.len());
+        keys.sort_by(|a, b| (&a.0, &a.1, rank(&a.2), &a.2).cmp(&(&b.0, &b.1, rank(&b.2), &b.2)));
+        Ok(keys
+            .into_iter()
+            .map(|key| {
+                let (n, first, last) = counts.get(key).cloned().unwrap_or((0, Value::Null, Value::Null));
+                let row = state.get(key);
+                let field = |k: &str| row.and_then(|r| r.get(k)).cloned().unwrap_or(Value::Null);
+                let active = matches!(field("active"), Value::Bool(true))
+                    || field("active").as_i64().is_some_and(|v| v != 0);
+                serde_json::json!({
+                    "source": key.0, "symbol": key.1, "tf": key.2, "bars": n, "first": first, "last": last,
+                    "active": active, "backfill": field("backfill"), "updated_at": field("updated_at"),
+                    "error": field("error"),
+                })
+            })
+            .collect())
+    }
+
     /// (source, symbol, bars) per stored stream, by source and symbol (`bar_stats` in storage.py).
     pub async fn bar_counts(&self) -> Result<Vec<(String, String, i64)>, String> {
         let sql = "SELECT source, symbol, COUNT(*) FROM bars WHERE tf = '1m' GROUP BY source, symbol ORDER BY source, symbol";

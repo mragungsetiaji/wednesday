@@ -283,7 +283,8 @@ TradingView directly and stores nothing.
 6. `users` and `sessions`, the setup code and `--create-user`, route guard, login page,
    Settings > Login (named so beside the existing Settings > Plan). Done: see
    [Access](dashboard.md#access).
-7. Settings > Data: ingest status per series (from `series`).
+7. Settings > Data source: ingest status per series (from `series`, `GET /api/series`).
+   Done: see [Storage](data-sources.md#storage).
 
 ## Open questions
 
