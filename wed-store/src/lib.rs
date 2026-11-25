@@ -604,6 +604,82 @@ impl Store {
                         vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))]).await? > 0)
     }
 
+    // ---- accounts: users and their sessions (wed-server/src/auth.rs, auth.py) ----
+
+    pub async fn users_count(&self) -> Result<usize, String> {
+        Ok(self.rows("users", "SELECT id FROM users", vec![]).await?.len())
+    }
+
+    /// One user by id (`by_id`) or by lowercased username.
+    pub async fn user(&self, by_id: bool, key: &str) -> Result<Option<Map<String, Value>>, String> {
+        let sql = if by_id { "SELECT * FROM users WHERE id = ?" } else { "SELECT * FROM users WHERE username = ?" };
+        Ok(self.rows("users", sql, vec![Arg::Str(Some(key.into()))]).await?.into_iter().next())
+    }
+
+    pub async fn add_user(&self, row: Vec<(&str, Arg)>) -> Result<(), String> {
+        let names: Vec<&str> = row.iter().map(|(k, _)| *k).collect();
+        let sql = format!("INSERT INTO users ({}) VALUES ({})", names.join(", "), vec!["?"; names.len()].join(", "));
+        self.execute(&sql, row.into_iter().map(|(_, a)| a).collect()).await.map(|_| ())
+    }
+
+    pub async fn update_user(&self, id: &str, values: Vec<(&str, Arg)>) -> Result<(), String> {
+        let sets: Vec<String> = values.iter().map(|(k, _)| format!("{k} = ?")).collect();
+        let mut args: Vec<Arg> = values.into_iter().map(|(_, a)| a).collect();
+        args.push(Arg::Str(Some(id.into())));
+        self.execute(&format!("UPDATE users SET {} WHERE id = ?", sets.join(", ")), args).await.map(|_| ())
+    }
+
+    pub async fn add_session(&self, token_hash: &str, user_id: &str, device: Option<&str>, created_at: &str,
+                             expires_at: &str) -> Result<(), String> {
+        let s = |v: &str| Arg::Str(Some(v.into()));
+        self.execute("INSERT INTO sessions (token_hash, user_id, device, created_at, expires_at, last_seen_at) \
+                      VALUES (?, ?, ?, ?, ?, ?)",
+                     vec![s(token_hash), s(user_id), Arg::Str(device.map(String::from)), s(created_at), s(expires_at),
+                          s(created_at)])
+            .await
+            .map(|_| ())
+    }
+
+    pub async fn session(&self, token_hash: &str) -> Result<Option<Map<String, Value>>, String> {
+        Ok(self.rows("sessions", "SELECT * FROM sessions WHERE token_hash = ?", vec![Arg::Str(Some(token_hash.into()))])
+            .await?
+            .into_iter()
+            .next())
+    }
+
+    /// A user's sessions, the most recently used first.
+    pub async fn sessions(&self, user_id: &str) -> Result<Vec<Map<String, Value>>, String> {
+        self.rows("sessions", "SELECT * FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC, created_at DESC",
+                  vec![Arg::Str(Some(user_id.into()))])
+            .await
+    }
+
+    pub async fn touch_session(&self, token_hash: &str, last_seen_at: &str, expires_at: &str) -> Result<(), String> {
+        let s = |v: &str| Arg::Str(Some(v.into()));
+        self.execute("UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?",
+                     vec![s(last_seen_at), s(expires_at), s(token_hash)])
+            .await
+            .map(|_| ())
+    }
+
+    /// Delete one session (`token_hash`), a user's (but `keep`), or those that expired before a time.
+    pub async fn delete_sessions(&self, token_hash: Option<&str>, user_id: Option<&str>, keep: Option<&str>,
+                                 expired_before: Option<&str>) -> Result<u64, String> {
+        if token_hash.is_none() && user_id.is_none() && expired_before.is_none() {
+            return Err("delete_sessions needs a session, a user or a time".into());
+        }
+        let mut wheres = Vec::new();
+        let mut args = Vec::new();
+        for (cond, v) in [("token_hash = ?", token_hash), ("user_id = ?", user_id), ("token_hash <> ?", keep),
+                          ("expires_at < ?", expired_before)] {
+            if let Some(v) = v {
+                wheres.push(cond);
+                args.push(Arg::Str(Some(v.into())));
+            }
+        }
+        self.execute(&format!("DELETE FROM sessions WHERE {}", wheres.join(" AND ")), args).await
+    }
+
     // ---- drawings (per source and symbol) ----
 
     const DRAWING_JSON: [&'static str; 4] = ["points", "style", "props", "timeframes"];

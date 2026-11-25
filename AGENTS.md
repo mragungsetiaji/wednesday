@@ -87,11 +87,13 @@ detectors, setups, sessions, quarters) exists twice, `src/wednesday/` and
   notice and a link to tradingview.com where users see the charts; the status bar
   carries both (the charts set `attributionLogo: false`), so keep it visible,
   full screen included.
-- **There is no login; the dashboard stays local.** Keep the default host
-  `127.0.0.1`; a non-loopback host is refused unless `--insecure` (both servers). Cross-site
-  writes to `/api` are refused (`same_site.py`, and `cross_site` in `wed-server`), so
-  another web page can't drive the dashboard. Don't add endpoints that expose
-  secrets or files outside `data/`.
+- **The login is for a network host only.** Keep the default host `127.0.0.1`, where there
+  is no login; a non-loopback host (or `--login`) asks for one (`auth.py`, `wed-server/src/auth.rs`),
+  unless `--insecure`. Every `/api` route but `PUBLIC` needs a session: a new route is guarded
+  by default, keep it so. Passwords are argon2id hashes and sessions are stored by their token's
+  hash, never the token. Cross-site writes to `/api` are refused (`same_site.py`, and `cross_site`
+  in `wed-server`), so another web page can't drive the dashboard. Don't add endpoints that
+  expose secrets or files outside `data/`.
 - **Time zones are explicit.** Bar times come in the feed's clock (`XAU_CLOCK`; UTC for
   TradingView, a broker clock such as NY+7 for MT5 report times); the quarterly
   view works in New York time. Convert with `quarters.to_new_york` / `utc_to_feed` rather

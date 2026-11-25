@@ -6,6 +6,7 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 dependencies = [
+    "argon2-cffi>=23",
     "cryptography>=42",
     "fastapi>=0.115",
     "numpy>=1.26",

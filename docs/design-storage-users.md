@@ -281,7 +281,8 @@ the fetched candles isn't filled yet; the backfill only reaches back from the fi
 stored candle. A market opened only in a pane (not scanned, not kept live) still reads
 TradingView directly and stores nothing.
 6. `users` and `sessions`, the setup code and `--create-user`, route guard, login page,
-   Settings > Account.
+   Settings > Login (named so beside the existing Settings > Plan). Done: see
+   [Access](dashboard.md#access).
 7. Settings > Data: ingest status per series (from `series`).
 
 ## Open questions

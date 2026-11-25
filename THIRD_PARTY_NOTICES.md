@@ -61,7 +61,11 @@ program built with these crates, each under the MIT License or the Apache Licens
   with `ring` (<https://github.com/briansmith/ring>; Apache-2.0 and ISC, with BoringSSL's
   OpenSSL-style notices in its `LICENSE`) and unpacks them with `zip`
   (<https://github.com/zip-rs/zip2>, MIT), `flate2` and `miniz_oxide` (MIT or Apache-2.0),
-  `crc32fast` and `arbitrary` (MIT or Apache-2.0). The other crates it uses are
+  `crc32fast` and `arbitrary` (MIT or Apache-2.0). Its login hashes passwords with
+  `argon2` and checks older ones with `scrypt` (<https://github.com/RustCrypto/password-hashes>,
+  MIT or Apache-2.0), reads a password at the console with `rpassword`
+  (<https://github.com/conradkleinespel/rpassword>, Apache-2.0) and uses `uuid`
+  (<https://github.com/uuid-rs/uuid>, MIT or Apache-2.0). The other crates it uses are
   listed in `wed-server/Cargo.lock`.
 
 On Windows its windows are drawn by Microsoft Edge WebView2, which Windows provides.

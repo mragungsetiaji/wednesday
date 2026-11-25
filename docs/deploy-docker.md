@@ -20,8 +20,11 @@ docker run -d --name wednesday --restart unless-stopped \
   wednesday
 ```
 
-- The server has no login. Inside the container it listens on `0.0.0.0` with
-  `--insecure`, so publish the port on `127.0.0.1` only, as above.
+- Inside the container it listens on `0.0.0.0`, so the login is on. The first start
+  logs a setup code: `docker logs wednesday`, then open the dashboard, choose *Create
+  account* and enter it. Or create the account from the shell:
+  `docker exec -it wednesday wednesday-rs --create-user NAME` (it also resets a
+  password). See [Access](dashboard.md#access).
 - `/data` is the data folder (`WEDNESDAY_HOME`): the database, settings, logs and its
   `.env`. Keep it on a volume so it survives a rebuild.
 - Arguments after the image name go to `wednesday-rs`, for example
@@ -30,13 +33,10 @@ docker run -d --name wednesday --restart unless-stopped \
 
 ## Reaching it from elsewhere
 
-Put a reverse proxy with TLS and a login of its own in front, for example nginx with
-basic auth:
+Put a reverse proxy with TLS in front, so the password and the session cookie never
+travel in clear, for example nginx:
 
 ```nginx
-auth_basic "Wednesday";
-auth_basic_user_file /etc/nginx/htpasswd-wednesday;
-
 # Server-sent events: no buffering, long reads.
 location = /api/stream {
     proxy_pass http://127.0.0.1:8765;
@@ -53,8 +53,9 @@ location / {
 ```
 
 Keep the `Host` header: the server refuses a write whose `Origin` doesn't match the
-host the page came from. Without a login in front, anyone who can reach the page can
-change settings and delete data.
+host the page came from. Pass `X-Forwarded-Proto` (`proxy_set_header X-Forwarded-Proto
+$scheme;`) so the session cookie is marked Secure, and `X-Forwarded-For` so the
+login's rate limit counts each client rather than the proxy.
 
 ## Update
 

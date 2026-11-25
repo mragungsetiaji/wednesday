@@ -582,11 +582,30 @@ The dashboard follows the system theme and works down to phone width.
 
 ## Access
 
-The dashboard has no login: it binds to `127.0.0.1`, and any other address is
-refused unless `--insecure` is passed. Write requests from another web site are
-refused, so a page open in the same browser can't drive it. To reach it from
-another machine, use an SSH tunnel or a VPN; see
-[deploy-windows.md](deploy-windows.md).
+On `127.0.0.1` (the desktop app, `make serve`) the dashboard has no login. Served on
+any other address (`--host 0.0.0.0`, Docker), or with `--login` / `XAU_LOGIN=1`, it
+asks for a username and password, so you can use it from your PC and your laptop.
+Write requests from another web site are refused either way, so a page open in the
+same browser can't drive it.
+
+**The first account.** On the first start with the login on and no account yet, the
+server logs a one-time setup code (valid for an hour). Open the dashboard, choose
+*Create account*, enter the code and pick a username and password (8 to 256
+characters). Instead, you can set `XAU_AUTH_PASSWORD` in `.env` (an account named
+`admin` is made from it on the first start), or run `wednesday-rs --create-user NAME`
+(`wednesday --create-user NAME` from source), which also resets a forgotten password.
+
+**Sessions.** A login lasts 30 days from the device's last use, in an HttpOnly cookie
+(Secure behind HTTPS). After 10 wrong passwords in 15 minutes, the login waits. The
+password is stored as an argon2id hash; the session token only as its SHA-256.
+
+**Settings > Login** lists the devices logged in to the account, with *Log out* for
+each, and changes the password, which logs every other device out.
+
+Serve it over HTTPS (a reverse proxy) when it is reachable from outside, so the
+password isn't sent in clear; see [deploy-docker.md](deploy-docker.md).
+`--insecure` serves a network host without a login: anyone who reaches the port can
+then change settings and delete data.
 
 ## UI development
 

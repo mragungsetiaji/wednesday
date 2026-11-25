@@ -4805,3 +4805,19 @@ fieldset:disabled .switch {
 .markets-table .button.quiet {
   padding-inline: 0.4rem;
 }
+
+/* The login screen and Settings > Login. */
+.login-card {
+  max-width: 360px;
+}
+.login-card .field input {
+  width: 100%;
+}
+.login-password {
+  max-width: 360px;
+  margin-top: var(--s6);
+}
+.login-password h3 {
+  margin: 0;
+  font-size: var(--text-md);
+}

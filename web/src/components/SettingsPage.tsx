@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import {
-  fetchSettings, reconnectFeed, saveSettings, type DataSettings, type SettingsResponse,
+  fetchAuthStatus, fetchSettings, LOGGED_OUT_EVENT, reconnectFeed, type AuthStatus, saveSettings, type DataSettings, type SettingsResponse,
 } from "../api";
 import { fmtFeedTime } from "../format";
 import { usePlugins } from "../plugins";
@@ -9,6 +9,7 @@ import { AccountSettings } from "./AccountSettings";
 import { AlertsSettings } from "./AlertsSettings";
 import { CalendarSettingsForm } from "./CalendarSettingsForm";
 import { JournalSettings } from "./JournalSettings";
+import { LoginSettings } from "./LoginSettings";
 import { MarketsSettings } from "./MarketsSettings";
 
 const EMPTY: DataSettings = { source: "tradingview", symbol: null, clock: null, tick_seconds: null };
@@ -28,7 +29,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const fmtTick = (s: number) => (s === 0 || s >= 60 ? "once a minute, with each scan" : `${s}s`);
 
-type Section = "data" | "markets" | "alerts" | "calendar" | "journal" | "plan" | "plugins";
+type Section = "data" | "markets" | "alerts" | "calendar" | "journal" | "plan" | "login" | "plugins";
 const SECTIONS: { id: Section; title: string }[] = [
   { id: "data", title: "Data source" },
   { id: "markets", title: "Markets" },
@@ -36,6 +37,7 @@ const SECTIONS: { id: Section; title: string }[] = [
   { id: "calendar", title: "News calendar" },
   { id: "journal", title: "Journal" },
   { id: "plan", title: "Plan" },
+  { id: "login", title: "Login" },
   { id: "plugins", title: "Plugins" },
 ];
 const sectionFromHash = (): Section => {
@@ -50,6 +52,13 @@ const sectionHash = (s: Section) => (s === "data" ? "#settings" : `#settings/${s
  */
 export function SettingsPage() {
   const [section, setSection] = useState<Section>(sectionFromHash);
+  const [auth, setAuth] = useState<AuthStatus | null>(null);
+
+  useEffect(() => {
+    fetchAuthStatus().then(setAuth).catch(() => setAuth(null));
+  }, []);
+  // Login only when the server asks for one (a network host, or --login).
+  const sections = SECTIONS.filter((s) => s.id !== "login" || auth?.login);
 
   useEffect(() => {
     const onHash = () => setSection(sectionFromHash());
@@ -66,7 +75,7 @@ export function SettingsPage() {
   return (
     <main className="settings-page">
       <nav className="settings-nav" aria-label="Settings">
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <a key={s.id} href={sectionHash(s.id)} className="settings-nav-item" aria-current={section === s.id ? "page" : undefined}
             onClick={(e) => { e.preventDefault(); go(s.id); }}>
             {s.title}
@@ -80,6 +89,11 @@ export function SettingsPage() {
         <div hidden={section !== "calendar"}><CalendarSettingsForm /></div>
         <div hidden={section !== "journal"}><JournalSettings /></div>
         <div hidden={section !== "plan"}><AccountSettings /></div>
+        {auth?.login && (
+          <div hidden={section !== "login"}>
+            <LoginSettings user={auth.user} onLoggedOut={() => window.dispatchEvent(new Event(LOGGED_OUT_EVENT))} />
+          </div>
+        )}
         <div hidden={section !== "plugins"}><PluginsSection /></div>
       </div>
     </main>

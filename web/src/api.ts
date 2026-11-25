@@ -153,9 +153,45 @@ export const saveWorkspace = (name: string, layout: Record<string, unknown>, win
   send<Workspace>("PUT", `/api/workspaces/${encodeURIComponent(name)}`, { layout, windows });
 export const deleteWorkspace = (name: string) => send<{ deleted: boolean }>("DELETE", `/api/workspaces/${encodeURIComponent(name)}`);
 
-function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-  return fetch(url, init);
+/** Sent when an API call answers 401: the session ended, so the login screen comes back. */
+export const LOGGED_OUT_EVENT = "wednesday:logged-out";
+
+async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(url, init);
+  if (res.status === 401 && !url.startsWith("/api/auth/")) window.dispatchEvent(new Event(LOGGED_OUT_EVENT));
+  return res;
 }
+
+// The login: on when the dashboard is served on a network host (or with --login).
+export interface AuthUser {
+  username: string;
+  name: string | null;
+  email: string | null;
+  role: string;
+}
+export interface AuthStatus {
+  login: boolean; // the server asks for a login
+  logged_in: boolean;
+  setup: boolean; // no account yet: create one with the setup code from the server's log
+  user: AuthUser | null;
+}
+export interface Device {
+  id: string;
+  device: string | null;
+  created_at: string;
+  last_seen_at: string | null;
+  current: boolean;
+}
+export const fetchAuthStatus = () => getJson<AuthStatus>("/api/auth/status");
+export const logIn = (username: string, password: string) =>
+  send<AuthStatus>("POST", "/api/auth/login", { username, password });
+export const setUp = (code: string, username: string, password: string) =>
+  send<AuthStatus>("POST", "/api/auth/setup", { code, username, password });
+export const logOut = () => send<AuthStatus>("POST", "/api/auth/logout");
+export const fetchDevices = () => getJson<{ sessions: Device[] }>("/api/auth/sessions");
+export const endDevice = (id: string) => send<{ sessions: Device[] }>("DELETE", `/api/auth/sessions/${encodeURIComponent(id)}`);
+export const changePassword = (current: string, next: string) =>
+  send<{ sessions: Device[] }>("PUT", "/api/auth/password", { current, new: next });
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await apiFetch(url, { cache: "no-store" });

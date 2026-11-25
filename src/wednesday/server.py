@@ -19,6 +19,8 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
+from .auth import Auth
+from .auth import install as install_auth
 from .same_site import install as install_same_site
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
 from .bias import TradeBias
@@ -85,13 +87,15 @@ def clock_offset(clock: str) -> int:
 
 
 def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | None = None,
-               clock: str = "UTC", snapshots: Snapshots | None = None) -> FastAPI:
+               clock: str = "UTC", snapshots: Snapshots | None = None, auth: Auth | None = None) -> FastAPI:
     """Serve a fixed :class:`Engine`, or a :class:`Runtime` whose data source the dashboard can change.
-    There is no login (the dashboard runs on the trader's machine); cross-site writes are refused."""
+    ``auth`` is the login (on for a network host, ``auth.py``); without it there is none, as on
+    127.0.0.1. Cross-site writes are refused either way."""
     app = FastAPI(title="Wednesday", docs_url="/api/docs", openapi_url="/api/openapi.json")
     runtime = target if isinstance(target, Runtime) else None
     cfg = target.cfg
-    install_same_site(app)
+    install_auth(app, auth or Auth(target.store if runtime is None else runtime.store, enabled=False))
+    install_same_site(app)  # added last, so it runs first
 
     @app.get("/api/health")
     def health() -> dict:

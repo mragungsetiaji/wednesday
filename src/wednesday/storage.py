@@ -476,6 +476,68 @@ class Store:
         with self.engine.begin() as conn:
             return conn.execute(t.delete().where(t.c.source == source, t.c.symbol == symbol)).rowcount > 0
 
+    # ---- accounts: users and their sessions (auth.py) -------------------------------
+    def users_count(self) -> int:
+        with self.engine.connect() as conn:
+            return int(conn.execute(select(func.count()).select_from(users_table)).scalar() or 0)
+
+    def user(self, *, user_id: str | None = None, username: str | None = None) -> dict | None:
+        """One user by id or by (lowercased) username."""
+        t = users_table
+        q = select(t).where(t.c.id == user_id) if user_id is not None else select(t).where(t.c.username == username)
+        with self.engine.connect() as conn:
+            row = conn.execute(q).mappings().first()
+        return {**dict(row), "disabled": bool(row["disabled"])} if row else None
+
+    def add_user(self, row: dict) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(users_table.insert().values(**row))
+
+    def update_user(self, user_id: str, **values) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(users_table.update().where(users_table.c.id == user_id).values(**values))
+
+    def add_session(self, row: dict) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(sessions_table.insert().values(**row))
+
+    def session(self, token_hash: str) -> dict | None:
+        t = sessions_table
+        with self.engine.connect() as conn:
+            row = conn.execute(select(t).where(t.c.token_hash == token_hash)).mappings().first()
+        return dict(row) if row else None
+
+    def sessions(self, user_id: str) -> list[dict]:
+        """A user's sessions, the most recently used first."""
+        t = sessions_table
+        q = select(t).where(t.c.user_id == user_id).order_by(t.c.last_seen_at.desc(), t.c.created_at.desc())
+        with self.engine.connect() as conn:
+            return [dict(r) for r in conn.execute(q).mappings().all()]
+
+    def touch_session(self, token_hash: str, last_seen_at: str, expires_at: str) -> None:
+        t = sessions_table
+        with self.engine.begin() as conn:
+            conn.execute(t.update().where(t.c.token_hash == token_hash).values(
+                last_seen_at=last_seen_at, expires_at=expires_at))
+
+    def delete_sessions(self, *, token_hash: str | None = None, user_id: str | None = None,
+                        keep: str | None = None, expired_before: str | None = None) -> int:
+        """Delete one session, a user's (but ``keep``), or those that expired before a time."""
+        if token_hash is None and user_id is None and expired_before is None:
+            raise ValueError("delete_sessions needs a session, a user or a time")
+        t = sessions_table
+        q = t.delete()
+        if token_hash is not None:
+            q = q.where(t.c.token_hash == token_hash)
+        if user_id is not None:
+            q = q.where(t.c.user_id == user_id)
+        if keep is not None:
+            q = q.where(t.c.token_hash != keep)
+        if expired_before is not None:
+            q = q.where(t.c.expires_at < expired_before)
+        with self.engine.begin() as conn:
+            return conn.execute(q).rowcount
+
     # ---- series: what the ingest keeps per (source, symbol, timeframe) ------------
     def note_series(self, source: str, symbol: str, tf: str, backfill: str, error: str | None = None,
                     active: bool = True) -> None:

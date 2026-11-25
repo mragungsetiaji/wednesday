@@ -25,6 +25,7 @@ Variables: `HOST`, `PORT`, and `ARGS` for extra CLI flags, e.g.
 wednesday ...` commands directly (see [deploy-windows.md](deploy-windows.md)).
 
 The Rust server (`make serve`, the desktop app) takes `--host`, `--port`, `--insecure`,
+`--login`, `--create-user NAME`,
 `--home` (the data folder), `--db`, `--ui-dir` and `--source`; its scan settings come from
 `.env` and the dashboard (see [Development](development.md#the-rust-server-96)).
 
@@ -49,8 +50,10 @@ These are Python's (`wednesday`, from source). `uv run wednesday --help` lists e
 | `--recent-bars` | `3` | Report levels swept/mitigated within this many candles |
 | `--serve` | off | Also run the web dashboard + API (`XAU_SERVE=1`) |
 | `--no-poll` | off | With `--serve`: scan once at start, then fetch nothing (no minute scans, no live prices); for working on the dashboard (the status shows *Paused*) |
-| `--host` / `--port` | `127.0.0.1` / `8000` | Dashboard address (`XAU_HOST`, `XAU_PORT`); a non-loopback host needs `--insecure` |
-| `--insecure` | off | Serve on a non-loopback host (the dashboard has no login) |
+| `--host` / `--port` | `127.0.0.1` / `8000` | Dashboard address (`XAU_HOST`, `XAU_PORT`); a non-loopback host turns the login on |
+| `--login` | off | Ask for a login on `127.0.0.1` too (`XAU_LOGIN=1`); see [Access](dashboard.md#access) |
+| `--insecure` | off | Serve a non-loopback host without a login (not recommended) |
+| `--create-user NAME` | - | Create the login's account, or set a new password for it, then exit |
 | `--db` | `sqlite:///data/xau.db` | Storage URL (`XAU_DB_URL`); `none` disables it |
 | `--reset-settings` | off | Forget the data source saved from the dashboard |
 | `--once` | off | Scan once and exit instead of looping every minute |

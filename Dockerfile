@@ -26,6 +26,7 @@ USER wednesday
 ENV WEDNESDAY_HOME=/data XAU_UI_DIR=/app/web XAU_HOST=0.0.0.0 XAU_PORT=8000
 VOLUME ["/data"]
 EXPOSE 8000
-# The server has no login, hence --insecure inside the container: publish the port on 127.0.0.1
-# only, and put a reverse proxy with its own login in front of anything reachable from outside.
-ENTRYPOINT ["wednesday-rs", "--insecure"]
+# Listening on 0.0.0.0 turns the login on: the first start logs a setup code to create the
+# account with (or set XAU_AUTH_PASSWORD, or run `wednesday-rs --create-user NAME`). Serve it over
+# HTTPS (a reverse proxy) when it is reachable from outside, so the password isn't sent in clear.
+ENTRYPOINT ["wednesday-rs"]
