@@ -40,6 +40,7 @@ import { levelGroups, levelView, DEFAULT_LEVELS, NO_LEVELS, type LevelGroup } fr
 import { useDrawings } from "./drawingsData";
 import { useReplay } from "./replayData";
 import { ReplayBar } from "./components/ReplayBar";
+import { TabTitle } from "./components/TabTitle";
 import { useLiveFeed } from "./liveData";
 import { useChartPalette } from "./theme";
 
@@ -345,6 +346,8 @@ export default function App() {
   return (
     <ChartMarket.Provider value={market}>
     <div ref={appRef} className="app">
+      {/* The tab follows the live market, replay or not. */}
+      <TabTitle symbol={data?.symbol ?? ""} live={liveFeed} fallback={liveScan?.price ?? null} sessions={sessions} />
       {/* The chart has no top bar: its toolbar carries the market and the views. Journal and
           Settings keep a slim one to come back. */}
       {view !== "chart" && (

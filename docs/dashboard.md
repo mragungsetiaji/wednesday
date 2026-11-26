@@ -11,6 +11,10 @@ rescans once a minute. With the Python server (`make serve-py`), API docs live a
 
 ## Chart first
 
+The browser tab follows the live feed tick by tick: the symbol, its price and the
+change since the day's open, as in `XAUUSD 3,568.59 ▼ −0.42%` (it reads `Wednesday`
+until the first price arrives). A chart in its own window keeps its own title.
+
 The chart shows the selected timeframe's candles with everything the detectors
 found on it:
 
