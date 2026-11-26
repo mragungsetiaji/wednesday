@@ -46,7 +46,8 @@ def test_there_is_no_login_on_loopback(engine, tmp_path):
     client = TestClient(create_app(engine, ui_dir=tmp_path))
     assert client.get("/api/status").status_code == 200
     assert client.get("/api/auth/status").json() == {"login": False, "logged_in": False, "setup": False,
-                                                     "user": None}
+                                                     "user": None, "signup": False, "guest": None,
+                                                     "guest_available": False}
     assert client.post("/api/auth/login", json={"username": "a", "password": "b"}).status_code == 409
 
 

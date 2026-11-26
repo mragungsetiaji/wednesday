@@ -80,6 +80,15 @@
     }
    }
   },
+  "PATCH /api/users/{user_id}": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
   "POST /api/auth/login": {
    "body": {
     "application/json": {
@@ -90,6 +99,15 @@
    }
   },
   "POST /api/auth/setup": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/auth/signup": {
    "body": {
     "application/json": {
      "additionalProperties": true,
@@ -131,6 +149,15 @@
    }
   },
   "POST /api/markets": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
+  "POST /api/me/import": {
    "body": {
     "application/json": {
      "additionalProperties": true,
@@ -232,6 +259,15 @@
     }
    }
   },
+  "PUT /api/prefs": {
+   "body": {
+    "application/json": {
+     "additionalProperties": true,
+     "title": "Body",
+     "type": "object"
+    }
+   }
+  },
   "PUT /api/settings": {
    "body": {
     "application/json": {
@@ -276,9 +312,12 @@
    "sessions": []
   },
   "GET /api/auth/status": {
+   "guest": "null",
+   "guest_available": "bool",
    "logged_in": "bool",
    "login": "bool",
    "setup": "bool",
+   "signup": "bool",
    "user": "null"
   },
   "GET /api/bias": {
@@ -644,6 +683,9 @@
    ],
    "features": [],
    "plugins": []
+  },
+  "GET /api/prefs": {
+   "prefs": {}
   },
   "GET /api/quarters": {
    "clock": "string",
@@ -1715,12 +1757,14 @@
   "PUT /api/alerts",
   "GET /api/alerts/chats",
   "POST /api/alerts/test",
+  "POST /api/auth/guest",
   "POST /api/auth/login",
   "POST /api/auth/logout",
   "PUT /api/auth/password",
   "GET /api/auth/sessions",
   "DELETE /api/auth/sessions/{session_id}",
   "POST /api/auth/setup",
+  "POST /api/auth/signup",
   "GET /api/auth/status",
   "GET /api/bias",
   "PUT /api/bias",
@@ -1764,7 +1808,10 @@
   "PUT /api/markets",
   "GET /api/markets/candles",
   "GET /api/markets/tick",
+  "POST /api/me/import",
   "GET /api/plugins",
+  "GET /api/prefs",
+  "PUT /api/prefs",
   "GET /api/quarters",
   "GET /api/replay",
   "GET /api/replay/range",
@@ -1781,6 +1828,9 @@
   "GET /api/terms",
   "POST /api/terms/accept",
   "GET /api/tick",
+  "GET /api/users",
+  "DELETE /api/users/{user_id}",
+  "PATCH /api/users/{user_id}",
   "GET /api/workspaces",
   "DELETE /api/workspaces/{name}",
   "GET /api/workspaces/{name}",

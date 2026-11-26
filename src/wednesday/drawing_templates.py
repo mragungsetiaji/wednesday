@@ -11,8 +11,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from .drawings import DASHES, MAX_TEXT
+from .storage import user_key
 
-TEMPLATES_KEY = "drawing_templates"  # family -> name -> {"style", "text", "saved_at"}
+TEMPLATES_KEY = "drawing_templates"  # family -> name -> {"style", "text", "saved_at"}; ":<user id>" per account
 FAMILIES = {"trendline": "line", "hline": "line", "path": "line", "rect": "rect", "text": "text"}
 MAX_TEMPLATES = 100  # per family
 _COLOR_CHARS = set("0123456789abcdefABCDEF")
@@ -64,13 +65,15 @@ def clean_template(body: dict) -> dict:
 
 
 class DrawingTemplates:
-    """The saved templates, read and written through the store's settings."""
+    """The saved templates of one account (``user``), or the server's without a login, read and
+    written through the store's settings."""
 
-    def __init__(self, store) -> None:
+    def __init__(self, store, user: str | None = None) -> None:
         self.store = store
+        self.key = user_key(TEMPLATES_KEY, user)
 
     def _all(self) -> dict:
-        return self.store.get_setting(TEMPLATES_KEY) or {}
+        return self.store.get_setting(self.key) or {}
 
     def list(self) -> list[dict]:
         """Every template, by family then name (case-insensitive)."""
@@ -85,7 +88,7 @@ class DrawingTemplates:
         if name not in named and len(named) >= MAX_TEMPLATES:
             raise TemplateError(f"At most {MAX_TEMPLATES} templates per drawing type: delete one first")
         named[name] = template
-        self.store.set_setting(TEMPLATES_KEY, everything)
+        self.store.set_setting(self.key, everything)
         return {"family": family, "name": name, **template}
 
     def delete(self, family: str, name: str) -> bool:
@@ -93,5 +96,5 @@ class DrawingTemplates:
         if name not in everything.get(family, {}):
             return False
         del everything[family][name]
-        self.store.set_setting(TEMPLATES_KEY, everything)
+        self.store.set_setting(self.key, everything)
         return True

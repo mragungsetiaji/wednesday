@@ -143,5 +143,5 @@ def _position_props(kind: str, points: list[dict], props: dict | None) -> dict:
 
 
 def drawing_payload(row: dict) -> dict:
-    """The API shape: a stored row without the source and symbol it's filed under."""
-    return {k: v for k, v in row.items() if k not in ("source", "symbol")}
+    """The API shape: a stored row without the source and symbol it's filed under, and whose it is."""
+    return {k: v for k, v in row.items() if k not in ("source", "symbol", "user_id")}

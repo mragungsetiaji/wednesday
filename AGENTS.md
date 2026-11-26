@@ -90,7 +90,11 @@ detectors, setups, sessions, quarters) exists twice, `src/wednesday/` and
 - **The login is for a network host only.** Keep the default host `127.0.0.1`, where there
   is no login; a non-loopback host (or `--login`) asks for one (`auth.py`, `wed-server/src/auth.rs`),
   unless `--insecure`. Every `/api` route but `PUBLIC` needs a session: a new route is guarded
-  by default, keep it so. Passwords are argon2id hashes and sessions are stored by their token's
+  by default, keep it so. Without a session a browser gets a 24-hour guest pass that only reads
+  (`GUEST_GETS`; its drawings and layout stay in localStorage, `web/src/localData.ts`); sign-ups
+  wait for an admin (roles `owner`, `user`, `pending`). Server-wide settings, the bias and
+  drawing alerts are admin-only (`admin_only`); drawings, journals, workspaces, templates and
+  prefs are per account (`Viewer::scope`), so a new per-user route takes the `Viewer`. Passwords are argon2id hashes and sessions are stored by their token's
   hash, never the token. Cross-site writes to `/api` are refused (`same_site.py`, and `cross_site`
   in `wed-server`), so another web page can't drive the dashboard. Don't add endpoints that
   expose secrets or files outside `data/`.

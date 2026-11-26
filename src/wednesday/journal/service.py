@@ -52,10 +52,19 @@ class Journals:
         self._sample_checked = False
 
     # ---- journals ----
-    def list(self) -> list[dict]:
+    def list(self, user: str | None = None) -> list[dict]:
+        """The journals of one account (``user``), or all of them without a login."""
         if self.sample:
             self.ensure_sample()
-        return [self._public(j) for j in self.store.journals()]
+        return [self._public(j) for j in self.journals_of(user)]
+
+    def journals_of(self, user: str | None) -> list[dict]:
+        found = self.store.journals()
+        return found if user is None else [j for j in found if j.get("user_id") == user]
+
+    def owned(self, journal_id: str, user: str | None) -> bool:
+        """Whether journal ``journal_id`` is ``user``'s (any journal without a login)."""
+        return any(j["id"] == journal_id for j in self.journals_of(user))
 
     # ---- the sample portfolio ----
     def ensure_sample(self) -> dict | None:
@@ -104,19 +113,20 @@ class Journals:
 
     def _public(self, j: dict) -> dict:
         off = j.get("time_offset")
-        return {**j, **self.options(j), "settings": None,
+        out = {k: v for k, v in j.items() if k != "user_id"}  # whose it is stays on the server
+        return {**out, **self.options(j), "settings": None,
                 "time_offset": None if off is None else off / 3600, "sample": bool(j.get("sample"))}
 
-    def create(self, name: str, features: list[str], login: str | None = None) -> dict:
-        """A new journal, tied to its MT5 account number from the start when one is given, so a
-        report of another account is refused."""
+    def create(self, name: str, features: list[str], login: str | None = None, user: str | None = None) -> dict:
+        """A new journal of ``user`` (none without a login), tied to its MT5 account number from the
+        start when one is given, so a report of another account is refused."""
         name = (name or "").strip()[:120]
         if not name:
             raise JournalError("Give the journal a name")
         login = str(login or "").strip() or None
         if login is not None and not login.isdigit():
             raise JournalError("The account number is the digits MT5 shows for the login, e.g. 51234567")
-        existing = self.store.journals()
+        existing = self.journals_of(user)
         if any(not j.get("sample") for j in existing) and MULTI_FEATURE not in features:  # the sample is free
             raise PermissionError("One journal is free. More than one needs a plan with multiple journals")
         taken = next((j for j in existing if login and str(j.get("login") or "") == login), None)
@@ -124,7 +134,7 @@ class Journals:
             raise JournalError(f"{taken['name']} already follows account {login}. Open it instead, or use another account")
         row = {"id": uuid.uuid4().hex[:12], "name": name, "login": login, "server": None, "company": None,
                "currency": None, "time_offset": None, "created_at": _now(),
-               "synced_at": None, "settings": {}}
+               "synced_at": None, "settings": {}, "user_id": user}
         self.store.journal_put(row)
         return self._public(row)
 

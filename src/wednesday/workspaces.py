@@ -13,7 +13,9 @@ import json
 import re
 from datetime import datetime, timezone
 
-WORKSPACES_KEY = "workspaces"  # name -> {"layout", "windows", "saved_at"}
+from .storage import user_key
+
+WORKSPACES_KEY = "workspaces"  # name -> {"layout", "windows", "saved_at"}; "workspaces:<user id>" per account
 MAX_WORKSPACES = 20
 MAX_WINDOWS = 12
 MAX_LAYOUT_BYTES = 64 * 1024
@@ -66,11 +68,14 @@ def clean_layout(layout) -> dict:
 
 
 class Workspaces:
-    def __init__(self, store):
+    """One account's workspaces (``user``), or the server's without a login."""
+
+    def __init__(self, store, user: str | None = None):
         self.store = store
+        self.key = user_key(WORKSPACES_KEY, user)
 
     def _all(self) -> dict:
-        return self.store.get_setting(WORKSPACES_KEY) or {}
+        return self.store.get_setting(self.key) or {}
 
     def list(self) -> list[dict]:
         return [{"name": n, "saved_at": w.get("saved_at"), "windows": len(w.get("windows") or [])}
@@ -89,12 +94,12 @@ class Workspaces:
             raise WorkspaceError(f"At most {MAX_WORKSPACES} workspaces: remove one first")
         items[name] = {"layout": clean_layout(layout), "windows": clean_windows(windows or []),
                        "saved_at": datetime.now(timezone.utc).isoformat()}
-        self.store.set_setting(WORKSPACES_KEY, items)
+        self.store.set_setting(self.key, items)
         return {"name": name, **items[name]}
 
     def delete(self, name: str) -> bool:
         items = self._all()
         if items.pop(name, None) is None:
             return False
-        self.store.set_setting(WORKSPACES_KEY, items)
+        self.store.set_setting(self.key, items)
         return True

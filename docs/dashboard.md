@@ -11,6 +11,10 @@ rescans once a minute. With the Python server (`make serve-py`), API docs live a
 
 ## Chart first
 
+The browser tab follows the live feed tick by tick: the symbol, its price and the
+change since the day's open, as in `XAUUSD 3,568.59 ▼ −0.42%` (it reads `Wednesday`
+until the first price arrives). A chart in its own window keeps its own title.
+
 The chart shows the selected timeframe's candles with everything the detectors
 found on it:
 
@@ -330,6 +334,13 @@ wiped by the weekly feed later.
 
 ## Full screen and multiple charts
 
+**On the chart page.** The layout button at the top right (next to the snapshot) splits the
+chart page with the same layouts as full screen. The main chart always takes the first place,
+left or top: it is the scanned market on the toolbar's timeframe, with the drawing tools, the
+levels pane and the toolbar acting on it. The other charts have their own timeframe tabs, market
+and layers, shared with full screen (chart 2 is chart 2 in both), and their lines can be dragged.
+**One chart** goes back to a single chart. Bar replay and a phone show only the main chart.
+
 The button at the bottom right of the chart (or **F**) opens the charts full
 screen, TradingView style, without a page header: the bar at the top holds the drawing
 tools, the layout, **Layers** (Mid OBs, HTF, Swings, News and the session levels for
@@ -527,7 +538,8 @@ with its price. Clicking a row opens its timeframe.
 
 ## Panels
 
-The rail beside the chart keeps the bias on top and tabs under it:
+The rail beside the chart keeps the bias on top (folded to its direction and expiry until you
+click its heading; it stays as you leave it) and tabs under it:
 
 - **Levels**: the ladder above.
 - **Structure**: direction, last break (BOS / CHoCH, with the streak), its level and age, per timeframe.
@@ -598,6 +610,30 @@ characters). Instead, you can set `XAU_AUTH_PASSWORD` in `.env` (an account name
 **Sessions.** A login lasts 30 days from the device's last use, in an HttpOnly cookie
 (Secure behind HTTPS). After 10 wrong passwords in 15 minutes, the login waits. The
 password is stored as an argon2id hash; the session token only as its SHA-256.
+
+**A 24-hour preview.** Someone who opens the dashboard without logging in gets a preview: the
+chart, the scan, the levels, the markets and the calendar work, and their drawings, drawing
+templates, workspaces and layout stay in that browser. A banner shows when it ends, with *Log in*
+and *Sign up*; closing it (×) leaves *Log in* at the top right of the toolbar, whose menu also
+offers *Sign up*. After 24 hours the dashboard shows the login (one preview per address per 7 days,
+so clearing the cookies doesn't restart it). Logging in moves what the browser kept into the
+account.
+
+**Sign up and Settings > Users.** *Sign up* makes an account that waits for the admin: it can't
+log in until an admin approves it in **Settings > Users**, where they can also reject a sign-up,
+disable an account, make it an admin or remove it. The first account is an admin; the last admin
+can't be demoted or removed.
+
+**Per account.** Each account keeps its own drawings, templates, workspaces, preferences and
+journals, so they follow it to another device. The data source, markets, Telegram alerts, drawing
+alerts, the bias, the news import, plugins and the licence are the server's: only an admin changes
+them, and a user sees the data source read only. Data saved before the login was on belongs to
+the first admin. Details: [design-guest-accounts.md](design-guest-accounts.md).
+
+**The account menu.** Logged in, the toolbar's right end shows the account's initials; clicking
+them opens its menu: the name and role, *Account and devices* (Settings > Login), *Users* for an
+admin, and *Log out*, which goes back to the preview or the login. On `127.0.0.1`, with no
+login, there is no account menu.
 
 **Settings > Login** lists the devices logged in to the account, with *Log out* for
 each, and changes the password, which logs every other device out.

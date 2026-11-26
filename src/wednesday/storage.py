@@ -126,6 +126,17 @@ sessions_table = Table(
     Column("last_seen_at", String(40), nullable=True),
 )
 
+# A 24-hour preview pass for someone without an account (auth.py): the cookie holds the token,
+# the table its SHA-256 and the address it was given to (one pass per address a day).
+guests_table = Table(
+    "guests",
+    metadata,
+    Column("token_hash", String(64), primary_key=True),
+    Column("address", String(64), nullable=False, index=True),
+    Column("created_at", String(40), nullable=False),
+    Column("expires_at", String(40), nullable=False),
+)
+
 # Data migrations already applied (see MIGRATIONS); the Rust store keeps the same list.
 migrations_table = Table(
     "schema_migrations",
@@ -170,6 +181,7 @@ journals_table = Table(
     Column("synced_at", String(40), nullable=True),  # when the last MT5 report was imported
     Column("sample", Boolean, nullable=True),  # the made-up sample portfolio (journal/sample.py)
     Column("settings", Text, nullable=True),  # JSON: show_weekends (journal/service.py)
+    Column("user_id", String(36), nullable=True, index=True),  # the account's; null without a login
 )
 
 calendar_events_table = Table(
@@ -280,6 +292,7 @@ drawings_table = Table(
     Column("locked", Boolean, nullable=False, default=False),
     Column("hidden", Boolean, nullable=False, default=False),
     Column("updated_at", String(40), nullable=False),
+    Column("user_id", String(36), nullable=True, index=True),  # the account's; null without a login
     Index("ix_drawings_source_symbol", "source", "symbol"),
 )
 _DRAWING_JSON = ("points", "style", "props", "timeframes")
@@ -541,6 +554,70 @@ class Store:
         with self.engine.begin() as conn:
             return conn.execute(q).rowcount
 
+    def users(self) -> list[dict]:
+        """Every account, the oldest first, without the password hashes."""
+        t = users_table
+        cols = [c for c in t.c if c.name != "password_hash"]
+        with self.engine.connect() as conn:
+            rows = conn.execute(select(*cols).order_by(t.c.created_at)).mappings().all()
+        return [{**dict(r), "disabled": bool(r["disabled"])} for r in rows]
+
+    def delete_user(self, user_id: str) -> bool:
+        """Remove an account with its sessions, drawings (and their alerts), journals and settings."""
+        d, a, j, st = drawings_table, drawing_alerts_table, journals_table, settings_table
+        with self.engine.begin() as conn:
+            ids = [r[0] for r in conn.execute(select(d.c.id).where(d.c.user_id == user_id))]
+            if ids:
+                conn.execute(a.delete().where(a.c.drawing_id.in_(ids)))
+            conn.execute(d.delete().where(d.c.user_id == user_id))
+            jids = [r[0] for r in conn.execute(select(j.c.id).where(j.c.user_id == user_id))]
+            for t in (journal_trades_table, journal_cash_table, journal_notes_table, journal_entries_table):
+                if jids:
+                    conn.execute(t.delete().where(t.c.journal_id.in_(jids)))
+            conn.execute(j.delete().where(j.c.user_id == user_id))
+            conn.execute(st.delete().where(st.c.key.like(f"%:{user_id}")))
+            conn.execute(sessions_table.delete().where(sessions_table.c.user_id == user_id))
+            return conn.execute(users_table.delete().where(users_table.c.id == user_id)).rowcount > 0
+
+    def claim_unowned(self, user_id: str, keys: tuple[str, ...]) -> None:
+        """Give the data saved without a login (drawings, journals, the settings ``keys``) to ``user_id``."""
+        st = settings_table
+        with self.engine.begin() as conn:
+            for t in (drawings_table, journals_table):
+                conn.execute(t.update().where(t.c.user_id.is_(None)).values(user_id=user_id))
+            for key in keys:
+                row = conn.execute(select(st.c.value).where(st.c.key == key)).first()
+                if row is None:
+                    continue
+                mine = f"{key}:{user_id}"
+                if conn.execute(select(st.c.key).where(st.c.key == mine)).first() is None:
+                    conn.execute(st.insert().values(key=mine, value=row[0]))
+                conn.execute(st.delete().where(st.c.key == key))
+
+    def add_guest(self, row: dict) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(guests_table.insert().values(**row))
+
+    def guest(self, token_hash: str, now: str) -> dict | None:
+        """The pass of a token (by its hash) that still runs at ``now``."""
+        t = guests_table
+        with self.engine.connect() as conn:
+            row = conn.execute(select(t).where(t.c.token_hash == token_hash, t.c.expires_at > now)).mappings().first()
+        return dict(row) if row else None
+
+    def guest_of(self, address: str, since: str) -> dict | None:
+        """The latest pass given to ``address`` since a time, running or not."""
+        t = guests_table
+        q = select(t).where(t.c.address == address, t.c.created_at > since).order_by(t.c.created_at.desc())
+        with self.engine.connect() as conn:
+            row = conn.execute(q).mappings().first()
+        return dict(row) if row else None
+
+    def delete_guests(self, created_before: str) -> int:
+        t = guests_table
+        with self.engine.begin() as conn:
+            return conn.execute(t.delete().where(t.c.created_at < created_before)).rowcount
+
     # ---- series: what the ingest keeps per (source, symbol, timeframe) ------------
     def note_series(self, source: str, symbol: str, tf: str, backfill: str, error: str | None = None,
                     active: bool = True) -> None:
@@ -659,9 +736,13 @@ class Store:
             return [dict(r._mapping) for r in conn.execute(q)]
 
     # ---- drawings -------------------------------------------------------
-    def drawings(self, source: str, symbol: str) -> list[dict]:
+    def drawings(self, source: str, symbol: str, user_id: str | None = None) -> list[dict]:
+        """The drawings of one account (``user_id``), or everyone's (no login, the alert checker)."""
         t = drawings_table
-        q = select(t).where(t.c.source == source, t.c.symbol == symbol).order_by(t.c.updated_at)
+        q = select(t).where(t.c.source == source, t.c.symbol == symbol)
+        if user_id is not None:
+            q = q.where(t.c.user_id == user_id)
+        q = q.order_by(t.c.updated_at)
         with self.engine.connect() as conn:
             rows = [dict(r._mapping) for r in conn.execute(q)]
         for r in rows:
@@ -671,7 +752,14 @@ class Store:
 
     def drawing_put(self, row: dict) -> None:
         row = {**row, **{k: json.dumps(row[k]) if row.get(k) is not None else None for k in _DRAWING_JSON}}
-        self._upsert(drawings_table, [row], ["id"])
+        self._upsert(drawings_table, [row], ["id"], keep=("user_id",))  # a row without its account keeps it
+
+    def drawing_owner(self, drawing_id: str) -> tuple[bool, str | None]:
+        """Whether drawing ``drawing_id`` exists, and whose it is (None: no account)."""
+        t = drawings_table
+        with self.engine.connect() as conn:
+            row = conn.execute(select(t.c.user_id).where(t.c.id == drawing_id)).first()
+        return (row is not None, row[0] if row else None)
 
     def drawing_delete(self, drawing_id: str, source: str, symbol: str) -> bool:
         t = drawings_table
@@ -737,7 +825,7 @@ class Store:
 
     def journal_put(self, row: dict) -> None:
         row = {**row, "settings": json.dumps(row["settings"]) if row.get("settings") else None}
-        self._upsert(journals_table, [row], ["id"])
+        self._upsert(journals_table, [row], ["id"], keep=("user_id",))  # a row without its account keeps it
 
     def journal_delete(self, journal_id: str) -> bool:
         with self.engine.begin() as conn:
@@ -829,6 +917,12 @@ class Store:
                   for c in table.columns if c.name not in keys}
         with self.engine.begin() as conn:
             conn.execute(stmt.on_conflict_do_update(index_elements=keys, set_=update), rows)
+
+
+def user_key(base: str, user: str | None) -> str:
+    """The settings key of one account's ``base`` (workspaces, templates...): ``base:<id>``, or
+    ``base`` without a login."""
+    return f"{base}:{user}" if user else base
 
 
 # ---- data migrations ------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import { CalendarSettingsForm } from "./CalendarSettingsForm";
 import { JournalSettings } from "./JournalSettings";
 import { LoginSettings } from "./LoginSettings";
 import { MarketsSettings } from "./MarketsSettings";
+import { UsersSettings } from "./UsersSettings";
 
 const EMPTY: DataSettings = { source: "tradingview", symbol: null, clock: null, tick_seconds: null };
 
@@ -29,7 +30,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 const fmtTick = (s: number) => (s === 0 || s >= 60 ? "once a minute, with each scan" : `${s}s`);
 
-type Section = "data" | "markets" | "alerts" | "calendar" | "journal" | "plan" | "login" | "plugins";
+type Section = "data" | "markets" | "alerts" | "calendar" | "journal" | "plan" | "login" | "users" | "plugins";
 const SECTIONS: { id: Section; title: string }[] = [
   { id: "data", title: "Data source" },
   { id: "markets", title: "Markets" },
@@ -38,6 +39,7 @@ const SECTIONS: { id: Section; title: string }[] = [
   { id: "journal", title: "Journal" },
   { id: "plan", title: "Plan" },
   { id: "login", title: "Login" },
+  { id: "users", title: "Users" },
   { id: "plugins", title: "Plugins" },
 ];
 const sectionFromHash = (): Section => {
@@ -55,10 +57,19 @@ export function SettingsPage() {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
 
   useEffect(() => {
-    fetchAuthStatus().then(setAuth).catch(() => setAuth(null));
+    fetchAuthStatus().then(setAuth).catch(() => setAuth({ login: false, logged_in: false, setup: false, user: null }));
   }, []);
-  // Login only when the server asks for one (a network host, or --login).
-  const sections = SECTIONS.filter((s) => s.id !== "login" || auth?.login);
+  // Login only when the server asks for one (a network host, or --login). There, a user sees what
+  // is theirs (and the data source, read only), an admin everything and Users, a preview the data source.
+  const role = !auth?.login ? "local" : !auth.logged_in ? "guest" : auth.user?.role === "owner" ? "admin" : "user";
+  const sections = SECTIONS.filter((s) => {
+    if (role === "local") return s.id !== "login" && s.id !== "users";
+    if (role === "guest") return s.id === "data";
+    if (role === "user") return ["data", "journal", "login"].includes(s.id);
+    return true;
+  });
+  const shown = sections.some((s) => s.id === section) ? section : sections[0]?.id ?? "data";
+  const has = (id: Section) => sections.some((s) => s.id === id);
 
   useEffect(() => {
     const onHash = () => setSection(sectionFromHash());
@@ -76,25 +87,30 @@ export function SettingsPage() {
     <main className="settings-page">
       <nav className="settings-nav" aria-label="Settings">
         {sections.map((s) => (
-          <a key={s.id} href={sectionHash(s.id)} className="settings-nav-item" aria-current={section === s.id ? "page" : undefined}
+          <a key={s.id} href={sectionHash(s.id)} className="settings-nav-item" aria-current={shown === s.id ? "page" : undefined}
             onClick={(e) => { e.preventDefault(); go(s.id); }}>
             {s.title}
           </a>
         ))}
       </nav>
       <div className="settings-content">
-        <div hidden={section !== "data"}><DataSourceSettings /></div>
-        <div hidden={section !== "markets"}><MarketsSettings /></div>
-        <div hidden={section !== "alerts"}><AlertsSettings /></div>
-        <div hidden={section !== "calendar"}><CalendarSettingsForm /></div>
-        <div hidden={section !== "journal"}><JournalSettings /></div>
-        <div hidden={section !== "plan"}><AccountSettings /></div>
-        {auth?.login && (
-          <div hidden={section !== "login"}>
-            <LoginSettings user={auth.user} onLoggedOut={() => window.dispatchEvent(new Event(LOGGED_OUT_EVENT))} />
-          </div>
+        <div hidden={shown !== "data"}><DataSourceSettings readOnly={role === "user" || role === "guest"} /></div>
+        {auth !== null && (
+          <>
+            {has("markets") && <div hidden={shown !== "markets"}><MarketsSettings /></div>}
+            {has("alerts") && <div hidden={shown !== "alerts"}><AlertsSettings /></div>}
+            {has("calendar") && <div hidden={shown !== "calendar"}><CalendarSettingsForm /></div>}
+            {has("journal") && <div hidden={shown !== "journal"}><JournalSettings /></div>}
+            {has("plan") && <div hidden={shown !== "plan"}><AccountSettings /></div>}
+            {has("login") && (
+              <div hidden={shown !== "login"}>
+                <LoginSettings user={auth.user} onLoggedOut={() => window.dispatchEvent(new Event(LOGGED_OUT_EVENT))} />
+              </div>
+            )}
+            {has("users") && <div hidden={shown !== "users"}><UsersSettings me={auth.user?.username ?? null} /></div>}
+            {has("plugins") && <div hidden={shown !== "plugins"}><PluginsSection /></div>}
+          </>
         )}
-        <div hidden={section !== "plugins"}><PluginsSection /></div>
       </div>
     </main>
   );
@@ -119,7 +135,7 @@ function connText(running: Running, sourceTitle: string): string {
 }
 
 /** Data source settings. Saving restarts the feed; the page keeps polling so the result shows up here. */
-function DataSourceSettings() {
+function DataSourceSettings({ readOnly = false }: { readOnly?: boolean }) {
   const [data, setData] = useState<SettingsResponse | null>(null);
   const [form, setForm] = useState<DataSettings>(EMPTY);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -155,6 +171,7 @@ function DataSourceSettings() {
     );
   }
 
+  const editable = data.editable && !readOnly;
   const current = data.settings ?? EMPTY;
   const dirty = !same(form, current);
   const source = data.sources.find((s) => s.id === form.source);
@@ -205,11 +222,13 @@ function DataSourceSettings() {
             <p>Where the screener gets 1-minute bars. Saving restarts the feed; the chart reloads after the first scan.</p>
           </div>
 
-          {!data.editable && (
+          {readOnly ? (
+            <p className="notice">Only the admin changes the data source.</p>
+          ) : !editable && (
             <p className="notice">These settings are read-only because the server was started without <code>--serve</code>.</p>
           )}
 
-          <fieldset className="choices" disabled={!data.editable || saving}>
+          <fieldset className="choices" disabled={!editable || saving}>
             <legend>Source</legend>
             {data.sources.map((s) => (
               <label key={s.id} className={`choice${form.source === s.id ? " is-checked" : ""}${s.available ? "" : " is-disabled"}`}>
@@ -227,7 +246,7 @@ function DataSourceSettings() {
             ))}
           </fieldset>
 
-          <fieldset className="fields" disabled={!data.editable || saving}>
+          <fieldset className="fields" disabled={!editable || saving}>
             <legend>Connection</legend>
             <Field label="Symbol" hint={`Leave empty for ${source?.default_symbol ?? "the default"}.`}>
               <input type="text" value={form.symbol ?? ""} placeholder={source?.default_symbol} spellCheck={false}
@@ -257,7 +276,7 @@ function DataSourceSettings() {
 
           </fieldset>
 
-          {data.editable && (
+          {editable && (
             <div className="form-actions">
               <button type="submit" className="button primary" disabled={!dirty || saving}>
                 {saving ? "Restarting feed…" : "Save and restart feed"}
@@ -294,7 +313,7 @@ function DataSourceSettings() {
                     {running.error && <span className="text-error"> {running.error}</span>}
                   </>
                 )}
-                {data.editable && running.conn === "failed" && (
+                {editable && running.conn === "failed" && (
                   <div className="status-actions">
                     <button type="button" className="button secondary" disabled={reconnecting} onClick={reconnect}>
                       {reconnecting ? "Reconnecting…" : "Reconnect"}

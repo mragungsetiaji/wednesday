@@ -40,6 +40,8 @@ CONTRACT = Path(__file__).with_name("api_contract.json")
 
 # GET routes that reach another service (TradingView, Telegram): listed, but not called here.
 NETWORK = {"/api/markets/candles", "/api/markets/tick", "/api/alerts/chats"}
+# GET routes that exist only with the login on (404 here, where there is none).
+LOGIN_ONLY = {"/api/users"}
 # Query strings for GET routes that need one.
 DRAWING_ID = "0f6c1d2e-8b4a-4c7e-9a51-3d2f7e6b1c90"
 QUERIES = {
@@ -204,7 +206,7 @@ def build(client) -> dict:
     queries["/api/replay"] = {"at": last - 60}
     responses = {}
     for method, path in routes:
-        if method != "GET" or path in NETWORK or path == "/api/stream":
+        if method != "GET" or path in NETWORK or path in LOGIN_ONLY or path == "/api/stream":
             continue
         names = re.findall(r"\{(\w+)\}", path)
         if any(n not in ids for n in names):

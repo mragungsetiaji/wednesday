@@ -177,3 +177,172 @@ async fn a_cross_site_login_is_refused() {
     let res = Client::builder(TokioExecutor::new()).build_http().request(req).await.unwrap();
     assert_eq!(res.status().as_u16(), 403);
 }
+
+/// `wednesday_guest=<token>` from a Set-Cookie header.
+fn guest(a: &Answer) -> String {
+    let c = a.cookie.as_deref().unwrap_or_else(|| panic!("no guest cookie: {} {}", a.status, a.body));
+    assert!(c.starts_with("wednesday_guest="), "{c}");
+    c.split(';').next().unwrap().to_string()
+}
+
+async fn log_in_as(addr: SocketAddr, username: &str, password: &str) -> Answer {
+    call(addr, "POST", "/api/auth/login", "", Some(json!({"username": username, "password": password}))).await
+}
+
+#[tokio::test]
+async fn a_preview_reads_the_market_and_keeps_nothing_on_the_server() {
+    let (addr, auth) = server("guest", &[]).await;
+    auth.create_user("trader", "the password").await.unwrap();
+    let status = call(addr, "GET", "/api/auth/status", "", None).await.body;
+    assert_eq!(status["guest"], Value::Null);
+    assert_eq!(status["guest_available"], json!(true));
+
+    let started = call(addr, "POST", "/api/auth/guest", "", None).await;
+    assert_eq!(started.status, 200, "{}", started.body);
+    let pass = guest(&started);
+    let until = started.body["guest"]["until"].clone();
+    assert!(until.is_string(), "{}", started.body);
+    // Asked again from the same address, the same pass: clearing the cookie doesn't restart it.
+    let again = call(addr, "POST", "/api/auth/guest", "", None).await;
+    assert_eq!(again.status, 200);
+    assert_eq!(again.body["guest"]["until"], until);
+
+    assert_eq!(call(addr, "GET", "/api/bias", &pass, None).await.status, 200);
+    assert_eq!(call(addr, "GET", "/api/drawings", &pass, None).await.status, 200);
+    for (method, path) in [("PUT", "/api/bias"), ("PUT", "/api/settings"), ("PUT", "/api/drawings/abcd1234"),
+                           ("POST", "/api/journals"), ("GET", "/api/users")] {
+        let a = call(addr, method, path, &pass, Some(json!({}))).await;
+        assert_eq!(a.status, 403, "{method} {path}: {}", a.body);
+        assert_eq!(a.body, json!({"detail": "Log in or sign up for this"}), "{method} {path}");
+    }
+    assert_eq!(call(addr, "GET", "/api/bias", "wednesday_guest=forged", None).await.status, 401);
+}
+
+#[tokio::test]
+async fn a_sign_up_waits_for_the_admin() {
+    let (addr, auth) = server("signup", &[]).await;
+    let early = call(addr, "POST", "/api/auth/signup", "", Some(json!({"username": "ana", "password": "ana password"}))).await;
+    assert_eq!(early.status, 409, "no account yet: the setup code makes the first one");
+    auth.create_user("trader", "the password").await.unwrap();
+    let admin = session(&log_in(addr, "the password").await);
+
+    let up = call(addr, "POST", "/api/auth/signup", "",
+                  Some(json!({"username": "ana", "password": "ana password", "email": "ana@example.com"}))).await;
+    assert_eq!(up.status, 200, "{}", up.body);
+    assert_eq!(up.cookie, None, "a sign-up doesn't log in");
+    let taken = call(addr, "POST", "/api/auth/signup", "", Some(json!({"username": "ana", "password": "other password"}))).await;
+    assert_eq!(taken.status, 409);
+
+    let waiting = log_in_as(addr, "ana", "ana password").await;
+    assert_eq!(waiting.status, 403);
+    assert!(waiting.body["detail"].as_str().unwrap().contains("approval"), "{}", waiting.body);
+
+    let users = call(addr, "GET", "/api/users", &admin, None).await.body["users"].clone();
+    let ana = users.as_array().unwrap().iter().find(|u| u["username"] == json!("ana")).unwrap().clone();
+    assert_eq!(ana["role"], json!("pending"));
+    assert_eq!(ana["email"], json!("ana@example.com"));
+    let id = ana["id"].as_str().unwrap();
+    let ok = call(addr, "PATCH", &format!("/api/users/{id}"), &admin, Some(json!({"role": "user"}))).await;
+    assert_eq!(ok.status, 200, "{}", ok.body);
+
+    let ana_in = log_in_as(addr, "ana", "ana password").await;
+    assert_eq!(ana_in.status, 200, "{}", ana_in.body);
+    let ana_cookie = session(&ana_in);
+    assert_eq!(call(addr, "GET", "/api/bias", &ana_cookie, None).await.status, 200);
+    for (method, path) in [("PUT", "/api/bias"), ("GET", "/api/users"), ("PUT", "/api/settings")] {
+        let a = call(addr, method, path, &ana_cookie, Some(json!({}))).await;
+        assert_eq!(a.status, 403, "{method} {path}: {}", a.body);
+        assert_eq!(a.body, json!({"detail": "Only the admin can change this"}));
+    }
+
+    // Disabled, the account is logged out and can't log in.
+    let off = call(addr, "PATCH", &format!("/api/users/{id}"), &admin, Some(json!({"disabled": true}))).await;
+    assert_eq!(off.status, 200, "{}", off.body);
+    assert_eq!(call(addr, "GET", "/api/bias", &ana_cookie, None).await.status, 401);
+    assert_ne!(log_in_as(addr, "ana", "ana password").await.status, 200);
+}
+
+#[tokio::test]
+async fn the_last_admin_stays_an_admin() {
+    let (addr, auth) = server("last-admin", &[]).await;
+    auth.create_user("trader", "the password").await.unwrap();
+    let admin = session(&log_in(addr, "the password").await);
+    let users = call(addr, "GET", "/api/users", &admin, None).await.body["users"].clone();
+    let me = users[0]["id"].as_str().unwrap().to_string();
+    for body in [json!({"role": "user"}), json!({"disabled": true})] {
+        let a = call(addr, "PATCH", &format!("/api/users/{me}"), &admin, Some(body.clone())).await;
+        assert!(a.status == 400 || a.status == 409 || a.status == 422, "{body}: {} {}", a.status, a.body);
+    }
+    assert_ne!(call(addr, "DELETE", &format!("/api/users/{me}"), &admin, None).await.status, 200);
+    assert_eq!(call(addr, "GET", "/api/bias", &admin, None).await.status, 200);
+}
+
+#[tokio::test]
+async fn each_account_keeps_its_own_drawings_journals_and_preferences() {
+    let (addr, auth) = server("mine", &[]).await;
+    auth.create_user("trader", "the password").await.unwrap();
+    let admin = session(&log_in(addr, "the password").await);
+    call(addr, "POST", "/api/auth/signup", "", Some(json!({"username": "ana", "password": "ana password"}))).await;
+    let users = call(addr, "GET", "/api/users", &admin, None).await.body["users"].clone();
+    let id = users.as_array().unwrap().iter().find(|u| u["username"] == json!("ana")).unwrap()["id"]
+        .as_str().unwrap().to_string();
+    call(addr, "PATCH", &format!("/api/users/{id}"), &admin, Some(json!({"role": "user"}))).await;
+    let ana = session(&log_in_as(addr, "ana", "ana password").await);
+
+    let line = json!({"kind": "hline", "points": [{"t": 1_700_000_000, "p": 2000.0}]});
+    let put = call(addr, "PUT", "/api/drawings/admin-0001", &admin, Some(line.clone())).await;
+    assert_eq!(put.status, 200, "{}", put.body);
+    let ids = |v: &Value| v["drawings"].as_array().unwrap().iter().map(|d| d["id"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    assert_eq!(ids(&call(addr, "GET", "/api/drawings", &ana, None).await.body), Vec::<String>::new());
+    // Someone else's drawing can't be overwritten or deleted.
+    assert_ne!(call(addr, "PUT", "/api/drawings/admin-0001", &ana, Some(line.clone())).await.status, 200);
+    assert_ne!(call(addr, "DELETE", "/api/drawings/admin-0001", &ana, None).await.status, 200);
+    assert_eq!(ids(&call(addr, "GET", "/api/drawings", &admin, None).await.body), vec!["admin-0001"]);
+
+    let journal = call(addr, "POST", "/api/journals", &admin, Some(json!({"name": "Main"}))).await;
+    assert_eq!(journal.status, 200, "{}", journal.body);
+    let jid = journal.body["id"].as_str().unwrap().to_string();
+    assert_eq!(call(addr, "GET", "/api/journals", &ana, None).await.body["journals"], json!([]));
+    assert_eq!(call(addr, "GET", &format!("/api/journals/{jid}/stats"), &ana, None).await.status, 404);
+
+    assert_eq!(call(addr, "PUT", "/api/prefs", &ana, Some(json!({"other": 1}))).await.status, 422);
+    let prefs = call(addr, "PUT", "/api/prefs", &ana, Some(json!({"wed.tf": "H1"}))).await;
+    assert_eq!(prefs.status, 200, "{}", prefs.body);
+    assert_eq!(call(addr, "GET", "/api/prefs", &ana, None).await.body["prefs"], json!({"wed.tf": "H1"}));
+    assert_eq!(call(addr, "GET", "/api/prefs", &admin, None).await.body["prefs"], json!({}));
+
+    // What a preview kept goes into the account at login; another account's drawing id is skipped.
+    let import = call(addr, "POST", "/api/me/import", &ana, Some(json!({
+        "drawings": [{"drawing": {"id": "ana-00001", "kind": "hline", "points": [{"t": 1_700_000_000, "p": 2010.0}]}},
+                     {"drawing": {"id": "admin-0001", "kind": "hline", "points": []}}],
+        "templates": [{"family": "line", "name": "H1 OB", "style": {"color": "#ff0000"}}],
+        "workspaces": [{"name": "London", "layout": {}, "windows": []}],
+        "prefs": {"wed.tf": "M15", "wed.theme": "dark"},
+    }))).await;
+    assert_eq!(import.status, 200, "{}", import.body);
+    assert_eq!(import.body["drawings"], json!(1));
+    assert_eq!(import.body["templates"], json!(1));
+    assert_eq!(import.body["workspaces"], json!(1));
+    assert_eq!(ids(&call(addr, "GET", "/api/drawings", &ana, None).await.body), vec!["ana-00001"]);
+    assert_eq!(ids(&call(addr, "GET", "/api/drawings", &admin, None).await.body), vec!["admin-0001"]);
+    let mine = call(addr, "GET", "/api/prefs", &ana, None).await.body["prefs"].clone();
+    assert_eq!(mine["wed.tf"], json!("H1"), "the account's own preference stays");
+    assert_eq!(mine["wed.theme"], json!("dark"));
+    assert_eq!(call(addr, "GET", "/api/workspaces", &admin, None).await.body["workspaces"], json!([]));
+}
+
+#[tokio::test]
+async fn a_database_from_before_the_accounts_opens() {
+    // drawings without user_id, as main had it: the column is added before its index.
+    let dir = std::env::temp_dir().join(format!("wed-auth-old-db-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    let store = Store::open("sqlite:///data/old.db", &dir).await.unwrap();
+    store.execute("DROP TABLE drawings", vec![]).await.unwrap();
+    store.execute("CREATE TABLE drawings ( id VARCHAR(36) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, \
+                   kind VARCHAR(16) NOT NULL, points TEXT NOT NULL, style TEXT NOT NULL, props TEXT, timeframes TEXT, \
+                   locked BOOLEAN NOT NULL, hidden BOOLEAN NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY (id) )",
+                  vec![]).await.unwrap();
+    drop(store);
+    Store::open("sqlite:///data/old.db", &dir).await.unwrap();
+}

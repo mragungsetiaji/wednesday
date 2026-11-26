@@ -15,11 +15,12 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .auth import Auth
+from .auth import Auth, viewer_of
 from .auth import install as install_auth
 from .same_site import install as install_same_site
 from .alerts import ALERTS_KEY, AlertSettings, TelegramError, telegram_client
@@ -28,6 +29,7 @@ from .journal.market import freeze
 from .markets import MarketError, Markets, clean_market, clean_symbol
 from .replay import ReplayCache, view as replay_view
 from .workspaces import WorkspaceError, Workspaces
+from .prefs import PrefsError, get_prefs, import_settings, put_prefs
 from .news import CalendarSettings
 from .news_stats import CalendarImportError, NewsReactions, event_key, history_summary, parse_csv
 from .drawings import clean_drawing, drawing_payload
@@ -73,6 +75,7 @@ log = logging.getLogger(__name__)
 STREAM_POLL = 0.05  # seconds between looks at the engine's state for /api/stream (a dict read under a short lock)
 STREAM_SECONDS = 600  # a stream's lifetime; EventSource reconnects by itself
 
+MAX_IMPORT_DRAWINGS = 2000  # at most this many drawings come in with one import
 DIST_TTL = 6 * 3600  # seconds the stored history's periods are kept; the live buffer's are fresh
 DIST_BARS = 2_000_000  # stored M1 bars read for the distribution: about five years
 DIST_DAYS = 3000  # daily bars asked of the feed, for lookbacks past the M1 history
@@ -94,6 +97,21 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     app = FastAPI(title="Wednesday", docs_url="/api/docs", openapi_url="/api/openapi.json")
     runtime = target if isinstance(target, Runtime) else None
     cfg = target.cfg
+
+    @app.middleware("http")
+    async def journal_owner(request: Request, call_next):
+        """A journal route (``/api/journals/{id}/...``) for a journal of another account answers 404.
+        Added before the login's middleware, so it runs after it and knows who asks."""
+        path = request.url.path
+        if path.startswith("/api/journals/"):
+            user = viewer_of(request).scope()
+            journal_id = path[len("/api/journals/"):].split("/")[0]
+            journals = runtime.journals if runtime else None
+            if user is not None and journal_id and journals is not None:
+                if not await run_in_threadpool(journals.owned, journal_id, user):
+                    return JSONResponse({"detail": "No such journal"}, status_code=404)
+        return await call_next(request)
+
     install_auth(app, auth or Auth(target.store if runtime is None else runtime.store, enabled=False))
     install_same_site(app)  # added last, so it runs first
 
@@ -145,14 +163,15 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     terms = Terms(runtime.store if runtime else target.store)
 
     @app.get("/api/terms")
-    def get_terms() -> dict:
-        """The disclaimer and risk agreement, and whether it was accepted."""
-        return terms.status()
+    def get_terms(request: Request) -> dict:
+        """The disclaimer and risk agreement, and whether this account accepted it."""
+        return terms.status(viewer_of(request).scope())
 
     @app.post("/api/terms/accept")
-    def accept_terms() -> dict:
-        terms.accept()
-        return terms.status()
+    def accept_terms(request: Request) -> dict:
+        who = viewer_of(request).scope()
+        terms.accept(who)
+        return terms.status(who)
 
     @app.get("/api/status")
     def get_status() -> dict:
@@ -230,26 +249,58 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
     def alert_payload(row: dict) -> dict:
         return {k: v for k, v in row.items() if k not in ("source", "symbol")}
 
+    def alerts_of(store, symbol: str, user: str | None) -> list[dict]:
+        """The alerts of ``user``'s drawings (everyone's without a login)."""
+        alerts = store.drawing_alerts(current_source(), symbol)
+        if user is None:
+            return alerts
+        mine = {d["id"] for d in store.drawings(current_source(), symbol, user)}
+        return [a for a in alerts if a["drawing_id"] in mine]
+
+    def check_owner(store, drawing_id: str, user: str | None) -> None:
+        """Refuse a drawing id that is another account's (or nobody's, with the login on)."""
+        if user is None:
+            return
+        exists, owner = store.drawing_owner(drawing_id)
+        if exists and owner != user:
+            raise HTTPException(404, "No such drawing")
+
+    def save_drawing(store, symbol: str, user: str | None, drawing_id: str, body: dict) -> dict:
+        try:
+            row = clean_drawing(drawing_id, body)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        check_owner(store, drawing_id, user)
+        stored = {**row, "source": current_source(), "symbol": symbol}
+        if user is not None:
+            stored["user_id"] = user
+        store.drawing_put(stored)
+        drawings_changed()  # a moved drawing moves its alert
+        return row
+
     @app.get("/api/drawings")
-    def get_drawings(symbol: str | None = Query(None)) -> dict:
+    def get_drawings(request: Request, symbol: str | None = Query(None)) -> dict:
+        """The drawings and their alerts, this account's when the login is on."""
         store = drawing_store()
         symbol = drawing_symbol(symbol)
-        rows = store.drawings(current_source(), symbol)
-        alerts = store.drawing_alerts(current_source(), symbol)
+        user = viewer_of(request).scope()
+        rows = store.drawings(current_source(), symbol, user)
+        alerts = alerts_of(store, symbol, user)
         return {"source": current_source(), "symbol": symbol, "drawings": [drawing_payload(r) for r in rows],
                 "alerts": [alert_payload(a) for a in alerts]}
 
     @app.get("/api/drawings/alerts")
-    def get_drawing_alerts() -> dict:
+    def get_drawing_alerts(request: Request) -> dict:
         """Just the alerts, polled after each scan so a fired one greys out on the chart."""
-        alerts = drawing_store().drawing_alerts(current_source(), current().symbol)
+        alerts = alerts_of(drawing_store(), current().symbol, viewer_of(request).scope())
         return {"alerts": [alert_payload(a) for a in alerts]}
 
     @app.put("/api/drawings/{drawing_id}/alert")
-    def put_drawing_alert(drawing_id: str, body: dict = Body(...)) -> dict:
+    def put_drawing_alert(drawing_id: str, request: Request, body: dict = Body(...)) -> dict:
         """Set (or re-arm) a drawing's alert: only closed bars from now on count."""
         store = drawing_store()
-        drawing = next((d for d in store.drawings(current_source(), current().symbol) if d["id"] == drawing_id), None)
+        mine = store.drawings(current_source(), current().symbol, viewer_of(request).scope())
+        drawing = next((d for d in mine if d["id"] == drawing_id), None)
         if drawing is None:
             raise HTTPException(404, "No such drawing: save it first")
         _, _, m1 = current().snapshot()
@@ -264,26 +315,25 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
         return alert_payload(row)
 
     @app.delete("/api/drawings/{drawing_id}/alert")
-    def delete_drawing_alert(drawing_id: str) -> dict:
-        if not drawing_store().drawing_alert_delete(drawing_id, current_source(), current().symbol):
+    def delete_drawing_alert(drawing_id: str, request: Request) -> dict:
+        store = drawing_store()
+        check_owner(store, drawing_id, viewer_of(request).scope())
+        if not store.drawing_alert_delete(drawing_id, current_source(), current().symbol):
             raise HTTPException(404, "That drawing has no alert")
         drawings_changed()
         return {"deleted": drawing_id}
 
     @app.put("/api/drawings/{drawing_id}")
-    def put_drawing(drawing_id: str, body: dict = Body(...), symbol: str | None = Query(None)) -> dict:
+    def put_drawing(drawing_id: str, request: Request, body: dict = Body(...),
+                    symbol: str | None = Query(None)) -> dict:
         symbol = drawing_symbol(symbol)
-        try:
-            row = clean_drawing(drawing_id, body)
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
-        drawing_store().drawing_put({**row, "source": current_source(), "symbol": symbol})
-        drawings_changed()  # a moved drawing moves its alert
-        return row
+        return save_drawing(drawing_store(), symbol, viewer_of(request).scope(), drawing_id, body)
 
     @app.delete("/api/drawings/{drawing_id}")
-    def delete_drawing(drawing_id: str, symbol: str | None = Query(None)) -> dict:
-        if not drawing_store().drawing_delete(drawing_id, current_source(), drawing_symbol(symbol)):
+    def delete_drawing(drawing_id: str, request: Request, symbol: str | None = Query(None)) -> dict:
+        store = drawing_store()
+        check_owner(store, drawing_id, viewer_of(request).scope())
+        if not store.drawing_delete(drawing_id, current_source(), drawing_symbol(symbol)):
             raise HTTPException(404, "No such drawing")
         drawings_changed()
         return {"deleted": drawing_id}
@@ -811,57 +861,103 @@ def create_app(target: Engine | Runtime, source: str = "", ui_dir: str | Path | 
                       current().symbol, current_source(), live["price"] if live else None)
 
     # ---- workspaces: named window sets and chart layouts (workspaces.py) ----
-    def workspaces() -> Workspaces:
+    def workspaces(request: Request) -> Workspaces:
         store = runtime.store if runtime else target.store
         if store is None:
             raise HTTPException(409, "Workspaces need a database")
-        return Workspaces(store)
+        return Workspaces(store, viewer_of(request).scope())
 
     @app.get("/api/workspaces")
-    def list_workspaces() -> dict:
-        return {"workspaces": workspaces().list()}
+    def list_workspaces(request: Request) -> dict:
+        return {"workspaces": workspaces(request).list()}
 
     @app.get("/api/workspaces/{name}")
-    def get_workspace(name: str) -> dict:
+    def get_workspace(name: str, request: Request) -> dict:
         try:
-            return workspaces().get(name)
+            return workspaces(request).get(name)
         except KeyError:
             raise HTTPException(404, "No such workspace") from None
 
     @app.put("/api/workspaces/{name}")
-    def put_workspace(name: str, body: dict = Body(...)) -> dict:
+    def put_workspace(name: str, request: Request, body: dict = Body(...)) -> dict:
         try:
-            return workspaces().save(name, body.get("layout") or {}, body.get("windows") or [])
+            return workspaces(request).save(name, body.get("layout") or {}, body.get("windows") or [])
         except WorkspaceError as exc:
             raise HTTPException(422, str(exc)) from exc
 
     @app.delete("/api/workspaces/{name}")
-    def delete_workspace(name: str) -> dict:
-        return {"deleted": workspaces().delete(name)}
+    def delete_workspace(name: str, request: Request) -> dict:
+        return {"deleted": workspaces(request).delete(name)}
 
     # ---- drawing templates: named drawing styles (drawing_templates.py) ----
-    def drawing_templates() -> DrawingTemplates:
+    def drawing_templates(request: Request) -> DrawingTemplates:
         store = runtime.store if runtime else target.store
         if store is None:
             raise HTTPException(409, "Drawing templates need a database")
-        return DrawingTemplates(store)
+        return DrawingTemplates(store, viewer_of(request).scope())
 
     @app.get("/api/drawing-templates")
-    def list_drawing_templates() -> dict:
-        return {"templates": drawing_templates().list()}
+    def list_drawing_templates(request: Request) -> dict:
+        return {"templates": drawing_templates(request).list()}
 
     @app.put("/api/drawing-templates/{family}/{name}")
-    def put_drawing_template(family: str, name: str, body: dict = Body(...)) -> dict:
+    def put_drawing_template(family: str, name: str, request: Request, body: dict = Body(...)) -> dict:
         try:
-            return drawing_templates().save(family, name, body)
+            return drawing_templates(request).save(family, name, body)
         except TemplateError as exc:
             raise HTTPException(422, str(exc)) from exc
 
     @app.delete("/api/drawing-templates/{family}/{name}")
-    def delete_drawing_template(family: str, name: str) -> dict:
-        if not drawing_templates().delete(family, name):
+    def delete_drawing_template(family: str, name: str, request: Request) -> dict:
+        if not drawing_templates(request).delete(family, name):
             raise HTTPException(404, "No such template")
         return {"deleted": name}
+
+    # ---- an account's preferences, and the preview's local data into it (prefs.py) ----
+    def settings_store():
+        store = runtime.store if runtime else target.store
+        if store is None:
+            raise HTTPException(503, "No database. Remove XAU_DB_URL=none (or fix it) in .env, then restart Wednesday.")
+        return store
+
+    @app.get("/api/prefs")
+    def get_preferences(request: Request) -> dict:
+        """This account's dashboard preferences (layout, chart type...)."""
+        return {"prefs": get_prefs(settings_store(), viewer_of(request).scope())}
+
+    @app.put("/api/prefs")
+    def put_preferences(request: Request, body: dict = Body(...)) -> dict:
+        """Merge ``{key: value}`` into the preferences; null removes a key."""
+        try:
+            return {"prefs": put_prefs(settings_store(), viewer_of(request).scope(), body)}
+        except PrefsError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/api/me/import")
+    def import_mine(request: Request, body: dict = Body(...)) -> dict:
+        """What the browser kept during the preview (drawings, templates, workspaces, preferences),
+        into the logged-in account; what it already has stays."""
+        store, who = settings_store(), viewer_of(request).scope()
+        try:
+            templates, spaces, prefs = import_settings(store, who, body)
+        except PrefsError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        drawn = 0
+        sent = body.get("drawings")
+        for item in (sent if isinstance(sent, list) else [])[:MAX_IMPORT_DRAWINGS]:
+            drawing = item.get("drawing") if isinstance(item, dict) else None
+            if not isinstance(drawing, dict) or not isinstance(drawing.get("id"), str):
+                continue
+            symbol = item.get("symbol") if isinstance(item.get("symbol"), str) else None
+            try:
+                symbol = drawing_symbol(symbol)
+                if store.drawing_owner(drawing["id"])[0]:
+                    continue  # there already
+                save_drawing(store, symbol, who, drawing["id"], drawing)
+            except HTTPException:
+                continue
+            drawn += 1
+        return {"drawings": drawn, "templates": templates, "workspaces": spaces, "prefs": prefs}
 
     app.include_router(journal_router(lambda: runtime.journals if runtime else None, current,
                                       lambda: features(app.state.plugins), shots, market_now))

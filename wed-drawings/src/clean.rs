@@ -203,7 +203,7 @@ fn position_props(kind: &str, points: &mut [(i64, f64)], props: Option<&Map<Stri
 
 /// The API shape of a stored row: without the source and symbol it's filed under.
 pub fn drawing_payload(row: &Map<String, Value>) -> Value {
-    Value::Object(row.iter().filter(|(k, _)| *k != "source" && *k != "symbol").map(|(k, v)| (k.clone(), v.clone())).collect())
+    Value::Object(row.iter().filter(|(k, _)| !["source", "symbol", "user_id"].contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect())
 }
 
 // ---- alerts ----

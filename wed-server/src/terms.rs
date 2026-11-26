@@ -3,7 +3,7 @@
 //!
 //! The text is the repository's `DISCLAIMER.md`, built into the binary: the desktop bundle ships
 //! the same file to Python from the same checkout, so both servers show one text. Acceptance is
-//! stored (setting `terms`) with the version of the terms, so a change to them asks again.
+//! stored (setting `terms`, `terms:<user id>` per account) with the version of the terms, so a change to them asks again.
 
 use chrono::Utc;
 use serde_json::{json, Value};
@@ -24,16 +24,16 @@ fn store_failed(e: String) -> Refusal {
 }
 
 /// The saved acceptance, if it is of these terms (`Terms.accepted`).
-async fn accepted(store: &Store) -> Result<Option<Value>, String> {
+async fn accepted(store: &Store, who: Option<&str>) -> Result<Option<Value>, String> {
     Ok(store
-        .get_setting(TERMS_KEY)
+        .get_setting(&crate::settings_routes::user_key(TERMS_KEY, who))
         .await?
         .filter(|s| s.as_object().is_some_and(|o| !o.is_empty()) && s.get("version").and_then(Value::as_str) == Some(TERMS_VERSION)))
 }
 
 /// `GET /api/terms`: the disclaimer, its version, and whether (and when) it was accepted.
-pub async fn status(store: &Store) -> Answer {
-    let accepted = accepted(store).await.map_err(store_failed)?;
+pub async fn status(store: &Store, who: Option<&str>) -> Answer {
+    let accepted = accepted(store, who).await.map_err(store_failed)?;
     Ok(json!({
         "version": TERMS_VERSION,
         "accepted": accepted.is_some(),
@@ -43,10 +43,10 @@ pub async fn status(store: &Store) -> Answer {
 }
 
 /// `POST /api/terms/accept`: store the acceptance of these terms, now; answers as [`status`].
-pub async fn accept(store: &Store) -> Answer {
+pub async fn accept(store: &Store, who: Option<&str>) -> Answer {
     let record = json!({"version": TERMS_VERSION, "accepted_at": py_iso_utc(Utc::now())});
-    store.set_setting(TERMS_KEY, &record).await.map_err(store_failed)?;
-    status(store).await
+    store.set_setting(&crate::settings_routes::user_key(TERMS_KEY, who), &record).await.map_err(store_failed)?;
+    status(store, who).await
 }
 
 #[cfg(test)]

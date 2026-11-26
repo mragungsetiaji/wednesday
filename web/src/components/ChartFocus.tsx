@@ -27,14 +27,14 @@ import { compose, fileName } from "../snapshot";
 import type { Drawings } from "../drawingsData";
 import { NewsAlert } from "./NewsAlert";
 
-const DEFAULT_TFS = ["1H", "15M", "4H", "5M", "30M", "4H"];
+export const DEFAULT_TFS = ["1H", "15M", "4H", "5M", "30M", "4H"];
 
 /**
  * A draggable line between two tracks, at `value` (a share of the grid from its start). Arrow
  * keys move it too; double-click shares the two tracks evenly. `from` insets it along its
  * length (a row line beside the big pane starts after that pane).
  */
-function Splitter({ axis, value, from = 0, label, onChange, onDone, onReset }: {
+export function Splitter({ axis, value, from = 0, label, onChange, onDone, onReset }: {
   axis: "x" | "y";
   value: number;
   from?: number;
@@ -127,19 +127,19 @@ interface Props {
 }
 
 /** The layout picker: the current layout's icon, opening every layout. */
-function LayoutMenu({ value, onChange }: { value: string; onChange: (id: LayoutId) => void }) {
+export function LayoutMenu({ value, onChange, icon = false }: { value: string; onChange: (id: LayoutId) => void; icon?: boolean }) {
   const { open, setOpen, ref } = usePopover<HTMLDivElement>();
   const id = useId();
   const current = LAYOUTS.find((l) => l.id === value) ?? LAYOUTS[0];
   return (
     <div className="tb-menu" ref={ref}>
-      <button type="button" className="tb-btn" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
+      <button type="button" className={`tb-btn${icon ? " tb-icon" : ""}`} aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
         title={`Layout: ${current.title}`} aria-label={`Layout: ${current.title}`}>
-        <LayoutIcon cols={current.cols} rows={current.rows} big={current.big} size={15} />
-        <TcIcon name="chevronDown" size={12} />
+        <LayoutIcon cols={current.cols} rows={current.rows} big={current.big} size={icon ? 16 : 15} />
+        {!icon && <TcIcon name="chevronDown" size={12} />}
       </button>
       {open && (
-        <div className="chart-pop menu-pop layout-pop" id={id} role="menu" aria-label="Layout">
+        <div className={`chart-pop menu-pop layout-pop${icon ? " is-end" : ""}`} id={id} role="menu" aria-label="Layout">
           {LAYOUTS.map((l) => (
             <button key={l.id} type="button" role="menuitemradio" aria-checked={l.id === value}
               className={`draw-flyout-item${l.id === value ? " is-active" : ""}`}

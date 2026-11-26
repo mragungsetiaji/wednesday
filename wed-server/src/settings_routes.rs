@@ -108,12 +108,21 @@ fn clean_layout(layout: &Value) -> Result<Map<String, Value>, Refused> {
     Ok(out)
 }
 
+/// A setting of one user: `workspaces:<user id>`; the plain key without a login.
+pub fn user_key(base: &str, who: Option<&str>) -> String {
+    match who {
+        Some(uid) => format!("{base}:{uid}"),
+        None => base.to_string(),
+    }
+}
+
 async fn all(store: &Store, key: &str) -> Result<Map<String, Value>, Refused> {
     Ok(store.get_setting(key).await?.and_then(|v| v.as_object().cloned()).unwrap_or_default())
 }
 
-pub async fn workspaces_list(store: &Store) -> Result<Value, Refused> {
-    let items = all(store, WORKSPACES_KEY).await?;
+pub async fn workspaces_list(store: &Store, who: Option<&str>) -> Result<Value, Refused> {
+    let key = user_key(WORKSPACES_KEY, who);
+    let items = all(store, &key).await?;
     let mut list: Vec<(&String, &Value)> = items.iter().collect();
     list.sort_by_key(|(n, _)| n.to_lowercase());
     let out: Vec<Value> = list
@@ -127,17 +136,19 @@ pub async fn workspaces_list(store: &Store) -> Result<Value, Refused> {
 }
 
 /// None when there's no such workspace.
-pub async fn workspace_get(store: &Store, name: &str) -> Result<Option<Value>, Refused> {
-    let items = all(store, WORKSPACES_KEY).await?;
+pub async fn workspace_get(store: &Store, who: Option<&str>, name: &str) -> Result<Option<Value>, Refused> {
+    let key = user_key(WORKSPACES_KEY, who);
+    let items = all(store, &key).await?;
     Ok(items.get(name).map(|w| with_first(json!({"name": name}), w)))
 }
 
-pub async fn workspace_save(store: &Store, name: &str, body: &Map<String, Value>) -> Result<Value, Refused> {
+pub async fn workspace_save(store: &Store, who: Option<&str>, name: &str, body: &Map<String, Value>) -> Result<Value, Refused> {
+    let key = user_key(WORKSPACES_KEY, who);
     let name = squeeze(name);
     if name.is_empty() {
         return invalid("Give the workspace a name, e.g. London prep");
     }
-    let mut items = all(store, WORKSPACES_KEY).await?;
+    let mut items = all(store, &key).await?;
     if !items.contains_key(&name) && items.len() >= MAX_WORKSPACES {
         return invalid(format!("At most {MAX_WORKSPACES} workspaces: remove one first"));
     }
@@ -146,16 +157,17 @@ pub async fn workspace_save(store: &Store, name: &str, body: &Map<String, Value>
     let windows = body.get("windows").filter(|v| truthy(Some(v))).cloned().unwrap_or(json!([]));
     let entry = json!({"layout": clean_layout(&layout)?, "windows": clean_windows(&windows)?, "saved_at": now_iso()});
     items.insert(name.clone(), entry.clone());
-    store.set_setting(WORKSPACES_KEY, &Value::Object(items)).await?;
+    store.set_setting(&key, &Value::Object(items)).await?;
     Ok(with_first(json!({"name": name}), &entry))
 }
 
-pub async fn workspace_delete(store: &Store, name: &str) -> Result<bool, Refused> {
-    let mut items = all(store, WORKSPACES_KEY).await?;
+pub async fn workspace_delete(store: &Store, who: Option<&str>, name: &str) -> Result<bool, Refused> {
+    let key = user_key(WORKSPACES_KEY, who);
+    let mut items = all(store, &key).await?;
     if items.shift_remove(name).is_none() {
         return Ok(false);
     }
-    store.set_setting(WORKSPACES_KEY, &Value::Object(items)).await?;
+    store.set_setting(&key, &Value::Object(items)).await?;
     Ok(true)
 }
 
@@ -219,8 +231,9 @@ fn clean_template(body: &Map<String, Value>) -> Result<Value, Refused> {
     Ok(json!({"style": style_out, "text": text, "saved_at": now_iso()}))
 }
 
-pub async fn templates_list(store: &Store) -> Result<Value, Refused> {
-    let everything = all(store, TEMPLATES_KEY).await?;
+pub async fn templates_list(store: &Store, who: Option<&str>) -> Result<Value, Refused> {
+    let key = user_key(TEMPLATES_KEY, who);
+    let everything = all(store, &key).await?;
     let mut out: Vec<Value> = Vec::new();
     for (family, named) in &everything {
         for (name, t) in named.as_object().into_iter().flatten() {
@@ -231,7 +244,8 @@ pub async fn templates_list(store: &Store) -> Result<Value, Refused> {
     Ok(json!({"templates": out}))
 }
 
-pub async fn template_save(store: &Store, family: &str, name: &str, body: &Map<String, Value>) -> Result<Value, Refused> {
+pub async fn template_save(store: &Store, who: Option<&str>, family: &str, name: &str, body: &Map<String, Value>) -> Result<Value, Refused> {
+    let key = user_key(TEMPLATES_KEY, who);
     if !FAMILIES.contains(&family) {
         return invalid(format!("Unknown drawing family {}: line, rect or text", py_repr(family)));
     }
@@ -240,25 +254,99 @@ pub async fn template_save(store: &Store, family: &str, name: &str, body: &Map<S
         return invalid("Give the template a name, e.g. H1 OB");
     }
     let template = clean_template(body)?;
-    let mut everything = all(store, TEMPLATES_KEY).await?;
+    let mut everything = all(store, &key).await?;
     let named = everything.entry(family.to_string()).or_insert_with(|| json!({}));
     let named = named.as_object_mut().ok_or_else(|| Refused::Store("templates aren't an object".into()))?;
     if !named.contains_key(&name) && named.len() >= MAX_TEMPLATES {
         return invalid(format!("At most {MAX_TEMPLATES} templates per drawing type: delete one first"));
     }
     named.insert(name.clone(), template.clone());
-    store.set_setting(TEMPLATES_KEY, &Value::Object(everything)).await?;
+    store.set_setting(&key, &Value::Object(everything)).await?;
     Ok(with_first(json!({"family": family, "name": name}), &template))
 }
 
-pub async fn template_delete(store: &Store, family: &str, name: &str) -> Result<bool, Refused> {
-    let mut everything = all(store, TEMPLATES_KEY).await?;
+pub async fn template_delete(store: &Store, who: Option<&str>, family: &str, name: &str) -> Result<bool, Refused> {
+    let key = user_key(TEMPLATES_KEY, who);
+    let mut everything = all(store, &key).await?;
     let Some(named) = everything.get_mut(family).and_then(Value::as_object_mut) else { return Ok(false) };
     if named.shift_remove(name).is_none() {
         return Ok(false);
     }
-    store.set_setting(TEMPLATES_KEY, &Value::Object(everything)).await?;
+    store.set_setting(&key, &Value::Object(everything)).await?;
     Ok(true)
+}
+
+// ---- preferences (layout, chart type...) of an account ----
+
+pub const PREFS_KEY: &str = "prefs";
+pub const MAX_PREFS_BYTES: usize = 256 * 1024;
+
+pub async fn prefs_get(store: &Store, who: Option<&str>) -> Result<Value, Refused> {
+    Ok(json!({"prefs": all(store, &user_key(PREFS_KEY, who)).await?}))
+}
+
+/// Merge `{key: value}` into the saved preferences; a null value removes the key. Only the
+/// dashboard's own keys (`wed.`, `xau.`) are kept.
+pub async fn prefs_put(store: &Store, who: Option<&str>, body: &Map<String, Value>) -> Result<Value, Refused> {
+    let key = user_key(PREFS_KEY, who);
+    let mut prefs = all(store, &key).await?;
+    for (k, v) in body {
+        if !(k.starts_with("wed.") || k.starts_with("xau.")) || k.len() > 100 {
+            return invalid(format!("Unknown preference {}: they start with wed.", py_repr(k)));
+        }
+        if v.is_null() {
+            prefs.shift_remove(k);
+        } else {
+            prefs.insert(k.clone(), v.clone());
+        }
+    }
+    if pyjson::dumps(&Value::Object(prefs.clone())).len() > MAX_PREFS_BYTES {
+        return invalid("The preferences are too large to save");
+    }
+    store.set_setting(&key, &Value::Object(prefs.clone())).await?;
+    Ok(json!({"prefs": prefs}))
+}
+
+/// What a browser kept during the preview, into the account: templates and workspaces whose
+/// name the account doesn't have yet, and the preferences the account hasn't set. Returns how
+/// many of each were added.
+pub async fn import(store: &Store, who: Option<&str>, body: &Map<String, Value>) -> Result<(usize, usize, usize), Refused> {
+    let (mut templates, mut workspaces, mut prefs) = (0, 0, 0);
+    let have = all(store, &user_key(TEMPLATES_KEY, who)).await?;
+    for t in body.get("templates").and_then(Value::as_array).into_iter().flatten().take(MAX_TEMPLATES * FAMILIES.len()) {
+        let Some(t) = t.as_object() else { continue };
+        let (Some(family), Some(name)) = (t.get("family").and_then(Value::as_str), t.get("name").and_then(Value::as_str)) else {
+            continue;
+        };
+        if have.get(family).and_then(|f| f.get(squeeze(name))).is_some() {
+            continue;
+        }
+        if template_save(store, who, family, name, t).await.is_ok() {
+            templates += 1;
+        }
+    }
+    let have = all(store, &user_key(WORKSPACES_KEY, who)).await?;
+    for w in body.get("workspaces").and_then(Value::as_array).into_iter().flatten().take(MAX_WORKSPACES) {
+        let Some(w) = w.as_object() else { continue };
+        let Some(name) = w.get("name").and_then(Value::as_str) else { continue };
+        if have.contains_key(&squeeze(name)) {
+            continue;
+        }
+        if workspace_save(store, who, name, w).await.is_ok() {
+            workspaces += 1;
+        }
+    }
+    if let Some(sent) = body.get("prefs").and_then(Value::as_object) {
+        let have = all(store, &user_key(PREFS_KEY, who)).await?;
+        let new: Map<String, Value> = sent.iter()
+            .filter(|(k, v)| !have.contains_key(*k) && !v.is_null() && (k.starts_with("wed.") || k.starts_with("xau.")))
+            .map(|(k, v)| (k.clone(), v.clone())).collect();
+        prefs = new.len();
+        if prefs > 0 {
+            prefs_put(store, who, &new).await?;
+        }
+    }
+    Ok((templates, workspaces, prefs))
 }
 
 #[cfg(test)]

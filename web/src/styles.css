@@ -2181,15 +2181,56 @@ p {
   padding: var(--s3) var(--s4);
   border-bottom: 1px solid var(--line);
 }
-.bias-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s2);
+.bias.is-folded {
+  padding-block: var(--s2);
 }
-.bias-head h2 {
+.bias-head {
+  margin: 0;
   font-size: var(--text-lg);
   font-weight: 600;
+}
+.bias-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bias-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-right: auto;
+}
+.bias-now {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.bias-now.bias-bullish { color: var(--bull-text); }
+.bias-now.bias-bearish { color: var(--bear-text); }
+.bias-now.bias-neutral { color: var(--text-2); }
+.bias-chevron {
+  display: inline-flex;
+  color: var(--text-3);
+  transform: rotate(180deg);
+  transition: transform 0.15s;
+}
+.bias-toggle[aria-expanded="true"] .bias-chevron {
+  transform: none;
+}
+.bias-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
 }
 .bias-when {
   font-size: var(--text-xs);
@@ -4813,6 +4854,49 @@ fieldset:disabled .switch {
 .login-card .field input {
   width: 100%;
 }
+/* The 24-hour preview: a small pill over the top of the app, with Log in and Sign up. */
+.preview-banner {
+  position: fixed;
+  top: var(--s2);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  max-width: calc(100vw - 32px);
+  padding: var(--s1) var(--s1) var(--s1) var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.3);
+}
+.preview-banner span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-banner .preview-close {
+  flex: none;
+  display: inline-flex;
+  padding: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.preview-banner .preview-close:hover {
+  color: var(--text);
+  background: var(--line);
+}
+.preview-banner .button {
+  flex: none;
+  padding-block: 2px;
+  border-radius: 999px;
+}
 .login-password {
   max-width: 360px;
   margin-top: var(--s6);
@@ -4828,4 +4912,83 @@ fieldset:disabled .switch {
   font-weight: 600;
   padding-top: var(--s3);
   color: var(--text);
+}
+
+/* The account at the top right: initials in a circle, the menu under it. */
+.account-btn {
+  padding: 2px;
+}
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.avatar.is-big {
+  width: 34px;
+  height: 34px;
+  font-size: 13px;
+}
+.account-login {
+  font-weight: 600;
+  color: var(--accent);
+}
+.account-pop {
+  min-width: 240px;
+}
+.account-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0;
+  padding: 6px 8px;
+}
+p.account-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.account-head > span:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.account-head span span,
+p.account-head span {
+  color: var(--text-3);
+  font-size: 12px;
+}
+.account-pop a.draw-flyout-item {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* The chart page's own layout: the main chart in the first place, more charts beside it. */
+.main-grid {
+  min-width: 0;
+}
+.main-grid > .pane.is-main {
+  grid-column: var(--col);
+  grid-row: var(--row) / span var(--row-span, 1);
+}
+/* A phone has room for one chart: the main one. */
+@media (max-width: 900px) {
+  .main-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .main-grid > .pane:not(.is-main),
+  .main-grid > .splitter {
+    display: none;
+  }
+  .main-grid > .pane.is-main {
+    grid-column: 1;
+    grid-row: 1;
+  }
 }
