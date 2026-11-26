@@ -603,7 +603,7 @@ password is stored as an argon2id hash; the session token only as its SHA-256.
 **A 24-hour preview.** Someone who opens the dashboard without logging in gets a preview: the
 chart, the scan, the levels, the markets and the calendar work, and their drawings, drawing
 templates, workspaces and layout stay in that browser. A banner shows when it ends, with *Log in*
-and *Sign up*; closing it (×) leaves a small *Log in* at the top right. After 24 hours the dashboard shows the login (one preview per address per 7 days,
+and *Sign up*; closing it (×) leaves a small *Log in* at the bottom right. After 24 hours the dashboard shows the login (one preview per address per 7 days,
 so clearing the cookies doesn't restart it). Logging in moves what the browser kept into the
 account.
 

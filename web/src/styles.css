@@ -4879,6 +4879,8 @@ fieldset:disabled .switch {
   white-space: nowrap;
 }
 .preview-banner.is-small {
+  top: auto;
+  bottom: 40px; /* above the status bar, clear of the rail's bias heading */
   left: auto;
   right: var(--s3);
   transform: none;
