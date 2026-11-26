@@ -2181,15 +2181,56 @@ p {
   padding: var(--s3) var(--s4);
   border-bottom: 1px solid var(--line);
 }
-.bias-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s2);
+.bias.is-folded {
+  padding-block: var(--s2);
 }
-.bias-head h2 {
+.bias-head {
+  margin: 0;
   font-size: var(--text-lg);
   font-weight: 600;
+}
+.bias-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.bias-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-right: auto;
+}
+.bias-now {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.bias-now.bias-bullish { color: var(--bull-text); }
+.bias-now.bias-bearish { color: var(--bear-text); }
+.bias-now.bias-neutral { color: var(--text-2); }
+.bias-chevron {
+  display: inline-flex;
+  color: var(--text-3);
+  transform: rotate(180deg);
+  transition: transform 0.15s;
+}
+.bias-toggle[aria-expanded="true"] .bias-chevron {
+  transform: none;
+}
+.bias-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
 }
 .bias-when {
   font-size: var(--text-xs);
@@ -4836,6 +4877,26 @@ fieldset:disabled .switch {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.preview-banner.is-small {
+  left: auto;
+  right: var(--s3);
+  transform: none;
+  padding: 2px;
+}
+.preview-banner .preview-close {
+  flex: none;
+  display: inline-flex;
+  padding: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.preview-banner .preview-close:hover {
+  color: var(--text);
+  background: var(--line);
 }
 .preview-banner .button {
   flex: none;

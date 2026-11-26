@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { saveBias, type BiasDirection, type BiasExpiry, type TradeBias } from "../api";
-import { ArrowDown, ArrowUp } from "../icons";
+import { ArrowDown, ArrowUp, ChevronUp } from "../icons";
+import { usePref } from "../prefs";
 
 const DIRECTIONS: { id: BiasDirection; label: string }[] = [
   { id: "bullish", label: "Bullish" },
@@ -30,7 +31,7 @@ export function BiasIcon({ dir, size = 13 }: { dir: BiasDirection; size?: number
 
 /**
  * The trader's bias, set by hand. It only labels setups (risk on / off / no trade);
- * it never hides them.
+ * it never hides them. Folded by default to its heading (direction and expiry); the heading opens it.
  */
 export function BiasPanel({ bias, onChanged }: {
   bias: TradeBias | null;
@@ -40,6 +41,7 @@ export function BiasPanel({ bias, onChanged }: {
   const [expiry, setExpiry] = useState<BiasExpiry>(bias?.expiry ?? "day");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = usePref<boolean>("wed.biasOpen", false);
 
   // Follow the server when the bias changes elsewhere (another tab, a restart).
   useEffect(() => {
@@ -63,43 +65,59 @@ export function BiasPanel({ bias, onChanged }: {
   const current = bias && !bias.expired ? bias.direction : null;
 
   return (
-    <section className="bias" aria-labelledby="bias-h">
-      <div className="bias-head">
-        <h2 id="bias-h">Bias</h2>
-        <span className={`bias-when${bias?.expired ? " is-expired" : ""}`}>
-          {!bias ? "Not set" : bias.expired ? "Expired, set it again" : bias.expires_at ? `until ${fmtWhen(bias.expires_at)}` : "until changed"}
-        </span>
-      </div>
+    <section className={`bias${open ? "" : " is-folded"}`} aria-labelledby="bias-h">
+      <h2 id="bias-h" className="bias-head">
+        <button type="button" className="bias-toggle" aria-expanded={open} aria-controls="bias-body"
+          onClick={() => setOpen(!open)}>
+          <span className="bias-title">
+            Bias
+            {current && !open && (
+              <span className={`bias-now bias-${current}`}>
+                <BiasIcon dir={current} size={12} />
+                {DIRECTIONS.find((d) => d.id === current)?.label}
+              </span>
+            )}
+          </span>
+          <span className={`bias-when${bias?.expired ? " is-expired" : ""}`}>
+            {!bias ? "Not set" : bias.expired ? "Expired, set it again" : bias.expires_at ? `until ${fmtWhen(bias.expires_at)}` : "until changed"}
+          </span>
+          <span className="bias-chevron" aria-hidden="true"><ChevronUp size={12} /></span>
+        </button>
+      </h2>
 
-      <div className="segmented bias-choice" role="group" aria-label="Bias">
-        {DIRECTIONS.map((d) => (
-          <button key={d.id} type="button" className={`seg seg-text bias-${d.id}`} aria-pressed={current === d.id}
-            disabled={saving} onClick={() => save(d.id)}>
-            <BiasIcon dir={d.id} />
-            {d.label}
-          </button>
-        ))}
-      </div>
+      {open && (
+        <div className="bias-body" id="bias-body">
+          <div className="segmented bias-choice" role="group" aria-label="Bias">
+            {DIRECTIONS.map((d) => (
+              <button key={d.id} type="button" className={`seg seg-text bias-${d.id}`} aria-pressed={current === d.id}
+                disabled={saving} onClick={() => save(d.id)}>
+                <BiasIcon dir={d.id} />
+                {d.label}
+              </button>
+            ))}
+          </div>
 
-      <p className="bias-focus">{current ? FOCUS[current] : "Pick a direction to label the setups risk on or risk off."}</p>
+          <p className="bias-focus">{current ? FOCUS[current] : "Pick a direction to label the setups risk on or risk off."}</p>
 
-      <div className="bias-fields">
-        <input type="text" className="bias-note" value={note} maxLength={500} placeholder="Why? e.g. CPI hot, DXY breaking out"
-          aria-label="Bias note" spellCheck={false}
-          onChange={(e) => setNote(e.target.value)}
-          onBlur={() => current && note !== (bias?.note ?? "") && save(current, { note })}
-          onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()} />
-        <select className="bias-expiry" value={expiry} aria-label="Bias expires"
-          onChange={(e) => {
-            const v = e.target.value as BiasExpiry;
-            setExpiry(v);
-            if (current) save(current, { expiry: v });
-          }}>
-          {EXPIRY.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-        </select>
-      </div>
+          <div className="bias-fields">
+            <input type="text" className="bias-note" value={note} maxLength={500} placeholder="Why? e.g. CPI hot, DXY breaking out"
+              aria-label="Bias note" spellCheck={false}
+              onChange={(e) => setNote(e.target.value)}
+              onBlur={() => current && note !== (bias?.note ?? "") && save(current, { note })}
+              onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()} />
+            <select className="bias-expiry" value={expiry} aria-label="Bias expires"
+              onChange={(e) => {
+                const v = e.target.value as BiasExpiry;
+                setExpiry(v);
+                if (current) save(current, { expiry: v });
+              }}>
+              {EXPIRY.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+            </select>
+          </div>
 
-      {error && <p className="text-error bias-error" role="alert">{error}</p>}
+          {error && <p className="text-error bias-error" role="alert">{error}</p>}
+        </div>
+      )}
     </section>
   );
 }

@@ -4,6 +4,7 @@ import {
   fetchAuthStatus, fetchPrefs, importMine, LOGGED_OUT_EVENT, logIn, savePrefs, setUp, signUp, startPreview,
   type AuthStatus,
 } from "../api";
+import { CrossIcon } from "../icons";
 import { applyPrefs, clearLocal, hasLocalData, localData, prefsDiff, prefsOf, setPreview } from "../localData";
 
 type State = "checking" | "open" | "preview" | "login" | "signup" | "setup";
@@ -22,6 +23,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<State>("checking");
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [form, setForm] = useState(false); // the login form over the preview
+  const [banner, setBanner] = useState(() => !bannerClosed()); // the preview's banner, until closed
   const [formMode, setFormMode] = useState<"login" | "signup" | "setup">("login");
   const [session, setSession] = useState(0); // remounts the app after each login so it reloads
   const [code, setCode] = useState("");
@@ -100,9 +102,16 @@ export function LoginGate({ children }: { children: ReactNode }) {
   if (state === "preview" && !form) {
     return (
       <>
-        <PreviewBanner until={status?.guest?.until ?? null}
-          onLogin={() => { setForm(true); setMode("login"); }}
-          onSignup={() => { setForm(true); setMode("signup"); }} />
+        {banner ? (
+          <PreviewBanner until={status?.guest?.until ?? null}
+            onLogin={() => { setForm(true); setMode("login"); }}
+            onSignup={() => { setForm(true); setMode("signup"); }}
+            onClose={() => { closeBanner(); setBanner(false); }} />
+        ) : (
+          <div className="preview-banner is-small">
+            <button type="button" className="button quiet" onClick={() => { setForm(true); setMode("login"); }}>Log in</button>
+          </div>
+        )}
         {app}
       </>
     );
@@ -236,7 +245,26 @@ export function LoginGate({ children }: { children: ReactNode }) {
   );
 }
 
-function PreviewBanner({ until, onLogin, onSignup }: { until: string | null; onLogin: () => void; onSignup: () => void }) {
+/** Closing the preview's banner leaves a small Log in; it holds for this tab (sessionStorage). */
+const BANNER_KEY = "wedlocal.bannerClosed";
+function bannerClosed(): boolean {
+  try {
+    return sessionStorage.getItem(BANNER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function closeBanner(): void {
+  try {
+    sessionStorage.setItem(BANNER_KEY, "1");
+  } catch {
+    /* closed until the next load */
+  }
+}
+
+function PreviewBanner({ until, onLogin, onSignup, onClose }: {
+  until: string | null; onLogin: () => void; onSignup: () => void; onClose: () => void;
+}) {
   const ends = until ? new Date(until) : null;
   const when = ends ? ends.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
   return (
@@ -246,6 +274,9 @@ function PreviewBanner({ until, onLogin, onSignup }: { until: string | null; onL
       </span>
       <button type="button" className="button quiet" onClick={onLogin}>Log in</button>
       <button type="button" className="button primary" onClick={onSignup}>Sign up</button>
+      <button type="button" className="preview-close" aria-label="Close" title="Close" onClick={onClose}>
+        <CrossIcon size={12} />
+      </button>
     </div>
   );
 }

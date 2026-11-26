@@ -527,7 +527,8 @@ with its price. Clicking a row opens its timeframe.
 
 ## Panels
 
-The rail beside the chart keeps the bias on top and tabs under it:
+The rail beside the chart keeps the bias on top (folded to its direction and expiry until you
+click its heading; it stays as you leave it) and tabs under it:
 
 - **Levels**: the ladder above.
 - **Structure**: direction, last break (BOS / CHoCH, with the streak), its level and age, per timeframe.
@@ -602,7 +603,7 @@ password is stored as an argon2id hash; the session token only as its SHA-256.
 **A 24-hour preview.** Someone who opens the dashboard without logging in gets a preview: the
 chart, the scan, the levels, the markets and the calendar work, and their drawings, drawing
 templates, workspaces and layout stay in that browser. A banner shows when it ends, with *Log in*
-and *Sign up*. After 24 hours the dashboard shows the login (one preview per address per 7 days,
+and *Sign up*; closing it (×) leaves a small *Log in* at the top right. After 24 hours the dashboard shows the login (one preview per address per 7 days,
 so clearing the cookies doesn't restart it). Logging in moves what the browser kept into the
 account.
 

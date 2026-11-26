@@ -9,7 +9,8 @@ there, just marked for a smaller risk.
 
 ## Setting the bias
 
-At the top of the panel next to the chart:
+At the top of the panel next to the chart. It starts folded to a line (the direction and when it
+expires): click *Bias* to open it.
 
 | Bias | Risk on (focus) | Risk off (still listed) |
 | --- | --- | --- |
