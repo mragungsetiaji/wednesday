@@ -3,7 +3,10 @@ import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useR
 import { fetchQuarters, fetchScan, fetchSessions, fetchSettings, saveSettings, type QuartersResponse, type ScanResponse, type SessionsResponse } from "./api";
 import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
-import { ChartFocus } from "./components/ChartFocus";
+import { AccountMenu } from "./components/AccountMenu";
+import { ChartFocus, LayoutMenu } from "./components/ChartFocus";
+import { MainGrid } from "./components/MainGrid";
+import type { LayoutId } from "./focusLayouts";
 import { ChartPopOut } from "./components/ChartPopOut";
 import { PerfOverlay } from "./components/PerfOverlay";
 import { LinkMenu, useChartLink } from "./components/LinkMenu";
@@ -162,6 +165,8 @@ export default function App() {
   // The live price stays out of this component's state: a tick re-renders only what shows it.
   const liveFeed = useLiveFeed(data?.tick_seconds ?? 0, data?.version ?? 0, refreshScan);
   const live = replaying ? null : liveFeed;
+  // The chart page's layout (the layout button): the main chart first, more charts beside it.
+  const [mainLayout, setMainLayout] = usePref<LayoutId>("wed.mainLayout", "1");
   // The main drawings' keys (Delete, undo) step aside while a full screen pane on another market has focus.
   const [mainKeys, setMainKeys] = useState(true);
   const drawings = useDrawings(data?.source, data?.symbol, data?.version ?? 0, { keys: mainKeys });
@@ -357,6 +362,7 @@ export default function App() {
             <h1 className="ticker-title">{view === "journal" ? "Journal" : "Settings"}</h1>
           </div>
           {viewNav(false)}
+          <AccountMenu />
         </header>
       )}
 
@@ -436,6 +442,7 @@ export default function App() {
                 </button>
                 <LinkMenu value={mainGroup} onChange={setMainGroup} />
                 <span className="tb-spacer" />
+                <LayoutMenu value={mainLayout} onChange={setMainLayout} icon />
                 <SnapshotMenu source={mainShot} className="tb-btn tb-icon" iconSize={16} />
                 <ChartSettingsMenu palette={palette} />
                 <ThemeButton mode={palette.mode} />
@@ -444,7 +451,7 @@ export default function App() {
                   <PopOutIcon size={16} />
                 </button>
                 <button type="button" className="tb-btn tb-icon" onClick={() => setFocus(true)} disabled={!scan || replaying}
-                  title="Full screen: one, two or four charts (F)" aria-label="Full screen charts">
+                  title="Full screen: up to six charts (F)" aria-label="Full screen charts">
                   <TcIcon name="maximize" />
                 </button>
                 <button type="button" className="tb-btn tb-icon" onClick={() => setShowRail(!showRail)} aria-pressed={showRail}
@@ -454,34 +461,46 @@ export default function App() {
                 <MoreMenu onShortcuts={() => window.dispatchEvent(new Event(SHOW_SHORTCUTS))} />
                 <span className="tb-sep" aria-hidden="true" />
                 {viewNav(true)}
+                <AccountMenu />
               </div>
               {replaying && <ReplayBar replay={replay} tf={tf} clockName={CLOCK_NAMES[data?.clock ?? ""] ?? data?.clock ?? "feed"} />}
               <div className="chart-body">
               <DrawingToolbar ctl={drawings} history={false} />
               <DrawingStyleBar ctl={drawings} />
-              <PriceChart
-                candles={chart?.candles ?? []}
-                zones={zones}
-                events={events}
-                highlight={highlight}
-                palette={palette}
-                resetKey={`${data?.symbol ?? ""}|${tf}`}
-                timeframe={tf}
-                loading={!chart}
-                onNeedOlder={replaying ? undefined : loadOlder}
-                quarters={quarters}
-                quarterRows={quarterRows}
-                swings={showSwings ? chart?.swings : undefined}
-                news={replaying ? undefined : news}
-                levels={levels}
-                live={live}
-                drawings={drawings}
-                nav={mainNav}
-                sync={mainLink.sync}
-                rangeLink={mainLink.rangeLink}
-                snapshotButton={false}
-                viewKey={`main:${data?.symbol ?? ""}`}
-              />
+              {(() => {
+                const main = (
+                  <PriceChart
+                    candles={chart?.candles ?? []}
+                    zones={zones}
+                    events={events}
+                    highlight={highlight}
+                    palette={palette}
+                    resetKey={`${data?.symbol ?? ""}|${tf}`}
+                    timeframe={tf}
+                    loading={!chart}
+                    onNeedOlder={replaying ? undefined : loadOlder}
+                    quarters={quarters}
+                    quarterRows={quarterRows}
+                    swings={showSwings ? chart?.swings : undefined}
+                    news={replaying ? undefined : news}
+                    levels={levels}
+                    live={live}
+                    drawings={drawings}
+                    nav={mainNav}
+                    sync={mainLink.sync}
+                    rangeLink={mainLink.rangeLink}
+                    snapshotButton={false}
+                    viewKey={`main:${data?.symbol ?? ""}`}
+                  />
+                );
+                // Replay and full screen show only the main chart: the other charts would read the live feed.
+                return mainLayout === "1" || replaying || focus || !scan || !data ? main : (
+                  <MainGrid layout={mainLayout} main={main} symbol={data.symbol} scan={scan} timeframes={timeframes}
+                    version={version} lookback={lookback} rail={rail} layers={layers} palette={palette} quarters={quarters}
+                    showQuarters={showQuarters} showNews={showNews} allDetectors={allDetectors} sessions={sessions}
+                    levelGroups={levelGroupsOn} news={allNews} live={live} drawings={drawings} source={data.source} />
+                );
+              })()}
               </div>
               {scan && config && (
                 <Dock open={dockTab} onOpen={setDockTab} tabs={[

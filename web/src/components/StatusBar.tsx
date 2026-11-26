@@ -49,7 +49,8 @@ function useNow(ms: number) {
 export function StatusBar({ version, status, source, scannedAt, barTime }: Props) {
   const plan = usePlan();
   const now = useNow(1000);
-  const detail = [`Scanned ${fmtAgo(scannedAt, now)}`, barTime && `last bar ${fmtFeedTime(barTime)}`].filter(Boolean).join(" · ");
+  // The source sits in the tooltip: the corner shows only whether the feed is live.
+  const detail = [source && `Source ${SOURCES[source] ?? source}`, `Scanned ${fmtAgo(scannedAt, now)}`, barTime && `last bar ${fmtFeedTime(barTime)}`].filter(Boolean).join(" · ");
   return (
     <footer className="statusbar">
       <span className="statusbar-item num" title="Wednesday version">
@@ -66,7 +67,6 @@ export function StatusBar({ version, status, source, scannedAt, barTime }: Props
         TradingView Lightweight Charts™ · © 2025 TradingView, Inc.
       </a>
       <span className="statusbar-feed" title={detail}>
-        {source && <span className="statusbar-item">{SOURCES[source] ?? source}</span>}
         <span className={`statusbar-item live ${status.cls}`} role="status">
           <span className="dot" aria-hidden="true" />
           {status.text}

@@ -1,7 +1,8 @@
-import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { AccountContext, type Account } from "../account";
 import {
-  fetchAuthStatus, fetchPrefs, importMine, LOGGED_OUT_EVENT, logIn, savePrefs, setUp, signUp, startPreview,
+  fetchAuthStatus, fetchPrefs, importMine, LOGGED_OUT_EVENT, logIn, logOut, savePrefs, setUp, signUp, startPreview,
   type AuthStatus,
 } from "../api";
 import { CrossIcon } from "../icons";
@@ -96,21 +97,33 @@ export function LoginGate({ children }: { children: ReactNode }) {
     else setState(m);
   };
 
+  // The account menu at the top right reads this: who is logged in, Log in, Log out.
+  const account = useMemo<Account>(() => ({
+    status,
+    openForm: (m) => {
+      setError(null);
+      setNotice(null);
+      setFormMode(m);
+      setForm(true);
+    },
+    logOut: async () => {
+      await logOut();
+      await check();
+      setSession((n) => n + 1); // the app reloads without the account's data
+    },
+  }), [status, check]);
+
   if (state === "checking") return null;
-  const app = <Fragment key={session}>{children}</Fragment>;
+  const app = <AccountContext.Provider value={account}><Fragment key={session}>{children}</Fragment></AccountContext.Provider>;
   if (state === "open") return app;
   if (state === "preview" && !form) {
     return (
       <>
-        {banner ? (
+        {banner && (
           <PreviewBanner until={status?.guest?.until ?? null}
             onLogin={() => { setForm(true); setMode("login"); }}
             onSignup={() => { setForm(true); setMode("signup"); }}
             onClose={() => { closeBanner(); setBanner(false); }} />
-        ) : (
-          <div className="preview-banner is-small">
-            <button type="button" className="button quiet" onClick={() => { setForm(true); setMode("login"); }}>Log in</button>
-          </div>
         )}
         {app}
       </>
