@@ -330,3 +330,19 @@ async fn each_account_keeps_its_own_drawings_journals_and_preferences() {
     assert_eq!(mine["wed.theme"], json!("dark"));
     assert_eq!(call(addr, "GET", "/api/workspaces", &admin, None).await.body["workspaces"], json!([]));
 }
+
+#[tokio::test]
+async fn a_database_from_before_the_accounts_opens() {
+    // drawings without user_id, as main had it: the column is added before its index.
+    let dir = std::env::temp_dir().join(format!("wed-auth-old-db-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    let store = Store::open("sqlite:///data/old.db", &dir).await.unwrap();
+    store.execute("DROP TABLE drawings", vec![]).await.unwrap();
+    store.execute("CREATE TABLE drawings ( id VARCHAR(36) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, \
+                   kind VARCHAR(16) NOT NULL, points TEXT NOT NULL, style TEXT NOT NULL, props TEXT, timeframes TEXT, \
+                   locked BOOLEAN NOT NULL, hidden BOOLEAN NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY (id) )",
+                  vec![]).await.unwrap();
+    drop(store);
+    Store::open("sqlite:///data/old.db", &dir).await.unwrap();
+}

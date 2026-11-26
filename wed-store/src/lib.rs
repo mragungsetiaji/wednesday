@@ -160,10 +160,8 @@ impl Store {
         let d = self.backend();
         for t in self.tables().clone() {
             self.execute(t["create"][d].as_str().unwrap(), vec![]).await?;
-            for ix in t["indexes"][d].as_array().unwrap() {
-                self.execute(ix.as_str().unwrap(), vec![]).await?;
-            }
-            // Nullable columns a newer version added: add them to an older table.
+            // Nullable columns a newer version added: add them to an older table, before the
+            // indexes, which may be on them.
             let have = self.columns(t["name"].as_str().unwrap()).await?;
             for c in t["columns"].as_array().unwrap() {
                 let name = c["name"].as_str().unwrap();
@@ -172,6 +170,9 @@ impl Store {
                                       c[d].as_str().unwrap());
                     self.execute(&sql, vec![]).await?;
                 }
+            }
+            for ix in t["indexes"][d].as_array().unwrap() {
+                self.execute(ix.as_str().unwrap(), vec![]).await?;
             }
         }
         Ok(())
