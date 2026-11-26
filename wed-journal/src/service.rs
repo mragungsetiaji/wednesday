@@ -383,6 +383,7 @@ async fn load_bars(store: &Store, source: &str, symbol: &str, start: i64, end: i
 /// What the API shows of a journal (`Journals._public`).
 pub fn public(j: &Map<String, Value>) -> Value {
     let mut out = j.clone();
+    out.shift_remove("user_id");
     let weekends = j.get("settings").and_then(|s| s.get("show_weekends")).map_or(false, |v| truthy(Some(v)));
     out.insert("show_weekends".into(), Value::Bool(weekends));
     out.insert("settings".into(), Value::Null);
@@ -399,12 +400,26 @@ pub async fn get(store: &Store, id: &str) -> Result<Map<String, Value>, Fail> {
     }
 }
 
-pub async fn list(store: &Store, features: &[String]) -> Result<Value, Fail> {
-    let all: Vec<Value> = journals(store).await?.iter().map(public).collect();
+/// The journals of one account (`user`), or all of them without a login.
+pub async fn journals_of(store: &Store, user: Option<&str>) -> Result<Vec<Map<String, Value>>, String> {
+    let all = journals(store).await?;
+    Ok(match user {
+        Some(u) => all.into_iter().filter(|j| j.get("user_id").and_then(Value::as_str) == Some(u)).collect(),
+        None => all,
+    })
+}
+
+/// Whether journal `id` is `user`'s (any journal without a login).
+pub async fn owned(store: &Store, id: &str, user: Option<&str>) -> Result<bool, String> {
+    Ok(journals_of(store, user).await?.iter().any(|j| j["id"] == id))
+}
+
+pub async fn list(store: &Store, features: &[String], user: Option<&str>) -> Result<Value, Fail> {
+    let all: Vec<Value> = journals_of(store, user).await?.iter().map(public).collect();
     Ok(json!({"available": true, "journals": all, "multi": features.iter().any(|f| f == MULTI_FEATURE)}))
 }
 
-pub async fn create(store: &Store, body: &Map<String, Value>, features: &[String]) -> Result<Value, Fail> {
+pub async fn create(store: &Store, body: &Map<String, Value>, features: &[String], user: Option<&str>) -> Result<Value, Fail> {
     let name = take(text_or_empty(body.get("name")).trim(), 120);
     if name.is_empty() {
         return fail(422, "Give the journal a name");
@@ -416,7 +431,7 @@ pub async fn create(store: &Store, body: &Map<String, Value>, features: &[String
             return fail(422, "The account number is the digits MT5 shows for the login, e.g. 51234567");
         }
     }
-    let existing = journals(store).await?;
+    let existing = journals_of(store, user).await?;
     if existing.iter().any(|j| !truthy(j.get("sample"))) && !features.iter().any(|f| f == MULTI_FEATURE) {
         return fail(402, "One journal is free. More than one needs a plan with multiple journals");
     }
@@ -433,6 +448,11 @@ pub async fn create(store: &Store, body: &Map<String, Value>, features: &[String
         .unwrap()
         .clone();
     journal_put(store, &row).await?;
+    if let Some(u) = user {
+        store.execute("UPDATE journals SET user_id = ? WHERE id = ?",
+                      vec![Arg::Str(Some(u.into())), Arg::Str(row.get("id").and_then(Value::as_str).map(String::from))])
+            .await?;
+    }
     Ok(public(&row))
 }
 

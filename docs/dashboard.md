@@ -599,6 +599,24 @@ characters). Instead, you can set `XAU_AUTH_PASSWORD` in `.env` (an account name
 (Secure behind HTTPS). After 10 wrong passwords in 15 minutes, the login waits. The
 password is stored as an argon2id hash; the session token only as its SHA-256.
 
+**A 24-hour preview.** Someone who opens the dashboard without logging in gets a preview: the
+chart, the scan, the levels, the markets and the calendar work, and their drawings, drawing
+templates, workspaces and layout stay in that browser. A banner shows when it ends, with *Log in*
+and *Sign up*. After 24 hours the dashboard shows the login (one preview per address per 7 days,
+so clearing the cookies doesn't restart it). Logging in moves what the browser kept into the
+account.
+
+**Sign up and Settings > Users.** *Sign up* makes an account that waits for the admin: it can't
+log in until an admin approves it in **Settings > Users**, where they can also reject a sign-up,
+disable an account, make it an admin or remove it. The first account is an admin; the last admin
+can't be demoted or removed.
+
+**Per account.** Each account keeps its own drawings, templates, workspaces, preferences and
+journals, so they follow it to another device. The data source, markets, Telegram alerts, drawing
+alerts, the bias, the news import, plugins and the licence are the server's: only an admin changes
+them, and a user sees the data source read only. Data saved before the login was on belongs to
+the first admin. Details: [design-guest-accounts.md](design-guest-accounts.md).
+
 **Settings > Login** lists the devices logged in to the account, with *Log out* for
 each, and changes the password, which logs every other device out.
 

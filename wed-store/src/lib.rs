@@ -738,15 +738,94 @@ impl Store {
         self.execute(&format!("DELETE FROM sessions WHERE {}", wheres.join(" AND ")), args).await
     }
 
+    /// Every account, the oldest first, without the password hashes.
+    pub async fn users(&self) -> Result<Vec<Map<String, Value>>, String> {
+        let mut rows = self.rows("users", "SELECT * FROM users ORDER BY created_at", vec![]).await?;
+        for r in &mut rows {
+            r.shift_remove("password_hash");
+        }
+        Ok(rows)
+    }
+
+    /// Remove an account with its sessions, drawings (and their alerts), journals and settings.
+    pub async fn delete_user(&self, user_id: &str) -> Result<bool, String> {
+        let u = || Arg::Str(Some(user_id.into()));
+        let mine = "SELECT id FROM journals WHERE user_id = ?";
+        let mut stmts: Vec<(String, Vec<Arg>)> = vec![
+            ("DELETE FROM drawing_alerts WHERE drawing_id IN (SELECT id FROM drawings WHERE user_id = ?)".into(), vec![u()]),
+            ("DELETE FROM drawings WHERE user_id = ?".into(), vec![u()]),
+        ];
+        for t in ["journal_trades", "journal_cash", "journal_notes", "journal_entries"] {
+            stmts.push((format!("DELETE FROM {t} WHERE journal_id IN ({mine})"), vec![u()]));
+        }
+        stmts.push(("DELETE FROM journals WHERE user_id = ?".into(), vec![u()]));
+        stmts.push(("DELETE FROM settings WHERE key LIKE ?".into(), vec![Arg::Str(Some(format!("%:{user_id}")))]));
+        stmts.push(("DELETE FROM sessions WHERE user_id = ?".into(), vec![u()]));
+        self.transaction(stmts).await?;
+        Ok(self.execute("DELETE FROM users WHERE id = ?", vec![u()]).await? > 0)
+    }
+
+    /// Give the data saved without a login (drawings, journals, the settings `keys`) to `user_id`.
+    pub async fn claim_unowned(&self, user_id: &str, keys: &[&str]) -> Result<(), String> {
+        let u = || Arg::Str(Some(user_id.into()));
+        self.execute("UPDATE drawings SET user_id = ? WHERE user_id IS NULL", vec![u()]).await?;
+        self.execute("UPDATE journals SET user_id = ? WHERE user_id IS NULL", vec![u()]).await?;
+        for key in keys {
+            let Some(value) = self.get_setting(key).await? else { continue };
+            let mine = format!("{key}:{user_id}");
+            if self.get_setting(&mine).await?.is_none() {
+                self.set_setting(&mine, &value).await?;
+            }
+            self.delete_setting(key).await?;
+        }
+        Ok(())
+    }
+
+    // ---- preview passes (auth.rs) ----
+
+    pub async fn add_guest(&self, token_hash: &str, address: &str, created_at: &str, expires_at: &str) -> Result<(), String> {
+        let s = |v: &str| Arg::Str(Some(v.into()));
+        self.execute("INSERT INTO guests (token_hash, address, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                     vec![s(token_hash), s(address), s(created_at), s(expires_at)])
+            .await
+            .map(|_| ())
+    }
+
+    /// The pass of a token (by its hash) that still runs at `now`.
+    pub async fn guest(&self, token_hash: &str, now: &str) -> Result<Option<Map<String, Value>>, String> {
+        let sql = "SELECT * FROM guests WHERE token_hash = ? AND expires_at > ?";
+        Ok(self.rows("guests", sql, vec![Arg::Str(Some(token_hash.into())), Arg::Str(Some(now.into()))]).await?.into_iter().next())
+    }
+
+    /// The latest pass given to `address` since a time, running or not.
+    pub async fn guest_of(&self, address: &str, since: &str) -> Result<Option<Map<String, Value>>, String> {
+        let sql = "SELECT * FROM guests WHERE address = ? AND created_at > ? ORDER BY created_at DESC";
+        Ok(self.rows("guests", sql, vec![Arg::Str(Some(address.into())), Arg::Str(Some(since.into()))]).await?.into_iter().next())
+    }
+
+    pub async fn delete_guests(&self, created_before: &str) -> Result<u64, String> {
+        self.execute("DELETE FROM guests WHERE created_at < ?", vec![Arg::Str(Some(created_before.into()))]).await
+    }
+
     // ---- drawings (per source and symbol) ----
 
     const DRAWING_JSON: [&'static str; 4] = ["points", "style", "props", "timeframes"];
 
     pub async fn drawings(&self, source: &str, symbol: &str) -> Result<Vec<Map<String, Value>>, String> {
-        let mut rows = self
-            .rows("drawings", "SELECT * FROM drawings WHERE source = ? AND symbol = ? ORDER BY updated_at",
-                  vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))])
-            .await?;
+        self.drawings_of(source, symbol, None).await
+    }
+
+    /// The drawings of one account (`user`), or everyone's (None: no login, the alert checker).
+    pub async fn drawings_of(&self, source: &str, symbol: &str, user: Option<&str>) -> Result<Vec<Map<String, Value>>, String> {
+        let mut args = vec![Arg::Str(Some(source.into())), Arg::Str(Some(symbol.into()))];
+        let mine = if let Some(u) = user {
+            args.push(Arg::Str(Some(u.into())));
+            " AND user_id = ?"
+        } else {
+            ""
+        };
+        let sql = format!("SELECT * FROM drawings WHERE source = ? AND symbol = ?{mine} ORDER BY updated_at");
+        let mut rows = self.rows("drawings", &sql, args).await?;
         for r in &mut rows {
             for k in Self::DRAWING_JSON {
                 if let Some(Value::String(s)) = r.get(k) {
@@ -767,7 +846,20 @@ impl Store {
                                      ("points", j("points")), ("style", j("style")), ("props", j("props")),
                                      ("timeframes", j("timeframes")), ("locked", b("locked")), ("hidden", b("hidden")),
                                      ("updated_at", s("updated_at"))], &["id"])
-            .await
+            .await?;
+        // An account's drawing (`user_id`); left as it is when the row doesn't say.
+        if let Some(user) = row.get("user_id").and_then(Value::as_str) {
+            self.execute("UPDATE drawings SET user_id = ? WHERE id = ?",
+                         vec![Arg::Str(Some(user.into())), Arg::Str(row.get("id").and_then(Value::as_str).map(String::from))])
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Whose drawing `id` is: None when there is none, Some(None) for one without an account.
+    pub async fn drawing_owner(&self, id: &str) -> Result<Option<Option<String>>, String> {
+        let rows = self.rows("drawings", "SELECT user_id FROM drawings WHERE id = ?", vec![Arg::Str(Some(id.into()))]).await?;
+        Ok(rows.into_iter().next().map(|r| r.get("user_id").and_then(Value::as_str).map(String::from)))
     }
 
     pub async fn drawing_delete(&self, id: &str, source: &str, symbol: &str) -> Result<bool, String> {

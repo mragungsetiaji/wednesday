@@ -7,6 +7,7 @@ from typing import Callable
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import Response
 
+from ..auth import viewer_of
 from ..snapshots import Snapshots
 from .service import MULTI_FEATURE, JournalError, Journals
 
@@ -32,16 +33,19 @@ def journal_router(get_journals: Callable[[], Journals | None], get_engine: Call
             raise HTTPException(404, "No such journal") from None
 
     @r.get("")
-    def list_journals() -> dict:
+    def list_journals(request: Request) -> dict:
+        """This account's journals (every journal without a login)."""
         found = get_journals()
         if found is None:
             return {"available": False, "journals": [], "multi": False}
-        return {"available": True, "journals": found.list(), "multi": MULTI_FEATURE in get_features()}
+        return {"available": True, "journals": found.list(viewer_of(request).scope()),
+                "multi": MULTI_FEATURE in get_features()}
 
     @r.post("")
-    def create(body: dict = Body(...)) -> dict:
+    def create(request: Request, body: dict = Body(...)) -> dict:
         try:
-            return svc().create(str(body.get("name") or ""), get_features(), body.get("login"))
+            return svc().create(str(body.get("name") or ""), get_features(), body.get("login"),
+                                viewer_of(request).scope())
         except PermissionError as exc:
             raise HTTPException(402, str(exc)) from exc
         except JournalError as exc:

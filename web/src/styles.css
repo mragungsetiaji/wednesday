@@ -4813,6 +4813,35 @@ fieldset:disabled .switch {
 .login-card .field input {
   width: 100%;
 }
+/* The 24-hour preview: a small pill over the top of the app, with Log in and Sign up. */
+.preview-banner {
+  position: fixed;
+  top: var(--s2);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  max-width: calc(100vw - 32px);
+  padding: var(--s1) var(--s1) var(--s1) var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.3);
+}
+.preview-banner span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview-banner .button {
+  flex: none;
+  padding-block: 2px;
+  border-radius: 999px;
+}
 .login-password {
   max-width: 360px;
   margin-top: var(--s6);

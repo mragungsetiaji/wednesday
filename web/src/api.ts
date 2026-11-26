@@ -1,3 +1,4 @@
+import { inPreview, localAnswer, type LocalData } from "./localData";
 import type { ShapeKind } from "./shapes";
 
 /** A level from any detector: a zone, or a line when top === bottom. */
@@ -157,6 +158,10 @@ export const deleteWorkspace = (name: string) => send<{ deleted: boolean }>("DEL
 export const LOGGED_OUT_EVENT = "wednesday:logged-out";
 
 async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (inPreview()) {
+    const local = await localAnswer(url, init);
+    if (local) return local;
+  }
   const res = await fetch(url, init);
   if (res.status === 401 && !url.startsWith("/api/auth/")) window.dispatchEvent(new Event(LOGGED_OUT_EVENT));
   return res;
@@ -174,6 +179,20 @@ export interface AuthStatus {
   logged_in: boolean;
   setup: boolean; // no account yet: create one with the setup code from the server's log
   user: AuthUser | null;
+  signup?: boolean; // anyone can sign up; an admin approves the account
+  guest?: { until: string } | null; // this browser's 24-hour preview, while it runs
+  guest_available?: boolean; // a preview can still start from this address
+}
+/** An account as Settings > Users lists it (admin). Role "owner" is an admin, "pending" waits for approval. */
+export interface UserAccount {
+  id: string;
+  username: string;
+  name: string | null;
+  email: string | null;
+  role: "owner" | "user" | "pending";
+  disabled: boolean;
+  created_at: string;
+  last_login_at: string | null;
 }
 export interface Device {
   id: string;
@@ -203,6 +222,18 @@ export const logIn = (username: string, password: string) =>
 export const setUp = (code: string, username: string, password: string) =>
   send<AuthStatus>("POST", "/api/auth/setup", { code, username, password });
 export const logOut = () => send<AuthStatus>("POST", "/api/auth/logout");
+export const startPreview = () => send<AuthStatus>("POST", "/api/auth/guest");
+export const signUp = (username: string, password: string, email: string) =>
+  send<{ username: string; pending: boolean }>("POST", "/api/auth/signup", { username, password, email: email || null });
+export const fetchUsers = () => getJson<{ users: UserAccount[] }>("/api/users");
+export const updateUser = (id: string, change: { role?: UserAccount["role"]; disabled?: boolean }) =>
+  send<{ users: UserAccount[] }>("PATCH", `/api/users/${encodeURIComponent(id)}`, change);
+export const deleteUser = (id: string) => send<{ users: UserAccount[] }>("DELETE", `/api/users/${encodeURIComponent(id)}`);
+export const fetchPrefs = () => getJson<{ prefs: Record<string, unknown> }>("/api/prefs");
+export const savePrefs = (change: Record<string, unknown>) =>
+  send<{ prefs: Record<string, unknown> }>("PUT", "/api/prefs", change);
+export const importMine = (data: LocalData) =>
+  send<{ drawings: number; templates: number; workspaces: number; prefs: number }>("POST", "/api/me/import", data);
 export const fetchDevices = () => getJson<{ sessions: Device[] }>("/api/auth/sessions");
 export const endDevice = (id: string) => send<{ sessions: Device[] }>("DELETE", `/api/auth/sessions/${encodeURIComponent(id)}`);
 export const changePassword = (current: string, next: string) =>

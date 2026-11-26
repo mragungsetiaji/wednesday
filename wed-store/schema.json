@@ -317,15 +317,17 @@
   {
    "name": "drawings",
    "create": {
-    "sqlite": "CREATE TABLE IF NOT EXISTS drawings ( id VARCHAR(36) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, kind VARCHAR(16) NOT NULL, points TEXT NOT NULL, style TEXT NOT NULL, props TEXT, timeframes TEXT, locked BOOLEAN NOT NULL, hidden BOOLEAN NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY (id) )",
-    "postgresql": "CREATE TABLE IF NOT EXISTS drawings ( id VARCHAR(36) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, kind VARCHAR(16) NOT NULL, points TEXT NOT NULL, style TEXT NOT NULL, props TEXT, timeframes TEXT, locked BOOLEAN NOT NULL, hidden BOOLEAN NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY (id) )"
+    "sqlite": "CREATE TABLE IF NOT EXISTS drawings ( id VARCHAR(36) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, kind VARCHAR(16) NOT NULL, points TEXT NOT NULL, style TEXT NOT NULL, props TEXT, timeframes TEXT, locked BOOLEAN NOT NULL, hidden BOOLEAN NOT NULL, updated_at VARCHAR(40) NOT NULL, user_id VARCHAR(36), PRIMARY KEY (id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS drawings ( id VARCHAR(36) NOT NULL, source VARCHAR(32) NOT NULL, symbol VARCHAR(64) NOT NULL, kind VARCHAR(16) NOT NULL, points TEXT NOT NULL, style TEXT NOT NULL, props TEXT, timeframes TEXT, locked BOOLEAN NOT NULL, hidden BOOLEAN NOT NULL, updated_at VARCHAR(40) NOT NULL, user_id VARCHAR(36), PRIMARY KEY (id) )"
    },
    "indexes": {
     "sqlite": [
-     "CREATE INDEX IF NOT EXISTS ix_drawings_source_symbol ON drawings (source, symbol)"
+     "CREATE INDEX IF NOT EXISTS ix_drawings_source_symbol ON drawings (source, symbol)",
+     "CREATE INDEX IF NOT EXISTS ix_drawings_user_id ON drawings (user_id)"
     ],
     "postgresql": [
-     "CREATE INDEX IF NOT EXISTS ix_drawings_source_symbol ON drawings (source, symbol)"
+     "CREATE INDEX IF NOT EXISTS ix_drawings_source_symbol ON drawings (source, symbol)",
+     "CREATE INDEX IF NOT EXISTS ix_drawings_user_id ON drawings (user_id)"
     ]
    },
    "columns": [
@@ -391,6 +393,53 @@
     },
     {
      "name": "updated_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "user_id",
+     "nullable": true,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
+    }
+   ]
+  },
+  {
+   "name": "guests",
+   "create": {
+    "sqlite": "CREATE TABLE IF NOT EXISTS guests ( token_hash VARCHAR(64) NOT NULL, address VARCHAR(64) NOT NULL, created_at VARCHAR(40) NOT NULL, expires_at VARCHAR(40) NOT NULL, PRIMARY KEY (token_hash) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS guests ( token_hash VARCHAR(64) NOT NULL, address VARCHAR(64) NOT NULL, created_at VARCHAR(40) NOT NULL, expires_at VARCHAR(40) NOT NULL, PRIMARY KEY (token_hash) )"
+   },
+   "indexes": {
+    "sqlite": [
+     "CREATE INDEX IF NOT EXISTS ix_guests_address ON guests (address)"
+    ],
+    "postgresql": [
+     "CREATE INDEX IF NOT EXISTS ix_guests_address ON guests (address)"
+    ]
+   },
+   "columns": [
+    {
+     "name": "token_hash",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "address",
+     "nullable": false,
+     "sqlite": "VARCHAR(64)",
+     "postgresql": "VARCHAR(64)"
+    },
+    {
+     "name": "created_at",
+     "nullable": false,
+     "sqlite": "VARCHAR(40)",
+     "postgresql": "VARCHAR(40)"
+    },
+    {
+     "name": "expires_at",
      "nullable": false,
      "sqlite": "VARCHAR(40)",
      "postgresql": "VARCHAR(40)"
@@ -684,12 +733,16 @@
   {
    "name": "journals",
    "create": {
-    "sqlite": "CREATE TABLE IF NOT EXISTS journals ( id VARCHAR(36) NOT NULL, name VARCHAR(120) NOT NULL, login VARCHAR(32), server VARCHAR(120), company VARCHAR(120), currency VARCHAR(8), time_offset INTEGER, created_at VARCHAR(40) NOT NULL, synced_at VARCHAR(40), sample BOOLEAN, settings TEXT, PRIMARY KEY (id) )",
-    "postgresql": "CREATE TABLE IF NOT EXISTS journals ( id VARCHAR(36) NOT NULL, name VARCHAR(120) NOT NULL, login VARCHAR(32), server VARCHAR(120), company VARCHAR(120), currency VARCHAR(8), time_offset INTEGER, created_at VARCHAR(40) NOT NULL, synced_at VARCHAR(40), sample BOOLEAN, settings TEXT, PRIMARY KEY (id) )"
+    "sqlite": "CREATE TABLE IF NOT EXISTS journals ( id VARCHAR(36) NOT NULL, name VARCHAR(120) NOT NULL, login VARCHAR(32), server VARCHAR(120), company VARCHAR(120), currency VARCHAR(8), time_offset INTEGER, created_at VARCHAR(40) NOT NULL, synced_at VARCHAR(40), sample BOOLEAN, settings TEXT, user_id VARCHAR(36), PRIMARY KEY (id) )",
+    "postgresql": "CREATE TABLE IF NOT EXISTS journals ( id VARCHAR(36) NOT NULL, name VARCHAR(120) NOT NULL, login VARCHAR(32), server VARCHAR(120), company VARCHAR(120), currency VARCHAR(8), time_offset INTEGER, created_at VARCHAR(40) NOT NULL, synced_at VARCHAR(40), sample BOOLEAN, settings TEXT, user_id VARCHAR(36), PRIMARY KEY (id) )"
    },
    "indexes": {
-    "sqlite": [],
-    "postgresql": []
+    "sqlite": [
+     "CREATE INDEX IF NOT EXISTS ix_journals_user_id ON journals (user_id)"
+    ],
+    "postgresql": [
+     "CREATE INDEX IF NOT EXISTS ix_journals_user_id ON journals (user_id)"
+    ]
    },
    "columns": [
     {
@@ -757,6 +810,12 @@
      "nullable": true,
      "sqlite": "TEXT",
      "postgresql": "TEXT"
+    },
+    {
+     "name": "user_id",
+     "nullable": true,
+     "sqlite": "VARCHAR(36)",
+     "postgresql": "VARCHAR(36)"
     }
    ]
   },

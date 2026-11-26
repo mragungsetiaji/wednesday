@@ -24,7 +24,8 @@ docker run -d --name wednesday --restart unless-stopped \
   logs a setup code: `docker logs wednesday`, then open the dashboard, choose *Create
   account* and enter it. Or create the account from the shell:
   `docker exec -it wednesday wednesday-rs --create-user NAME` (it also resets a
-  password). See [Access](dashboard.md#access).
+  password). Others can then sign up and wait for your approval in Settings > Users;
+  without an account, a browser gets a 24-hour preview. See [Access](dashboard.md#access).
 - `/data` is the data folder (`WEDNESDAY_HOME`): the database, settings, logs and its
   `.env`. Keep it on a volume so it survives a rebuild.
 - Arguments after the image name go to `wednesday-rs`, for example

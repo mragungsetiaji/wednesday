@@ -8,10 +8,12 @@ import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from wednesday.auth import (PUBLIC, SESSION_COOKIE, Auth, AuthError, RateLimiter, check_password, device_name,
-                            hash_password, now_iso)
+from wednesday.auth import (GUEST_COOKIE, PUBLIC, SESSION_COOKIE, Auth, AuthError, RateLimiter, admin_only,
+                            check_password, device_name, guest_may, hash_password, now_iso)
 from wednesday.detectors import DetectorParams
-from wednesday.engine import Engine
+from wednesday.engine import Engine, Runtime
+from wednesday.journal.service import Journals
+from wednesday.settings import DataSettings
 from wednesday.feeds import SyntheticFeed
 from wednesday.scanner import ScanConfig
 from wednesday.server import create_app
@@ -78,6 +80,7 @@ def test_every_api_route_needs_a_session(client):
             continue
         for method in route.methods - {"HEAD", "OPTIONS"}:
             res = client.request(method, _concrete(route.path), json={})
+            client.cookies.clear()  # POST /api/auth/guest gives this client a preview pass
             guarded = res.status_code == 401 and res.json().get("detail") == "Log in first"
             assert guarded == (route.path not in PUBLIC), (method, route.path, res.status_code)
             seen += guarded
@@ -89,7 +92,8 @@ def test_every_api_route_needs_a_session(client):
 
 def test_login_cookie_logout(client):
     assert client.get("/api/auth/status").json() == {"login": True, "logged_in": False, "setup": False,
-                                                     "user": None}
+                                                     "user": None, "signup": True, "guest": None,
+                                                     "guest_available": True}
     assert login(client, password="wrong").status_code == 401
     res = login(client, username=" TRADER ", **{"user-agent": "Mozilla/5.0 (Windows NT 10.0) Chrome/130.0"})
     assert res.status_code == 200, res.text
@@ -234,3 +238,192 @@ def test_device_names():
         == "Safari on macOS"
     assert device_name("Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537 Edg/130") == "Edge on Windows"
     assert device_name(None) is None
+
+
+# ---- guests, sign-up and accounts (docs/design-guest-accounts.md) ----
+
+def test_the_guest_pass(client, store):
+    assert client.get("/api/status").status_code == 401
+    res = client.post("/api/auth/guest")
+    assert res.status_code == 200, res.text
+    cookie = res.headers["set-cookie"]
+    assert GUEST_COOKIE in cookie and "HttpOnly" in cookie and "SameSite=strict" in cookie
+    until = res.json()["guest"]["until"]
+    assert res.json()["guest_available"] is False and not res.json()["logged_in"]
+    token = client.cookies[GUEST_COOKIE]
+    assert store.guest(token, now_iso()) is None  # only the hash is stored
+    # The market reads, empty lists of an account's data, nothing else.
+    assert client.get("/api/status").status_code == 200
+    assert client.get("/api/drawings").json()["drawings"] == []
+    assert client.get("/api/workspaces").json()["workspaces"] == []
+    assert client.get("/api/users").status_code == 403
+    refused = client.put("/api/workspaces/Mine", json={"layout": {}, "windows": []})
+    assert refused.status_code == 403 and refused.json()["detail"] == "Log in or sign up for this"
+    # The same browser again: its pass runs, no new one.
+    assert client.post("/api/auth/guest").json()["guest"]["until"] == until
+    # Another browser at the same address: a pass ending at the same time.
+    other = TestClient(client.app)
+    assert other.get("/api/auth/status").json()["guest_available"] is True
+    assert other.post("/api/auth/guest").json()["guest"]["until"] == until
+    # Once it ended, the address gets none until the week is over.
+    with store.engine.begin() as conn:
+        conn.exec_driver_sql("UPDATE guests SET expires_at = ?", (now_iso(datetime.now(timezone.utc) - timedelta(1)),))
+    assert client.get("/api/status").status_code == 401
+    assert client.get("/api/auth/status").json()["guest_available"] is False
+    ended = TestClient(client.app).post("/api/auth/guest")
+    assert ended.status_code == 403 and "preview ended" in ended.json()["detail"]
+
+
+def test_guest_and_admin_routes():
+    assert guest_may("GET", "/api/scan") and guest_may("GET", "/api/journals")
+    assert not guest_may("PUT", "/api/drawings/x") and not guest_may("GET", "/api/users")
+    assert not guest_may("GET", "/api/journals/x")
+    assert admin_only("GET", "/api/users") and admin_only("PUT", "/api/settings")
+    assert admin_only("PUT", "/api/drawings/x/alert") and admin_only("POST", "/api/engine/scan")
+    assert not admin_only("GET", "/api/settings") and not admin_only("PUT", "/api/drawings/x")
+
+
+def signup(client, username="newbie", password=PASSWORD, **extra):
+    return client.post("/api/auth/signup", json={"username": username, "password": password, **extra})
+
+
+def test_signup_waits_for_the_admin(client, store):
+    res = signup(client, email="new@example.com")
+    assert res.status_code == 200 and res.json() == {"username": "newbie", "pending": True}
+    assert signup(TestClient(client.app)).status_code == 409  # the name is taken
+    assert signup(client, "other", email="nope").status_code == 422
+    pending = login(client, "newbie")
+    assert pending.status_code == 403 and "approval" in pending.json()["detail"]
+    assert login(client, "newbie", "wrong").status_code == 401
+    admin = TestClient(client.app)
+    login(admin)
+    users = admin.get("/api/users").json()["users"]
+    new = next(u for u in users if u["username"] == "newbie")
+    assert new["role"] == "pending" and new["email"] == "new@example.com" and "password_hash" not in new
+    assert admin.patch(f"/api/users/{new['id']}", json={"role": "boss"}).status_code == 422
+    res = admin.patch(f"/api/users/{new['id']}", json={"role": "user"})
+    assert res.status_code == 200 and {u["username"]: u["role"] for u in res.json()["users"]}["newbie"] == "user"
+    assert login(client, "newbie").status_code == 200
+    assert client.get("/api/status").status_code == 200
+    only = client.get("/api/users")
+    assert only.status_code == 403 and only.json()["detail"] == "Only the admin can change this"
+    assert client.put("/api/bias", json={}).status_code == 403
+    # Disabling ends their sessions.
+    assert admin.patch(f"/api/users/{new['id']}", json={"disabled": True}).status_code == 200
+    assert client.get("/api/status").status_code == 401
+
+
+def test_signup_needs_a_first_account(store):
+    with pytest.raises(AuthError, match="setup code"):
+        Auth(store).signup({"username": "early", "password": PASSWORD}, "1.2.3.4")
+
+
+def test_the_last_admin_stays(client, store):
+    login(client)
+    me = store.user(username="trader")["id"]
+    for change in ({"role": "user"}, {"disabled": True}):
+        res = client.patch(f"/api/users/{me}", json=change)
+        assert res.status_code == 409 and "at least one admin" in res.json()["detail"]
+    assert client.delete(f"/api/users/{me}").status_code == 409
+    assert client.patch("/api/users/nope", json={"role": "user"}).status_code == 404
+    signup(client, "second")
+    second = store.user(username="second")["id"]
+    assert client.patch(f"/api/users/{second}", json={"role": "owner"}).status_code == 200
+    res = client.patch(f"/api/users/{me}", json={"role": "user"})  # another admin now, but it's me
+    assert res.status_code == 409 and "your own" in res.json()["detail"]
+    assert client.delete(f"/api/users/{me}").status_code == 409
+    res = client.delete(f"/api/users/{second}")
+    assert res.status_code == 200 and [u["username"] for u in res.json()["users"]] == ["trader"]
+
+
+D1, D2 = "0f6c1d2e-8b4a-4c7e-9a51-3d2f7e6b1c90", "1f6c1d2e-8b4a-4c7e-9a51-3d2f7e6b1c91"
+LAST = int(pd.Timestamp("2026-03-02 10:00").timestamp())
+
+
+@pytest.fixture
+def full(store, auth, tmp_path):
+    """A client of a :class:`Runtime`, which has the journal."""
+    cfg = ScanConfig(lookback=100, params=DetectorParams(swing_length=3))
+    runtime = Runtime(cfg, DataSettings(source="synthetic"), store, journals=Journals(store), poll=False)
+    return TestClient(create_app(runtime, source="synthetic", ui_dir=tmp_path, auth=auth))
+
+
+def two_users(client, store) -> tuple[TestClient, TestClient]:
+    signup(client, "bob")
+    store.update_user(store.user(username="bob")["id"], role="user")
+    alice, bob = TestClient(client.app), TestClient(client.app)
+    assert login(alice).status_code == 200 and login(bob, "bob").status_code == 200
+    return alice, bob
+
+
+def test_each_account_has_its_own_data(full, store):
+    alice, bob = two_users(full, store)
+    drawing = {"kind": "hline", "points": [{"t": LAST, "p": 2400}]}
+    assert alice.put(f"/api/drawings/{D1}", json=drawing).status_code == 200
+    assert [d["id"] for d in alice.get("/api/drawings").json()["drawings"]] == [D1]
+    assert "user_id" not in alice.get("/api/drawings").json()["drawings"][0]
+    assert bob.get("/api/drawings").json()["drawings"] == []
+    assert bob.put(f"/api/drawings/{D1}", json=drawing).status_code == 404  # not theirs to overwrite
+    assert bob.delete(f"/api/drawings/{D1}").status_code == 404
+    assert alice.put("/api/workspaces/London", json={"layout": {}, "windows": []}).status_code == 200
+    assert bob.get("/api/workspaces").json()["workspaces"] == []
+    assert bob.get("/api/workspaces/London").status_code == 404
+    journal = alice.post("/api/journals", json={"name": "Alice"}).json()
+    assert "user_id" not in journal
+    assert [j["name"] for j in alice.get("/api/journals").json()["journals"]] == ["Alice"]
+    assert bob.get("/api/journals").json()["journals"] == []
+    assert bob.get(f"/api/journals/{journal['id']}").status_code == 404
+    assert bob.post("/api/journals", json={"name": "Bob"}).status_code == 200  # his one free journal
+    assert alice.post("/api/terms/accept").json()["accepted"] is True
+    assert bob.get("/api/terms").json()["accepted"] is False
+
+
+def test_preferences_merge(client):
+    login(client)
+    assert client.get("/api/prefs").json() == {"prefs": {}}
+    assert client.put("/api/prefs", json={"wed.tf": "15M", "xau.theme": "dark"}).status_code == 200
+    res = client.put("/api/prefs", json={"wed.tf": None, "wed.chart": "candles"})
+    assert res.json() == {"prefs": {"xau.theme": "dark", "wed.chart": "candles"}}
+    assert client.get("/api/prefs").json() == res.json()
+    bad = client.put("/api/prefs", json={"theme": "dark"})
+    assert bad.status_code == 422 and "start with wed." in bad.json()["detail"]
+
+
+def test_import_keeps_what_the_account_has(client, store):
+    login(client)
+    line = {"kind": "hline", "points": [{"t": LAST, "p": 2400}]}
+    client.put(f"/api/drawings/{D1}", json=line)
+    client.put("/api/workspaces/London", json={"layout": {"xau.tf": "1H"}, "windows": []})
+    client.put("/api/drawing-templates/line/OB", json={"style": {"color": "#ff0000", "width": 2}})
+    client.put("/api/prefs", json={"wed.tf": "1H"})
+    body = {
+        "drawings": [{"drawing": {**line, "id": D1}}, {"drawing": {**line, "id": D2}},
+                     {"drawing": {"kind": "nope", "id": "bad"}}, {"symbol": 3}],
+        "templates": [{"family": "line", "name": " OB ", "style": {"color": "#00ff00"}},
+                      {"family": "rect", "name": "Zone", "style": {"color": "#00ff00"}}],
+        "workspaces": [{"name": "London", "layout": {}, "windows": []}, {"name": "New York", "layout": {}}],
+        "prefs": {"wed.tf": "4H", "wed.chart": "bars", "other": 1, "wed.gone": None},
+    }
+    res = client.post("/api/me/import", json=body)
+    assert res.json() == {"drawings": 1, "templates": 1, "workspaces": 1, "prefs": 1}, res.text
+    assert sorted(d["id"] for d in client.get("/api/drawings").json()["drawings"]) == sorted([D1, D2])
+    templates = {(t["family"], t["name"]): t for t in client.get("/api/drawing-templates").json()["templates"]}
+    assert templates[("line", "OB")]["style"]["color"] == "#ff0000"
+    assert client.get("/api/workspaces/London").json()["layout"] == {"xau.tf": "1H"}
+    assert client.get("/api/prefs").json()["prefs"] == {"wed.tf": "1H", "wed.chart": "bars"}
+
+
+def test_what_was_saved_without_a_login_goes_to_the_admin(store):
+    store.set_setting("workspaces", {"London": {"layout": {}, "windows": [], "saved_at": "x"}})
+    store.drawing_put({"id": D1, "source": "synthetic", "symbol": "XAUUSD", "kind": "hline",
+                       "points": [{"t": 1, "p": 2}], "style": {}, "props": None, "timeframes": None,
+                       "locked": False, "hidden": False, "updated_at": now_iso()})
+    auth = Auth(store)
+    auth.create_user("trader", PASSWORD)
+    me = store.user(username="trader")["id"]
+    assert store.get_setting("workspaces") is None and "London" in store.get_setting(f"workspaces:{me}")
+    assert [d["id"] for d in store.drawings("synthetic", "XAUUSD", me)] == [D1]
+    # A later start claims what was saved without the login in between.
+    store.set_setting("prefs", {"wed.tf": "1H"})
+    auth.start()
+    assert store.get_setting(f"prefs:{me}") == {"wed.tf": "1H"} and store.get_setting("prefs") is None

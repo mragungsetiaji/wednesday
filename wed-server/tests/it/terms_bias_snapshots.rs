@@ -31,24 +31,24 @@ fn failure(r: Result<Value, Fail>) -> (u16, String) {
 #[tokio::test]
 async fn terms_are_accepted_once_per_version() {
     let s = store().await;
-    let before = terms::status(&s).await.unwrap();
+    let before = terms::status(&s, None).await.unwrap();
     assert_eq!(before["version"], terms::TERMS_VERSION);
     assert_eq!((before["accepted"].clone(), before["accepted_at"].clone()), (json!(false), Value::Null));
     assert_eq!(before["text"], terms::DISCLAIMER);
     let keys: Vec<&str> = before.as_object().unwrap().keys().map(String::as_str).collect();
     assert_eq!(keys, ["version", "accepted", "accepted_at", "text"]);
 
-    let after = terms::accept(&s).await.unwrap();
+    let after = terms::accept(&s, None).await.unwrap();
     assert_eq!(after["accepted"], true);
     let at = after["accepted_at"].as_str().unwrap();
     assert!(at.ends_with("+00:00") && at.len() >= 25, "{at}");
     let saved = s.get_setting(terms::TERMS_KEY).await.unwrap().unwrap();
     assert_eq!(saved, json!({"version": terms::TERMS_VERSION, "accepted_at": at}));
-    assert_eq!(terms::status(&s).await.unwrap(), after);
+    assert_eq!(terms::status(&s, None).await.unwrap(), after);
 
     // Terms of an older version ask again.
     s.set_setting(terms::TERMS_KEY, &json!({"version": "2020-01-01", "accepted_at": at})).await.unwrap();
-    assert_eq!(terms::status(&s).await.unwrap()["accepted"], false);
+    assert_eq!(terms::status(&s, None).await.unwrap()["accepted"], false);
 }
 
 #[tokio::test]
@@ -90,7 +90,7 @@ async fn an_expired_bias_reads_as_expired() {
 #[tokio::test]
 async fn entries_keep_the_market_they_were_written_in() {
     let s = store().await;
-    let j = service::create(&s, &obj(json!({"name": "Main"})), &[]).await.unwrap();
+    let j = service::create(&s, &obj(json!({"name": "Main"})), &[], None).await.unwrap();
     let id = j["id"].as_str().unwrap();
 
     assert_eq!(failure(service::add_entry(&s, "nope", &obj(json!({"text": "x"})), None).await),
@@ -133,7 +133,7 @@ async fn trade_images_use_the_snapshot_folder() {
     let s = Store::open("sqlite://", &home).await.unwrap();
     let png = [snapshots::PNG_SIGNATURE, b"image"].concat();
     let sid = snapshots::save(&snapshots::dir(&home), &png).unwrap()["id"].as_str().unwrap().to_string();
-    let j = service::create(&s, &obj(json!({"name": "Main"})), &[]).await.unwrap();
+    let j = service::create(&s, &obj(json!({"name": "Main"})), &[], None).await.unwrap();
     let cache = service::Cache::default();
     let err = failure(service::attach_image(&s, &cache, j["id"].as_str().unwrap(), "t1", &obj(json!({"snapshot_id": "../x"}))).await);
     assert_eq!(err, (404, "No such snapshot: upload it first".into()));

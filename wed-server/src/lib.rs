@@ -61,6 +61,14 @@ pub const PORTED: &[&str] = &[
     "GET /api/auth/sessions",
     "DELETE /api/auth/sessions/{session_id}",
     "PUT /api/auth/password",
+    "POST /api/auth/signup",
+    "POST /api/auth/guest",
+    "GET /api/users",
+    "PATCH /api/users/{user_id}",
+    "DELETE /api/users/{user_id}",
+    "GET /api/prefs",
+    "PUT /api/prefs",
+    "POST /api/me/import",
     "GET /api/workspaces",
     "GET /api/workspaces/{name}",
     "PUT /api/workspaces/{name}",
@@ -248,6 +256,12 @@ fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store
         .route("/api/auth/sessions", get(auth::sessions))
         .route("/api/auth/sessions/{id}", axum::routing::delete(auth::end_session))
         .route("/api/auth/password", axum::routing::put(auth::password))
+        .route("/api/auth/signup", axum::routing::post(auth::signup))
+        .route("/api/auth/guest", axum::routing::post(auth::guest))
+        .route("/api/users", get(auth::users))
+        .route("/api/users/{id}", axum::routing::patch(auth::user_update).delete(auth::user_delete))
+        .route("/api/prefs", get(prefs_get).put(prefs_put))
+        .route("/api/me/import", axum::routing::post(me_import))
         .route("/api/workspaces", get(workspaces_list))
         .route("/api/workspaces/{name}", get(workspace_get).put(workspace_put).delete(workspace_delete))
         .route("/api/drawing-templates", get(templates_list))
@@ -271,6 +285,7 @@ fn build(backend: Option<SocketAddr>, ui: Option<Arc<std::path::PathBuf>>, store
         .route("/api/plugin-host/settings/{key}", get(plugin_host_settings).put(plugin_host_settings).delete(plugin_host_settings))
         .route_layer(axum::middleware::map_response(served_here))
         .fallback(forward)
+        .layer(axum::middleware::from_fn_with_state(state.clone(), journal_owner))
         .layer(axum::middleware::from_fn_with_state(state.clone(), auth::need_session))
         .with_state(state)
 }
@@ -527,16 +542,16 @@ fn answer(result: Result<Value, Refused>) -> Response {
 
 // ---- workspaces and drawing templates (settings_routes.rs) ----
 
-async fn workspaces_list(State(app): State<App>, req: Request) -> Response {
+async fn workspaces_list(State(app): State<App>, viewer: auth::Viewer, req: Request) -> Response {
     match app.admit(req).await {
-        Ok((store, _)) => answer(settings_routes::workspaces_list(&store).await),
+        Ok((store, _)) => answer(settings_routes::workspaces_list(&store, viewer.scope()).await),
         Err(res) => res,
     }
 }
 
-async fn workspace_get(State(app): State<App>, Path(name): Path<String>, req: Request) -> Response {
+async fn workspace_get(State(app): State<App>, viewer: auth::Viewer, Path(name): Path<String>, req: Request) -> Response {
     match app.admit(req).await {
-        Ok((store, _)) => match settings_routes::workspace_get(&store, &name).await {
+        Ok((store, _)) => match settings_routes::workspace_get(&store, viewer.scope(), &name).await {
             Ok(Some(w)) => Json(w).into_response(),
             Ok(None) => detail(StatusCode::NOT_FOUND, "No such workspace"),
             Err(e) => answer(Err(e)),
@@ -545,45 +560,115 @@ async fn workspace_get(State(app): State<App>, Path(name): Path<String>, req: Re
     }
 }
 
-async fn workspace_put(State(app): State<App>, Path(name): Path<String>, req: Request) -> Response {
+async fn workspace_put(State(app): State<App>, viewer: auth::Viewer, Path(name): Path<String>, req: Request) -> Response {
     let (store, req) = match app.admit(req).await {
         Ok(ok) => ok,
         Err(res) => return res,
     };
     match object_body(req).await {
-        Ok(body) => answer(settings_routes::workspace_save(&store, &name, &body).await),
+        Ok(body) => answer(settings_routes::workspace_save(&store, viewer.scope(), &name, &body).await),
         Err(res) => res,
     }
 }
 
-async fn workspace_delete(State(app): State<App>, Path(name): Path<String>, req: Request) -> Response {
+async fn workspace_delete(State(app): State<App>, viewer: auth::Viewer, Path(name): Path<String>, req: Request) -> Response {
     match app.admit(req).await {
-        Ok((store, _)) => answer(settings_routes::workspace_delete(&store, &name).await.map(|d| json!({"deleted": d}))),
+        Ok((store, _)) => answer(settings_routes::workspace_delete(&store, viewer.scope(), &name).await.map(|d| json!({"deleted": d}))),
         Err(res) => res,
     }
 }
 
-async fn templates_list(State(app): State<App>, req: Request) -> Response {
+async fn prefs_get(State(app): State<App>, viewer: auth::Viewer, req: Request) -> Response {
     match app.admit(req).await {
-        Ok((store, _)) => answer(settings_routes::templates_list(&store).await),
+        Ok((store, _)) => answer(settings_routes::prefs_get(&store, viewer.scope()).await),
         Err(res) => res,
     }
 }
 
-async fn template_put(State(app): State<App>, Path((family, name)): Path<(String, String)>, req: Request) -> Response {
+async fn prefs_put(State(app): State<App>, viewer: auth::Viewer, req: Request) -> Response {
     let (store, req) = match app.admit(req).await {
         Ok(ok) => ok,
         Err(res) => return res,
     };
     match object_body(req).await {
-        Ok(body) => answer(settings_routes::template_save(&store, &family, &name, &body).await),
+        Ok(body) => answer(settings_routes::prefs_put(&store, viewer.scope(), &body).await),
         Err(res) => res,
     }
 }
 
-async fn template_delete(State(app): State<App>, Path((family, name)): Path<(String, String)>, req: Request) -> Response {
+/// At most this many drawings come in with one import.
+const MAX_IMPORT_DRAWINGS: usize = 2000;
+
+/// `POST /api/me/import`: what the browser kept during the preview, into the logged-in account.
+async fn me_import(State(app): State<App>, viewer: auth::Viewer, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    let body = match object_body(req).await { Ok(b) => b, Err(r) => return r };
+    let who = viewer.scope();
+    let (templates, workspaces, prefs) = match settings_routes::import(&store, who, &body).await {
+        Ok(n) => n,
+        Err(e) => return answer(Err(e)),
+    };
+    let mut drawn = 0;
+    if let Some(rt) = app.engine.as_ref() {
+        let e = rt.engine();
+        for item in body.get("drawings").and_then(Value::as_array).into_iter().flatten().take(MAX_IMPORT_DRAWINGS) {
+            let Some(drawing) = item.get("drawing").and_then(Value::as_object) else { continue };
+            let Some(id) = drawing.get("id").and_then(Value::as_str) else { continue };
+            let q: HashMap<String, String> = item.get("symbol").and_then(Value::as_str)
+                .map(|s| HashMap::from([("symbol".to_string(), s.to_string())])).unwrap_or_default();
+            let Ok(symbol) = drawing_symbol(&q, &e.symbol) else { continue };
+            if !matches!(store.drawing_owner(id).await, Ok(None)) {
+                continue; // there already, or the database couldn't say
+            }
+            if drawings::routes::put(&store, &e.source, &symbol, who, id, drawing, Some(&services(rt).drawing_alerts)).await.is_ok() {
+                drawn += 1;
+            }
+        }
+    }
+    Json(json!({"drawings": drawn, "templates": templates, "workspaces": workspaces, "prefs": prefs})).into_response()
+}
+
+/// A journal route (`/api/journals/{id}/...`) for a journal of another account answers 404.
+async fn journal_owner(State(app): State<App>, req: Request, next: axum::middleware::Next) -> Response {
+    let scope = req.extensions().get::<auth::Viewer>().and_then(|v| v.scope().map(String::from));
+    if let (Some(user), Some(store)) = (scope, app.store.as_ref()) {
+        let id = req.uri().path().strip_prefix("/api/journals/").and_then(|rest| rest.split('/').next())
+            .filter(|id| !id.is_empty());
+        if let Some(id) = id {
+            match journal::service::owned(store, id, Some(&user)).await {
+                Ok(true) => {}
+                Ok(false) => return detail(StatusCode::NOT_FOUND, "No such journal"),
+                Err(e) => return answer(Err(Refused::Store(e))),
+            }
+        }
+    }
+    next.run(req).await
+}
+
+async fn templates_list(State(app): State<App>, viewer: auth::Viewer, req: Request) -> Response {
     match app.admit(req).await {
-        Ok((store, _)) => match settings_routes::template_delete(&store, &family, &name).await {
+        Ok((store, _)) => answer(settings_routes::templates_list(&store, viewer.scope()).await),
+        Err(res) => res,
+    }
+}
+
+async fn template_put(State(app): State<App>, viewer: auth::Viewer, Path((family, name)): Path<(String, String)>, req: Request) -> Response {
+    let (store, req) = match app.admit(req).await {
+        Ok(ok) => ok,
+        Err(res) => return res,
+    };
+    match object_body(req).await {
+        Ok(body) => answer(settings_routes::template_save(&store, viewer.scope(), &family, &name, &body).await),
+        Err(res) => res,
+    }
+}
+
+async fn template_delete(State(app): State<App>, viewer: auth::Viewer, Path((family, name)): Path<(String, String)>, req: Request) -> Response {
+    match app.admit(req).await {
+        Ok((store, _)) => match settings_routes::template_delete(&store, viewer.scope(), &family, &name).await {
             Ok(true) => Json(json!({"deleted": name})).into_response(),
             Ok(false) => detail(StatusCode::NOT_FOUND, "No such template"),
             Err(e) => answer(Err(e)),
@@ -677,7 +762,7 @@ fn plugin_features(req: &Request) -> Result<Vec<String>, Response> {
     Ok(plugins::routes::features(plugin_host(req).as_ref()))
 }
 
-async fn journals_list(State(app): State<App>, req: Request) -> Response {
+async fn journals_list(State(app): State<App>, viewer: auth::Viewer, req: Request) -> Response {
     let (store, req) = match app.admit(req).await {
         Ok(ok) => ok,
         Err(res) => return res,
@@ -686,10 +771,10 @@ async fn journals_list(State(app): State<App>, req: Request) -> Response {
         Ok(f) => f,
         Err(res) => return res,
     };
-    journal_answer(journal::service::list(&store, &features).await)
+    journal_answer(journal::service::list(&store, &features, viewer.scope()).await)
 }
 
-async fn journal_create(State(app): State<App>, req: Request) -> Response {
+async fn journal_create(State(app): State<App>, viewer: auth::Viewer, req: Request) -> Response {
     let (store, req) = match app.admit(req).await {
         Ok(ok) => ok,
         Err(res) => return res,
@@ -699,7 +784,7 @@ async fn journal_create(State(app): State<App>, req: Request) -> Response {
         Err(res) => return res,
     };
     match object_body(req).await {
-        Ok(body) => journal_answer(journal::service::create(&store, &body, &features).await),
+        Ok(body) => journal_answer(journal::service::create(&store, &body, &features, viewer.scope()).await),
         Err(res) => res,
     }
 }
@@ -782,16 +867,16 @@ async fn journal_image_detach(State(app): State<App>, Path((id, trade, sid)): Pa
 
 // ---- terms, bias, chart snapshots ----
 
-async fn terms_get(State(app): State<App>, req: Request) -> Response {
+async fn terms_get(State(app): State<App>, viewer: auth::Viewer, req: Request) -> Response {
     match app.admit(req).await {
-        Ok((store, _)) => engine_answer(terms::status(&store).await),
+        Ok((store, _)) => engine_answer(terms::status(&store, viewer.scope()).await),
         Err(res) => res,
     }
 }
 
-async fn terms_accept(State(app): State<App>, req: Request) -> Response {
+async fn terms_accept(State(app): State<App>, viewer: auth::Viewer, req: Request) -> Response {
     match app.admit(req).await {
-        Ok((store, _)) => engine_answer(terms::accept(&store).await),
+        Ok((store, _)) => engine_answer(terms::accept(&store, viewer.scope()).await),
         Err(res) => res,
     }
 }
@@ -1204,20 +1289,20 @@ fn drawing_symbol(q: &HashMap<String, String>, own: &str) -> Result<String, Resp
     }
 }
 
-async fn drawings_list(State(app): State<App>, axum::extract::Query(q): Query) -> Response {
+async fn drawings_list(State(app): State<App>, viewer: auth::Viewer, axum::extract::Query(q): Query) -> Response {
     let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
     let e = runtime_of(&app).engine();
     let symbol = match drawing_symbol(&q, &e.symbol) { Ok(s) => s, Err(r) => return r };
-    engine_answer(drawings::routes::list(store, &e.source, &symbol).await)
+    engine_answer(drawings::routes::list(store, &e.source, &symbol, viewer.scope()).await)
 }
 
-async fn drawings_alerts(State(app): State<App>) -> Response {
+async fn drawings_alerts(State(app): State<App>, viewer: auth::Viewer) -> Response {
     let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
     let e = runtime_of(&app).engine();
-    engine_answer(drawings::routes::alerts(store, &e.source, &e.symbol).await)
+    engine_answer(drawings::routes::alerts(store, &e.source, &e.symbol, viewer.scope()).await)
 }
 
-async fn drawing_put(State(app): State<App>, Path(id): Path<String>, axum::extract::Query(q): Query, req: Request) -> Response {
+async fn drawing_put(State(app): State<App>, viewer: auth::Viewer, Path(id): Path<String>, axum::extract::Query(q): Query, req: Request) -> Response {
     if let Some(refused) = app.guard(req.method(), req.headers()) {
         return refused;
     }
@@ -1226,10 +1311,10 @@ async fn drawing_put(State(app): State<App>, Path(id): Path<String>, axum::extra
     let rt = runtime_of(&app);
     let e = rt.engine();
     let symbol = match drawing_symbol(&q, &e.symbol) { Ok(s) => s, Err(r) => return r };
-    engine_answer(drawings::routes::put(store, &e.source, &symbol, &id, &body, Some(&services(&rt).drawing_alerts)).await)
+    engine_answer(drawings::routes::put(store, &e.source, &symbol, viewer.scope(), &id, &body, Some(&services(&rt).drawing_alerts)).await)
 }
 
-async fn drawing_delete(State(app): State<App>, Path(id): Path<String>, axum::extract::Query(q): Query, req: Request) -> Response {
+async fn drawing_delete(State(app): State<App>, viewer: auth::Viewer, Path(id): Path<String>, axum::extract::Query(q): Query, req: Request) -> Response {
     if let Some(refused) = app.guard(req.method(), req.headers()) {
         return refused;
     }
@@ -1237,10 +1322,10 @@ async fn drawing_delete(State(app): State<App>, Path(id): Path<String>, axum::ex
     let rt = runtime_of(&app);
     let e = rt.engine();
     let symbol = match drawing_symbol(&q, &e.symbol) { Ok(s) => s, Err(r) => return r };
-    engine_answer(drawings::routes::delete(store, &e.source, &symbol, &id, Some(&services(&rt).drawing_alerts)).await)
+    engine_answer(drawings::routes::delete(store, &e.source, &symbol, viewer.scope(), &id, Some(&services(&rt).drawing_alerts)).await)
 }
 
-async fn drawing_alert_put(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+async fn drawing_alert_put(State(app): State<App>, viewer: auth::Viewer, Path(id): Path<String>, req: Request) -> Response {
     if let Some(refused) = app.guard(req.method(), req.headers()) {
         return refused;
     }
@@ -1249,17 +1334,17 @@ async fn drawing_alert_put(State(app): State<App>, Path(id): Path<String>, req: 
     let rt = runtime_of(&app);
     let e = rt.engine();
     let armed = drawings::routes::armed_bar(&e.state().m1);
-    engine_answer(drawings::routes::alert_put(store, &e.source, &e.symbol, &id, armed, &body, Some(&services(&rt).drawing_alerts)).await)
+    engine_answer(drawings::routes::alert_put(store, &e.source, &e.symbol, viewer.scope(), &id, armed, &body, Some(&services(&rt).drawing_alerts)).await)
 }
 
-async fn drawing_alert_delete(State(app): State<App>, Path(id): Path<String>, req: Request) -> Response {
+async fn drawing_alert_delete(State(app): State<App>, viewer: auth::Viewer, Path(id): Path<String>, req: Request) -> Response {
     if let Some(refused) = app.guard(req.method(), req.headers()) {
         return refused;
     }
     let store = match drawing_store(&app) { Ok(s) => s, Err(r) => return r };
     let rt = runtime_of(&app);
     let e = rt.engine();
-    engine_answer(drawings::routes::alert_delete(store, &e.source, &e.symbol, &id, Some(&services(&rt).drawing_alerts)).await)
+    engine_answer(drawings::routes::alert_delete(store, &e.source, &e.symbol, viewer.scope(), &id, Some(&services(&rt).drawing_alerts)).await)
 }
 
 fn alerts_of(app: &App) -> &Arc<alerts::Alerts> {
