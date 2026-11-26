@@ -4992,3 +4992,173 @@ p.account-head span {
     grid-row: 1;
   }
 }
+
+/* The chart's right-click menu, at the pointer. */
+.ctx-menu {
+  position: fixed;
+  inset: auto;
+  z-index: 100;
+  min-width: 200px;
+}
+/* The chart settings dialog: tabs on the left, like a trading platform's. */
+.cs-dialog {
+  width: min(520px, calc(100vw - 32px));
+  overflow: visible;
+}
+.cs-main {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  min-height: 300px;
+}
+.cs-tabs {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 10px 8px;
+  border-inline-end: 1px solid var(--line);
+}
+.cs-tab {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+.cs-tab:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.cs-tab[aria-selected="true"] {
+  background: color-mix(in srgb, var(--tc-accent) 14%, transparent);
+  color: var(--tc-accent);
+  font-weight: 600;
+}
+.cs-body {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 12px 16px;
+  min-width: 0;
+}
+.cs-head {
+  margin-block-start: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.cs-head:not(:first-child) {
+  margin-block-start: 12px;
+}
+.cs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+}
+.cs-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.cs-wide {
+  min-height: 30px;
+}
+.cs-swatches {
+  display: flex;
+  gap: 8px;
+}
+.cs-swatch-wrap {
+  position: relative;
+}
+/* The colour over a checkerboard, so a see-through colour shows as one. */
+.cs-swatch {
+  display: block;
+  width: 30px;
+  height: 26px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.cs-swatch > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 999px var(--c, transparent);
+  background-image: conic-gradient(#ccc 25%, #fff 0 50%, #ccc 0 75%, #fff 0);
+  background-size: 8px 8px;
+}
+.cs-swatch[aria-expanded="true"] {
+  border-color: var(--tc-accent);
+}
+.cs-swatch:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.cs-pop {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-start: calc(100% + 6px);
+  z-index: 5;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 8px 24px rgb(0 0 0 / 0.3);
+}
+.cs-opacity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.cs-opacity input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--cs-color);
+}
+.cs-opacity input[type="number"] {
+  width: 52px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+.cs-foot {
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-block-start: 10px;
+}
+.cs-foot .tb-spacer {
+  flex: 1;
+}
+@media (max-width: 560px) {
+  .cs-main {
+    grid-template-columns: 1fr;
+  }
+  .cs-tabs {
+    display: flex;
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--line);
+  }
+}

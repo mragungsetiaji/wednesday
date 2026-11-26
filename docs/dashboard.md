@@ -166,10 +166,16 @@ gear) or removed. The readout over the chart shows their values under the pointe
 They are worked out on closed candles only, and every chart and window shows the same
 ones.
 
-**Chart settings** (the sliders) sets the up and down candle colours, the last
-price line, the grid (both, horizontal, vertical or none), the crosshair (free, or
-on the candle's close) and the space after the last candle, for every chart.
-**Reset to the defaults** goes back to the theme's colours.
+**Chart settings** opens from the toolbar's gear or by right-clicking the chart
+(**Settings…**; the same menu has **Reset chart view**, Alt+R). On **Symbol**, the
+candles: **Body**, **Borders** and **Wick**, each switched on or off with its own up
+and down colour and opacity, **Colour candles by the previous close** (a candle is
+up when it closed above the candle before it, not above its own open), and the last
+price line. On **Canvas**, the grid (both, horizontal, vertical or none), the
+crosshair (free, or on the candle's close) and the space after the last candle.
+Changes show at once and apply to every chart; **Cancel** (or Esc) puts back what
+was there, **Ok** keeps them, and **Reset to the defaults** goes back to the theme's
+colours. Right-clicking a drawing still opens its alert instead.
 
 The column left of the chart holds the drawing tools in TradeCanvas's groups. A
 button with a small triangle in its corner is a group: it draws with the tool last
