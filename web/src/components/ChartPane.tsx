@@ -8,14 +8,14 @@ import type { LiveFeed } from "../liveData";
 import { useMarketCandles, useMarketLive } from "../marketData";
 import { useMarkets } from "../marketsList";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "../chartData";
-import { fmtPrice } from "../format";
-import { Direction, LayersIcon, PopOutIcon } from "../icons";
+import { LayersIcon, PopOutIcon } from "../icons";
 import type { NewsMark } from "../newsPrimitive";
 import type { RailItem } from "../rail";
 import { levelGroups as knownGroups, levelView, type LevelGroup } from "../refLevels";
 import type { ChartPalette } from "../theme";
 import { LevelChecks } from "./LevelsMenu";
 import { PriceChart, type ChartNav } from "./PriceChart";
+import { TimeframeMenu } from "./TimeframeMenu";
 import { usePopover } from "./usePopover";
 
 /**
@@ -102,22 +102,8 @@ function ScanPane({ tf, onTf, timeframes, scan, version, lookback, rail, layers:
     <section className={`pane${focused ? " is-focused" : ""}`} aria-label={`${label}: ${tf}`} onPointerDownCapture={onFocus}
       style={cell && ({ "--col": cell.col, "--row": cell.row, "--row-span": cell.rowSpan } as CSSProperties)}>
       <div className="pane-head">
-        <div className="tabs tabs-compact" role="tablist" aria-label={`${label} timeframe`}>
-          {timeframes.map((name) => {
-            const b = scan.timeframes.find((t) => t.timeframe === name)?.bias;
-            return (
-              <button key={name} type="button" role="tab" aria-selected={name === tf} className="tab" onClick={() => onTf(name)}
-                title={b ? `${name}: ${b.direction} ${b.event} at ${fmtPrice(b.level)}` : name}>
-                {name}
-                {b && name === tf && (
-                  <span className={`dir ${b.direction}`}>
-                    <Direction dir={b.direction} size={11} title={`${b.direction} ${b.event}`} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+        <TimeframeMenu variant="pane" label={`${label} timeframe`} value={tf} options={timeframes} onChange={onTf}
+          bias={(name) => scan.timeframes.find((t) => t.timeframe === name)?.bias ?? undefined} />
         {onSymbol && <SymbolBox label={label} value={null} main={mainSymbol} onChange={onSymbol} />}
         {onPopOut && (
           <button type="button" className="pane-layers-btn" onClick={onPopOut} title={`Open ${tf} in its own window`}
@@ -179,13 +165,7 @@ function MarketPane({ symbol, tf, onTf, timeframes, version, lookback, palette, 
     <section className={`pane${focused ? " is-focused" : ""}`} aria-label={`${label}: ${symbol} ${tf}`} onPointerDownCapture={onFocus}
       style={cell && ({ "--col": cell.col, "--row": cell.row, "--row-span": cell.rowSpan } as CSSProperties)}>
       <div className="pane-head">
-        <div className="tabs tabs-compact" role="tablist" aria-label={`${label} timeframe`}>
-          {timeframes.map((name) => (
-            <button key={name} type="button" role="tab" aria-selected={name === tf} className="tab" onClick={() => onTf(name)}>
-              {name}
-            </button>
-          ))}
-        </div>
+        <TimeframeMenu variant="pane" label={`${label} timeframe`} value={tf} options={timeframes} onChange={onTf} />
         {onSymbol && <SymbolBox label={label} value={symbol} main={mainSymbol} onChange={onSymbol} />}
         <span className="pane-note" title="This symbol isn't scanned: no levels, setups or alerts. Candles and price from TradingView; drawings are kept for it.">
           Not scanned

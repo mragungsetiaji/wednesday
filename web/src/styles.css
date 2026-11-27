@@ -5162,3 +5162,56 @@ p.account-head span {
     border-block-end: 1px solid var(--line);
   }
 }
+
+/* The timeframe dropdown: on the toolbar and on every pane's header. */
+.tf-menu .tb-tf {
+  gap: 4px;
+  color: var(--text);
+  font-weight: 600;
+}
+.pane-tf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pane-tf-btn:hover,
+.pane-tf-btn[aria-expanded="true"] {
+  background: var(--hover);
+}
+.tf-menu .dir {
+  display: inline-flex;
+}
+.tf-pop {
+  min-width: 170px;
+}
+.tf-menu.is-pane .tf-pop {
+  inset-inline-start: 0;
+  inset-inline-end: auto;
+  z-index: 30;
+}
+.tf-item-name {
+  font-weight: 600;
+}
+.tf-item-bias {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-inline-start: auto;
+  font-size: 11px;
+}
+.tf-item-bias.bullish {
+  color: var(--bull, #199e70);
+}
+.tf-item-bias.bearish {
+  color: var(--bear, #e66767);
+}

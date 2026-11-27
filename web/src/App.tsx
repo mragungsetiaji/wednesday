@@ -3,6 +3,7 @@ import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useR
 import { fetchQuarters, fetchScan, fetchSessions, fetchSettings, saveSettings, type QuartersResponse, type ScanResponse, type SessionsResponse } from "./api";
 import { useCalendar } from "./calendarData";
 import { buildEvents, buildZones, quarterRowsFor, useCandles, type LayerOptions } from "./chartData";
+import { TimeframeMenu } from "./components/TimeframeMenu";
 import { AccountMenu } from "./components/AccountMenu";
 import { ChartFocus, LayoutMenu } from "./components/ChartFocus";
 import { MainGrid } from "./components/MainGrid";
@@ -30,8 +31,7 @@ import { SettingsPage } from "./components/SettingsPage";
 import { SOURCES, StatusBar } from "./components/StatusBar";
 import { StructurePanel } from "./components/StructurePanel";
 import { TimeframeTable } from "./components/TimeframeTable";
-import { fmtPrice } from "./format";
-import { BookIcon, ChartIcon, Direction, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
+import { BookIcon, ChartIcon, PopOutIcon, SidePanelIcon, SlidersIcon } from "./icons";
 import { TcIcon } from "./tcIcons";
 import { LayersMenu } from "./components/LayersMenu";
 import { ChartSettingsMenu, ChartTypeMenu, IndicatorsMenu, MoreMenu, SymbolMenu, ThemeButton } from "./components/ChartTopMenus";
@@ -397,22 +397,8 @@ export default function App() {
                   ["Last scan", data?.scanned_at ? new Date(data.scanned_at).toLocaleString() : "—"],
                 ]} />
                 <span className="tb-sep" aria-hidden="true" />
-                <div className="tb-tfs" role="tablist" aria-label="Chart timeframe">
-                  {(timeframes.length ? timeframes : ["4H", "1H", "30M", "15M", "5M"]).map((name) => {
-                    const b = scan?.timeframes.find((t) => t.timeframe === name)?.bias;
-                    return (
-                      <button key={name} type="button" role="tab" aria-selected={name === tf} className="tb-btn tb-tf" onClick={() => setTf(name)}
-                        title={b ? `${name}: ${b.direction} ${b.event} at ${fmtPrice(b.level)}` : name}>
-                        {name}
-                        {b && (
-                          <span className={`dir ${b.direction}`}>
-                            <Direction dir={b.direction} size={12} title={`${b.direction} ${b.event}`} />
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+                <TimeframeMenu value={tf} options={timeframes.length ? timeframes : ["4H", "1H", "30M", "15M", "5M"]} onChange={setTf}
+                  bias={(name) => scan?.timeframes.find((t) => t.timeframe === name)?.bias ?? undefined} />
                 <span className="tb-sep" aria-hidden="true" />
                 <ChartTypeMenu />
                 <IndicatorsMenu quarters={quartersCtl} />

@@ -26,8 +26,10 @@ found on it:
   lows, so the structure reads at a glance.
 - **Recent sweeps** as markers on the candle that swept.
 
-The timeframe tabs carry each timeframe's structure direction (↑ / ↓). Beside
-them, the **Layers** menu switches the detectors (**Order blocks**, **Liquidity**,
+The timeframe is one dropdown on the toolbar, as on every chart (layouts, full
+screen and pop-outs): the button shows the current timeframe and its structure
+direction (↑ / ↓), and the list shows each timeframe's last BOS or CHoCH. Beside
+it, the **Layers** menu switches the detectors (**Order blocks**, **Liquidity**,
 **Inducement**) and the overlays (**Mid OBs**, **HTF**, **Swings**, **News**) on and
 off. The chart carries no legend under it; the readout at its top left names what is
 under the pointer.
@@ -343,7 +345,7 @@ wiped by the weekly feed later.
 **On the chart page.** The layout button at the top right (next to the snapshot) splits the
 chart page with the same layouts as full screen. The main chart always takes the first place,
 left or top: it is the scanned market on the toolbar's timeframe, with the drawing tools, the
-levels pane and the toolbar acting on it. The other charts have their own timeframe tabs, market
+levels pane and the toolbar acting on it. The other charts have their own timeframe dropdown, market
 and layers, shared with full screen (chart 2 is chart 2 in both), and their lines can be dragged.
 **One chart** goes back to a single chart. Bar replay and a phone show only the main chart.
 
@@ -360,7 +362,7 @@ layout from the layout menu:
 - **four in a 2 × 2 grid**, or **six in 3 columns × 2 rows** for an ultrawide
   monitor.
 
-Each chart has its own timeframe tabs; the first one follows the dashboard's
+Each chart has its own timeframe dropdown; the first one follows the dashboard's
 timeframe, the others are remembered in this browser, as is the layout. **Esc** or
 **Exit** goes back. On a phone the charts stack and scroll.
 
@@ -375,7 +377,7 @@ timeframe, the others are remembered in this browser, as is the layout. **Esc** 
   the candle that contains the same moment on their timeframe (and the same
   price), and their OHLC and quarter readouts follow. A chart whose candles
   don't reach back that far just hides its crosshair.
-- **Another market in a chart**: the menu next to a chart's timeframe tabs picks its
+- **Another market in a chart**: the menu next to a chart's timeframe dropdown picks its
   market from the same list as the main chart (Settings > Markets), for
   example silver on the right next to gold on the left. That chart shows the other
   market's candles and live price from TradingView, labelled **Not scanned**: levels,
@@ -427,7 +429,7 @@ For a second or third monitor, a chart can open in a window of its own: the
 or the same button at the right of a full screen chart's tabs. It opens that
 timeframe, with the layers and session levels of the main window's toggles.
 
-A popped-out chart is bare: timeframe tabs, the live price, the bias, the drawing
+A popped-out chart is bare: the timeframe dropdown, the live price, the bias, the drawing
 tools, a link button and the status bar (with the TradingView notice). No dock and
 no rail. Every window reads the same local server, so it updates with the same
 ticks and scans. A drawing made or changed in one window shows in the others at
