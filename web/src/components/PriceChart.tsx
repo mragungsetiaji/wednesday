@@ -101,7 +101,7 @@ interface Props {
   nav?: Ref<ChartNav | null>; // for the keyboard shortcuts
   timeframe?: string; // named in a snapshot's footer; resetKey when not given
   snapshotButton?: boolean; // the camera under the chart; false where a toolbar holds one
-  viewKey?: string; // keep the zoom and scroll under this name for the session: leaving the page and coming back keeps them
+  viewKey?: string; // keep the zoom and scroll under this name: a refresh, or leaving the page and coming back, keeps them
   rangeLink?: { group: LinkGroup; id: string } | null; // scroll and zoom shared with a link group (windowLink.ts)
   precision?: number; // price decimals: 2 for gold, more for a pane's own symbol (e.g. 3 for silver)
 }
@@ -110,8 +110,8 @@ const ROW_PX = 22;
 const NO_SWINGS: SwingPoint[] = []; // stable defaults, so the effects don't rerun every render
 const NO_NEWS: NewsMark[] = [];
 /**
- * A chart's zoom and scroll, kept for the session (sessionStorage) so a chart built again (back from
- * Settings, out of full screen) opens where it was. Counted in bars back from the last closed candle,
+ * A chart's zoom and scroll, kept in this browser (localStorage) so a chart built again (a page
+ * refresh, the app opened again, back from Settings, out of full screen) opens where it was. Counted in bars back from the last closed candle,
  * so newer candles or older pages loaded since don't move it. Only for the same reset key (timeframe):
  * another timeframe still opens fitted.
  */
@@ -123,15 +123,18 @@ interface SavedView {
 const VIEW_PREFIX = "wed.view:";
 function loadView(key: string): SavedView | null {
   try {
-    const v = sessionStorage.getItem(VIEW_PREFIX + key);
-    return v ? (JSON.parse(v) as SavedView) : null;
+    const v = localStorage.getItem(VIEW_PREFIX + key) ?? sessionStorage.getItem(VIEW_PREFIX + key);
+    const view = v ? (JSON.parse(v) as SavedView) : null;
+    // A view with next to no candle in it (saved off by older pages coming in) opens fitted instead.
+    return view && Number.isFinite(view.fromEnd) && Number.isFinite(view.toEnd) && view.fromEnd > view.toEnd && view.fromEnd >= 5
+      ? view : null;
   } catch {
     return null;
   }
 }
 function saveView(key: string, v: SavedView): void {
   try {
-    sessionStorage.setItem(VIEW_PREFIX + key, JSON.stringify(v));
+    localStorage.setItem(VIEW_PREFIX + key, JSON.stringify(v));
   } catch {
     /* storage unavailable: the view just isn't kept */
   }
@@ -318,6 +321,8 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const needOlderRef = useRef(onNeedOlder);
   needOlderRef.current = onNeedOlder;
   const fittedKey = useRef<string | null>(null);
+  const olderWait = useRef<{ key: string; len: number; tries: number } | null>(null); // restoring a view older than the candles
+  const olderTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const resetKeyRef = useRef(resetKey);
   resetKeyRef.current = resetKey;
   const viewKeyRef = useRef(viewKey);
@@ -541,6 +546,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
       // Each Heikin Ashi bar depends on the one before it: the whole run again (a scan, not a tick).
       const bars = heikin(candles);
       heikinRef.current = bars;
+      candlesRef.current = candles; // before setData: the range event it fires counts from these
       series.setData(items(bars));
       counters.setData++;
       shownCandles.current = candles;
@@ -549,6 +555,9 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     }
     heikinRef.current = null;
     const plan = planUpdate(shownCandles.current, candles);
+    // Before setData: the range change it fires (older candles put in front) is saved counted from
+    // the last of these, not of the candles before them.
+    candlesRef.current = candles;
     if (plan.kind === "set") {
       series.setData(items(candles));
       counters.setData++;
@@ -607,12 +616,28 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
         // Just mounted, the chart has no width until autoSize measures it, and a range set before
         // that is lost: wait for the width, and save nothing until the view is back.
         const range = { from: last - saved.fromEnd, to: last - saved.toEnd };
+        // The view starts before the first loaded candle (scrolled far back): page older ones in,
+        // a page at a time, and put the view back again as each comes. Give up after a while or when
+        // no more come, and keep what is there.
+        const wait = olderWait.current?.key === resetKey ? olderWait.current : null;
+        const more = range.from < 0 && !!needOlderRef.current && (wait?.tries ?? 0) < 20 && (!wait || candles.length > wait.len);
+        clearTimeout(olderTimer.current);
         let tries = 0;
         const restore = () => {
           if (chartRef.current !== chart) return; // the chart was replaced
           if (ts.width() > 0 || tries++ > 60) {
             ts.setVisibleLogicalRange(range);
-            fittedKey.current = resetKey;
+            if (!more) {
+              fittedKey.current = resetKey;
+              olderWait.current = null;
+              return;
+            }
+            olderWait.current = { key: resetKey, len: candles.length, tries: (wait?.tries ?? 0) + 1 };
+            needOlderRef.current?.();
+            olderTimer.current = setTimeout(() => {
+              if (fittedKey.current === `restoring:${resetKey}`) fittedKey.current = resetKey; // no older candles came
+              olderWait.current = null;
+            }, 8000);
           } else requestAnimationFrame(restore);
         };
         fittedKey.current = `restoring:${resetKey}`;

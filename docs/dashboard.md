@@ -79,9 +79,9 @@ the symbol's usual size (0.1 on gold, 0.01 on yen pairs and silver).
 When you scroll back and the live candle leaves the screen, a **Live** button
 at the bottom right brings it back.
 
-Each chart keeps its zoom and scroll while the app is open: go to Settings or
-the Journal and back, or full screen and back, and the view is where you left
-it. The view is kept per market: switch from XAU to DXY and back and each opens
+Each chart keeps its zoom and scroll in this browser (or the desktop app): refresh
+the page, close and open the app, go to Settings or the Journal and back, or full
+screen and back, and the view is where you left it, counted from the latest candle. The view is kept per market: switch from XAU to DXY and back and each opens
 where you left it, and a market you haven't viewed yet (or a new timeframe) starts
 fitted to its candles, with the price scale fitting them again even after the price
 axis was dragged.
