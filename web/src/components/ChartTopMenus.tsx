@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { CHART_TYPES, useChartType } from "../chartType";
-import { DEFAULT_CHART_SETTINGS, useChartSettings, type ChartSettings } from "../chartSettings";
+import { useChartSettings, type ChartSettings } from "../chartSettings";
 import { useIndicators } from "../indicatorPrefs";
 import { cleanLength, cleanMult, indicatorLabel, INDICATOR_COLORS, INDICATOR_KINDS, LINE_WIDTHS, lineWidth, MAX_LENGTH, type Indicator, type IndicatorKind } from "../indicators";
 import { tickerName } from "../marketSymbol";
@@ -11,6 +11,7 @@ import { TcIcon } from "../tcIcons";
 import { useThemeChoice, type ThemeChoice } from "../theme";
 import { CrossIcon } from "../icons";
 import { ColorPicker } from "./ColorPicker";
+import { ChartSettingsDialog } from "./ChartSettingsDialog";
 import { usePopover } from "./usePopover";
 
 /**
@@ -373,58 +374,17 @@ function QuartersDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** Chart settings: candle colours, grid, last price line, crosshair, room right of the last candle. */
+/** The toolbar's gear: the chart settings dialog (also a right-click on the chart). */
 export function ChartSettingsMenu({ palette }: { palette: { bull: string; bear: string } }) {
-  const [s, set] = useChartSettings();
-  const { open, setOpen, ref } = usePopover<HTMLDivElement>();
-  const id = useId();
+  const [open, setOpen] = useState(false);
+  const [chartType] = useChartType();
   return (
-    <div className="tb-menu" ref={ref}>
-      <button type="button" className="tb-btn tb-icon" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}
+    <>
+      <button type="button" className="tb-btn tb-icon" aria-haspopup="dialog" onClick={() => setOpen(true)}
         title="Chart settings" aria-label="Chart settings">
         <TcIcon name="settings" />
       </button>
-      {open && (
-        <div className="chart-pop menu-pop settings-pop" id={id} role="group" aria-label="Chart settings">
-          <div className="pop-head">Candles</div>
-          <label className="set-row">
-            Up
-            <input type="color" value={s.bull ?? palette.bull} onChange={(e) => set({ ...s, bull: e.target.value })} />
-          </label>
-          <label className="set-row">
-            Down
-            <input type="color" value={s.bear ?? palette.bear} onChange={(e) => set({ ...s, bear: e.target.value })} />
-          </label>
-          <label className="set-row">
-            Last price line
-            <input type="checkbox" checked={s.priceLine} onChange={(e) => set({ ...s, priceLine: e.target.checked })} />
-          </label>
-          <hr />
-          <div className="pop-head">Chart</div>
-          <label className="set-row">
-            Grid
-            <select value={s.grid} onChange={(e) => set({ ...s, grid: e.target.value as ChartSettings["grid"] })}>
-              <option value="both">Both</option>
-              <option value="horz">Horizontal</option>
-              <option value="vert">Vertical</option>
-              <option value="none">None</option>
-            </select>
-          </label>
-          <label className="set-row">
-            Crosshair
-            <select value={s.crosshair} onChange={(e) => set({ ...s, crosshair: e.target.value as ChartSettings["crosshair"] })}>
-              <option value="normal">Free</option>
-              <option value="magnet">On the close</option>
-            </select>
-          </label>
-          <label className="set-row">
-            Space after the last candle
-            <input type="number" min={0} max={100} value={s.rightOffset}
-              onChange={(e) => set({ ...s, rightOffset: Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))) })} />
-          </label>
-          <button type="button" className="button quiet scale-reset" onClick={() => set(DEFAULT_CHART_SETTINGS)}>Reset to the defaults</button>
-        </div>
-      )}
-    </div>
+      {open && <ChartSettingsDialog palette={palette} hollow={chartType === "hollow"} onClose={() => setOpen(false)} />}
+    </>
   );
 }

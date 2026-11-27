@@ -1,9 +1,17 @@
-import { useSharedPref } from "./prefs";
+import { useSharedPref } from "./prefs.ts";
 
 /** How every chart looks, from the chart settings dialog. A null colour follows the theme. */
 export interface ChartSettings {
-  bull: string | null;
-  bear: string | null;
+  bull: string | null; // the up candles' body
+  bear: string | null; // the down candles' body
+  body: boolean; // fill the bodies
+  borders: boolean; // outline the bodies
+  borderUp: string | null; // null: the body's colour
+  borderDown: string | null;
+  wick: boolean;
+  wickUp: string | null; // null: the body's colour
+  wickDown: string | null;
+  prevClose: boolean; // colour a candle up or down by its close against the previous close, not its open
   grid: "both" | "horz" | "vert" | "none";
   priceLine: boolean; // the dashed line at the last price
   crosshair: "normal" | "magnet"; // magnet: the horizontal line sits on the candle's close
@@ -15,6 +23,14 @@ export interface ChartSettings {
 export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   bull: null,
   bear: null,
+  body: true,
+  borders: false,
+  borderUp: null,
+  borderDown: null,
+  wick: true,
+  wickUp: null,
+  wickDown: null,
+  prevClose: false,
   grid: "both",
   priceLine: true,
   crosshair: "normal",

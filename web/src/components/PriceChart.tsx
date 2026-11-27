@@ -24,6 +24,8 @@ import { counters, planUpdate } from "../perf";
 import { DrawingEditor } from "../drawingEditor";
 import { heikin, heikinBar, useChartType } from "../chartType";
 import { useChartSettings } from "../chartSettings";
+import { ChartContextMenu } from "./ChartContextMenu";
+import { barColors, candleLook, seriesOptions } from "../candleStyle";
 import { indicatorLabel, lineWidth, linesOf } from "../indicators";
 import { useIndicators } from "../indicatorPrefs";
 import type { DrawingCtl } from "../drawings";
@@ -333,6 +335,11 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const [chartType] = useChartType();
   const [settings] = useChartSettings();
   const settingsKey = JSON.stringify(settings);
+  const look = candleLook(settings, palette, chartType === "hollow");
+  const lookRef = useRef(look);
+  lookRef.current = look;
+  // Colouring by the previous close puts colours on each bar: a change to it draws them all again.
+  const paintKey = look.prevClose ? JSON.stringify(look) : "";
   const [indicators] = useIndicators();
   const indicatorSeries = useRef<ISeriesApi<"Line">[]>([]);
   const rsiPaneRef = useRef(0); // the RSI pane's index, 0 when there is none
@@ -340,6 +347,7 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   const heikinRef = useRef<Candle[] | null>(null); // the Heikin Ashi bars shown, when that's the chart type
   const [offLive, setOffLive] = useState(false); // the live candle is scrolled out of view
   const [ruler, setRuler] = useState<Ruler | null>(null);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null); // the right-click menu
   const [newsTip, setNewsTip] = useState<{ mark: NewsMark; x: number } | null>(null); // the news line under the pointer
 
   useEffect(() => {
@@ -496,21 +504,9 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     editorRef.current?.update({ palette });
   }, [palette]);
 
-  // The candles' look: filled, or hollow up candles (their border drawn instead).
+  // The candles' look: body, borders and wick from the settings; hollow up candles show their border.
   useEffect(() => {
-    const hollow = chartType === "hollow";
-    const bull = settings.bull ?? palette.bull;
-    const bear = settings.bear ?? palette.bear;
-    seriesRef.current?.applyOptions({
-      upColor: hollow ? "rgba(0, 0, 0, 0)" : bull,
-      downColor: bear,
-      wickUpColor: bull,
-      wickDownColor: bear,
-      borderVisible: hollow,
-      borderUpColor: bull,
-      borderDownColor: bear,
-      priceLineVisible: settings.priceLine,
-    });
+    seriesRef.current?.applyOptions({ ...seriesOptions(lookRef.current), priceLineVisible: settings.priceLine });
     chartRef.current?.applyOptions({
       grid: {
         vertLines: { visible: settings.grid === "both" || settings.grid === "vert" },
@@ -527,19 +523,25 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
   // New candles: update only the bars that changed when that's all it is (a scan adds one or two at
   // the end); a full setData only when history changed (#34).
   const shownCandles = useRef<Candle[]>([]);
-  const shownType = useRef(chartType);
+  const shownType = useRef(chartType + paintKey);
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
-    if (shownType.current !== chartType) {
-      shownType.current = chartType;
-      shownCandles.current = []; // another chart type: draw them all again
+    if (shownType.current !== chartType + paintKey) {
+      shownType.current = chartType + paintKey;
+      shownCandles.current = []; // another chart type or bar colours: draw them all again
     }
+    // A bar with its own colours when they follow the previous close.
+    const item = (c: Candle, prev: Candle | undefined) => {
+      const colors = barColors(lookRef.current, c, prev?.close ?? null);
+      return { ...c, ...colors, time: c.time as UTCTimestamp };
+    };
+    const items = (bars: Candle[]) => bars.map((c, i) => item(c, bars[i - 1]));
     if (chartType === "heikin") {
       // Each Heikin Ashi bar depends on the one before it: the whole run again (a scan, not a tick).
       const bars = heikin(candles);
       heikinRef.current = bars;
-      series.setData(bars.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
+      series.setData(items(bars));
       counters.setData++;
       shownCandles.current = candles;
       candlesRef.current = candles;
@@ -548,21 +550,22 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     heikinRef.current = null;
     const plan = planUpdate(shownCandles.current, candles);
     if (plan.kind === "set") {
-      series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
+      series.setData(items(candles));
       counters.setData++;
     } else if (plan.kind === "update") {
       try {
-        for (const c of candles.slice(plan.from)) series.update({ ...c, time: c.time as UTCTimestamp });
+        for (let i = plan.from; i < candles.length; i++) series.update(item(candles[i], candles[i - 1]));
         counters.update++;
       } catch {
         // A tick already opened a later candle than these: replace everything instead.
-        series.setData(candles.map((c) => ({ ...c, time: c.time as UTCTimestamp })));
+        series.setData(items(candles));
         counters.setData++;
       }
     }
     shownCandles.current = candles;
     candlesRef.current = candles;
-  }, [candles, chartType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candles, chartType, paintKey]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -646,10 +649,12 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     }
     if (liveCandle) {
       const ha = heikinRef.current;
+      const shown = ha ?? candlesRef.current;
       let prev: Candle | null = null;
-      for (let i = (ha?.length ?? 0) - 1; ha && i >= 0 && !prev; i--) if (ha[i].time < liveCandle.time) prev = ha[i];
+      for (let i = shown.length - 1; i >= 0 && !prev; i--) if (shown[i].time < liveCandle.time) prev = shown[i];
       const bar = ha ? heikinBar(liveCandle, prev) : liveCandle;
-      seriesRef.current?.update({ ...bar, time: bar.time as UTCTimestamp });
+      const colors = barColors(lookRef.current, bar, prev?.close ?? null);
+      seriesRef.current?.update({ ...bar, ...colors, time: bar.time as UTCTimestamp });
       counters.ticks++;
     }
     editorRef.current?.update({ live: liveCandle }); // positions track the forming candle too
@@ -951,7 +956,21 @@ export function PriceChart({ candles, zones, events, highlight, palette, resetKe
     );
   }
   return (
-    <div className="chart-wrap has-nav" aria-busy={loading} onMouseLeave={onLeave}>
+    <div className="chart-wrap has-nav" aria-busy={loading} onMouseLeave={onLeave}
+      onContextMenu={(e) => {
+        // A drawing's right-click (its alert) is taken before this; the rest of the canvas opens the menu.
+        if (!containerRef.current?.contains(e.target as Node)) return;
+        e.preventDefault();
+        setMenuAt({ x: e.clientX, y: e.clientY });
+      }}>
+      {menuAt && (
+        <ChartContextMenu at={menuAt} palette={palette} hollow={chartType === "hollow"} onClose={() => setMenuAt(null)}
+          onReset={() => {
+            const ts = chartRef.current?.timeScale();
+            ts?.resetTimeScale();
+            ts?.scrollToRealTime();
+          }} />
+      )}
       <ChartLegend hover={hover} fallback={liveCandle ?? candles[candles.length - 1]} quarters={quarters} quarterRows={quarterRows} indicators={indicatorRows} />
       {loading && <div className="chart-skeleton" aria-hidden="true" />}
       <div ref={containerRef} className="chart" role="img" aria-label="Price chart with order blocks, liquidity and inducement levels" />
